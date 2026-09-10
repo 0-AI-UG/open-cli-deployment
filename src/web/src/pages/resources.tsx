@@ -391,9 +391,15 @@ export function ResourcesPage() {
           {data?.s3_configured && <span className="font-mono text-[8px] text-muted uppercase">S3 · {data.s3_region}</span>}
         </div>
         <label className="block mb-3 font-mono text-[10px]">Storage connection
-          <select value={storageConnection || data?.storage_connection || ""} onChange={e => setStorageConnection(e.target.value)} disabled={!!bucketBusy}>
-            {(data?.storage_connections || []).map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connection.region}</option>)}
-          </select>
+          <NeoSelect
+            value={storageConnection || data?.storage_connection || ""}
+            onChange={setStorageConnection}
+            options={(data?.storage_connections || []).map((connection) => ({
+              value: connection.id,
+              label: `${connection.name} · ${connection.region}`,
+            }))}
+            disabled={!!bucketBusy}
+          />
         </label>
         {!data?.s3_configured ? (
           <EmptyState message="S3-compatible storage is not configured. Add and assign a provider under Admin → Providers." />
