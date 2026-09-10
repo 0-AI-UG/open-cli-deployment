@@ -14,6 +14,7 @@ import { AppDetailPage } from "./pages/app-detail/index.tsx";
 import { StackDetailPage } from "./pages/stack-detail/index.tsx";
 import { ResourcesPage } from "./pages/resources.tsx";
 import { VolumeDetailPage } from "./pages/volume-detail.tsx";
+import { BucketDetailPage } from "./pages/bucket-detail.tsx";
 import { ServerDetailPage } from "./pages/server-detail.tsx";
 import { AccountPage } from "./pages/account.tsx";
 import { UsersPage } from "./pages/admin/users.tsx";
@@ -154,6 +155,11 @@ export function App() {
   } else if (hash.startsWith("#/resources/volumes/")) {
     const volumeId = decodeURIComponent(hash.split("/")[3] || "");
     content = volumeId ? <VolumeDetailPage volumeId={volumeId} /> : <ResourcesPage />;
+  } else if (hash.startsWith("#/resources/buckets/")) {
+    const parts = hash.split("/");
+    const connectionId = decodeURIComponent(parts[3] || "");
+    const bucketName = decodeURIComponent(parts[4] || "");
+    content = connectionId && bucketName ? <BucketDetailPage connectionId={connectionId} bucketName={bucketName} /> : <ResourcesPage />;
   } else if (hash.startsWith("#/resources/servers/")) {
     const id = parseInt(hash.split("/")[3] || "", 10);
     content = id ? <ServerDetailPage serverId={id} /> : <ResourcesPage />;

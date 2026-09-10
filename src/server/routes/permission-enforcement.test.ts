@@ -154,7 +154,7 @@ import {
   handleCreateServer,
   handleGetVolumeDeletionAudit,
 } from "./resources.ts";
-import { handleCreateBucket, handleDeleteBucket, handleListBuckets } from "./buckets.ts";
+import { handleCreateBucket, handleDeleteBucket, handleGetBucket, handleGetBucketObject, handleListBucketObjects, handleListBuckets } from "./buckets.ts";
 import {
   handleConfirmConfirmation,
   handleCreateConfirmation,
@@ -737,6 +737,21 @@ const CASES: Case[] = [
     name: "buckets: handleListBuckets",
     permission: "resources.view",
     call: (c) => handleListBuckets(req("/api/resources/buckets", { token: c.token })),
+  },
+  {
+    name: "buckets: handleGetBucket",
+    permission: "resources.view",
+    call: (c) => handleGetBucket(req("/api/resources/buckets/permission-test-bucket", { token: c.token }), "permission-test-bucket"),
+  },
+  {
+    name: "buckets: handleListBucketObjects",
+    permission: "buckets.objects.read",
+    call: (c) => handleListBucketObjects(req("/api/resources/buckets/permission-test-bucket/objects", { token: c.token }), "permission-test-bucket"),
+  },
+  {
+    name: "buckets: handleGetBucketObject",
+    permission: "buckets.objects.read",
+    call: (c) => handleGetBucketObject(req("/api/resources/buckets/permission-test-bucket/object?key=test.txt", { token: c.token }), "permission-test-bucket"),
   },
   {
     name: "buckets: handleCreateBucket",

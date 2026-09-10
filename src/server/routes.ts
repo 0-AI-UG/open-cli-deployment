@@ -38,7 +38,7 @@ import {
 import { handleConnectServer, handleDeleteServer, handleGetServerEnrollmentKey, handleRefreshServers, handleSetServerPool } from "./routes/servers.ts";
 import { handleGetSettings, handleSaveSettings, handleGetServerTypes } from "./routes/settings.ts";
 import { handleGetResources, handleGetServerMetricsHistory, handleDeleteResource, handleCreateServer, handleGetVolumeDetail, handleListVolumeFiles, handleGetVolumeFile, handleGetServerDetail, handleGetVolumeDeletionAudit } from "./routes/resources.ts";
-import { handleCreateBucket, handleDeleteBucket, handleListBuckets } from "./routes/buckets.ts";
+import { handleCreateBucket, handleDeleteBucket, handleGetBucket, handleGetBucketObject, handleListBucketObjects, handleListBuckets } from "./routes/buckets.ts";
 import {
   handleGetPanelReleaseWebhook,
   handlePanelReleaseWebhook,
@@ -383,9 +383,25 @@ export const apiRoutes = {
     POST: (req: Request) => handleCreateBucket(req),
   },
   "/api/resources/buckets/:name": {
+    GET: (req: Request) => {
+      const name = decodeURIComponent(new URL(req.url).pathname.split("/")[4] || "");
+      return handleGetBucket(req, name);
+    },
     DELETE: (req: Request) => {
       const name = decodeURIComponent(new URL(req.url).pathname.split("/")[4] || "");
       return handleDeleteBucket(req, name);
+    },
+  },
+  "/api/resources/buckets/:name/objects": {
+    GET: (req: Request) => {
+      const name = decodeURIComponent(new URL(req.url).pathname.split("/")[4] || "");
+      return handleListBucketObjects(req, name);
+    },
+  },
+  "/api/resources/buckets/:name/object": {
+    GET: (req: Request) => {
+      const name = decodeURIComponent(new URL(req.url).pathname.split("/")[4] || "");
+      return handleGetBucketObject(req, name);
     },
   },
   "/api/resources/servers": { POST: (req: Request) => handleCreateServer(req) },

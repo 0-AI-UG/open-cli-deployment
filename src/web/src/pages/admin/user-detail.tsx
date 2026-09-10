@@ -82,6 +82,7 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
     permissions: [
       { key: "buckets.create", label: "Create S3 buckets" },
       { key: "buckets.delete", label: "Delete empty S3 buckets" },
+      { key: "buckets.objects.read", label: "Browse and read objects in S3 buckets" },
     ],
   },
   {

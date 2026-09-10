@@ -16,6 +16,19 @@ export type S3Bucket = {
   endpoint: string;
 };
 
+export type S3Object = {
+  key: string;
+  size: number;
+  lastModified: string;
+  etag: string;
+};
+
+export type S3ObjectPage = {
+  prefixes: string[];
+  objects: S3Object[];
+  nextCursor: string | null;
+};
+
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -66,6 +79,7 @@ export function signS3Request(opts: {
   body?: string | Uint8Array;
   now?: Date;
   headers?: Record<string, string>;
+  query?: Record<string, string | number | undefined>;
 }): { url: string; headers: Record<string, string> } {
   const now = opts.now ?? new Date();
   const { timestamp, date } = amzDate(now);
@@ -73,6 +87,14 @@ export function signS3Request(opts: {
   const payloadHash = sha256(body);
   const endpoint = new URL(opts.credentials.endpoint);
   const canonicalUri = opts.path.startsWith("/") ? opts.path : `/${opts.path}`;
+  const encodeQueryPart = (value: string) => encodeURIComponent(value)
+    .replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const canonicalQuery = Object.entries(opts.query ?? {})
+    .filter((entry): entry is [string, string | number] => entry[1] !== undefined)
+    .map(([key, value]) => [encodeQueryPart(key), encodeQueryPart(String(value))] as const)
+    .sort(([aKey, aValue], [bKey, bValue]) => aKey.localeCompare(bKey) || aValue.localeCompare(bValue))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&");
   const normalizedExtraHeaders = Object.fromEntries(
     Object.entries(opts.headers ?? {}).map(([key, value]) => [key.toLowerCase(), value.trim()]),
   );
@@ -88,7 +110,7 @@ export function signS3Request(opts: {
   const canonicalRequest = [
     opts.method,
     canonicalUri,
-    "",
+    canonicalQuery,
     canonicalHeaders,
     signedHeaders,
     payloadHash,
@@ -104,7 +126,7 @@ export function signS3Request(opts: {
     `AWS4-HMAC-SHA256 Credential=${opts.credentials.accessKey}/${scope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
   delete headers.host;
-  return { url: `${endpoint.origin}${canonicalUri}`, headers };
+  return { url: `${endpoint.origin}${canonicalUri}${canonicalQuery ? `?${canonicalQuery}` : ""}`, headers };
 }
 
 function decodeXml(value: string): string {
@@ -151,9 +173,9 @@ async function s3Request(
   method: "GET" | "PUT" | "DELETE" | "HEAD",
   path: string,
   credentials: S3Credentials,
-  opts: { body?: string | Uint8Array; headers?: Record<string, string>; fetcher?: typeof fetch } = {},
+  opts: { body?: string | Uint8Array; headers?: Record<string, string>; query?: Record<string, string | number | undefined>; fetcher?: typeof fetch } = {},
 ): Promise<Response> {
-  const signed = signS3Request({ method, path, credentials, body: opts.body, headers: opts.headers });
+  const signed = signS3Request({ method, path, credentials, body: opts.body, headers: opts.headers, query: opts.query });
   const signal = AbortSignal.timeout(120_000);
   const response = await (opts.fetcher ?? fetch)(signed.url, {
     method,
@@ -222,6 +244,54 @@ export async function deleteBucket(
   await s3Request("DELETE", `/${encodeURIComponent(checked.value)}`, credentials, { fetcher });
 }
 
+export function parseListObjects(xml: string, prefix: string): S3ObjectPage {
+  const prefixes = [...xml.matchAll(/<CommonPrefixes(?:\s[^>]*)?>([\s\S]*?)<\/CommonPrefixes>/gi)]
+    .map(match => xmlTag(match[1], "Prefix"))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const objects: S3Object[] = [];
+  for (const match of xml.matchAll(/<Contents(?:\s[^>]*)?>([\s\S]*?)<\/Contents>/gi)) {
+    const key = xmlTag(match[1], "Key");
+    if (!key || key === prefix || key.endsWith("/")) continue;
+    objects.push({
+      key,
+      size: Number(xmlTag(match[1], "Size")) || 0,
+      lastModified: xmlTag(match[1], "LastModified"),
+      etag: xmlTag(match[1], "ETag").replace(/^"|"$/g, ""),
+    });
+  }
+  objects.sort((a, b) => a.key.localeCompare(b.key));
+  return {
+    prefixes,
+    objects,
+    nextCursor: xmlTag(xml, "IsTruncated").toLowerCase() === "true"
+      ? xmlTag(xml, "NextContinuationToken") || null
+      : null,
+  };
+}
+
+export async function listObjects(
+  bucket: string,
+  prefix: string,
+  credentials: S3Credentials,
+  cursor?: string,
+  fetcher?: typeof fetch,
+): Promise<S3ObjectPage> {
+  const checked = validateBucketName(bucket);
+  if (!checked.valid || checked.value !== bucket) throw new Error("Invalid bucket name");
+  const response = await s3Request("GET", `/${encodeURIComponent(bucket)}`, credentials, {
+    query: {
+      "list-type": "2",
+      delimiter: "/",
+      prefix,
+      "max-keys": 1000,
+      "continuation-token": cursor || undefined,
+    },
+    fetcher,
+  });
+  return parseListObjects(await response.text(), prefix);
+}
+
 function objectPath(bucket: string, key: string): string {
   const checked = validateBucketName(bucket);
   if (!checked.valid || checked.value !== bucket) throw new Error("Invalid bucket name");
@@ -249,6 +319,52 @@ export async function getObject(bucket: string, key: string, credentials: S3Cred
     return Buffer.concat(chunks);
   } finally { await reader.cancel(); }
 
+}
+
+export const OBJECT_PREVIEW_MAX_BYTES = 256 * 1024;
+
+export async function getObjectPreview(
+  bucket: string,
+  key: string,
+  credentials: S3Credentials,
+  fetcher?: typeof fetch,
+): Promise<{ size: number; truncated: boolean; binary: boolean; content: string | null; contentType: string; maxBytes: number }> {
+  const head = await s3Request("HEAD", objectPath(bucket, key), credentials, { fetcher });
+  const size = Number(head.headers.get("content-length")) || 0;
+  const contentType = head.headers.get("content-type") || "application/octet-stream";
+  if (size === 0) {
+    return { size: 0, truncated: false, binary: false, content: "", contentType, maxBytes: OBJECT_PREVIEW_MAX_BYTES };
+  }
+  const response = await s3Request("GET", objectPath(bucket, key), credentials, {
+    headers: { range: `bytes=0-${Math.min(size, OBJECT_PREVIEW_MAX_BYTES) - 1}` },
+    fetcher,
+  });
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Empty S3 response");
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (received < OBJECT_PREVIEW_MAX_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = OBJECT_PREVIEW_MAX_BYTES - received;
+      chunks.push(value.subarray(0, remaining));
+      received += Math.min(value.length, remaining);
+    }
+  } finally {
+    await reader.cancel();
+  }
+  const raw = Buffer.concat(chunks);
+  const truncated = size > OBJECT_PREVIEW_MAX_BYTES;
+  const binary = raw.includes(0);
+  return {
+    size,
+    truncated,
+    binary,
+    content: binary ? null : raw.toString("utf8"),
+    contentType,
+    maxBytes: OBJECT_PREVIEW_MAX_BYTES,
+  };
 }
 export async function deleteObject(bucket: string, key: string, credentials: S3Credentials): Promise<void> {
   await s3Request("DELETE", objectPath(bucket, key), credentials);

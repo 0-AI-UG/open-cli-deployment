@@ -77,6 +77,8 @@ export const ALL_PERMISSIONS = [
   // --- Object storage -------------------------------------------------
   "buckets.create",
   "buckets.delete",
+  /** Browsing object keys and reading object contents — i.e. application data. */
+  "buckets.objects.read",
 
   // --- Other cloud resources ------------------------------------------
   "resources.view",

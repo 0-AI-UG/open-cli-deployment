@@ -425,7 +425,11 @@ export function ResourcesPage() {
               <Table headers={["Name", "Region", "Created", "Endpoint", ""]}>
                 {data.buckets.map((bucket) => (
                   <tr key={bucket.name} className="hover:bg-alt/50">
-                    <td className="py-2 px-3 font-bold">{bucket.name}</td>
+                    <td className="py-2 px-3">
+                      <a href={`#/resources/buckets/${encodeURIComponent(data.storage_connection)}/${encodeURIComponent(bucket.name)}`} className="text-fg font-bold hover:text-accent-blue hover:underline">
+                        {bucket.name}
+                      </a>
+                    </td>
                     <td className="py-2 px-3 text-fg-dim">{bucket.region}</td>
                     <td className="py-2 px-3 text-fg-dim">{bucket.createdAt ? new Date(bucket.createdAt).toLocaleString() : "—"}</td>
                     <td className="py-2 px-3 font-mono text-[9px] text-fg-dim">{bucket.endpoint}</td>

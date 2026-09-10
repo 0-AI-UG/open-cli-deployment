@@ -27,6 +27,12 @@ OCD only deletes an empty bucket and never recursively deletes objects, object
 versions, or incomplete multipart uploads. Remove that data with an S3 client
 before deleting the bucket.
 
+Select a bucket name under **Resources → Object Storage** to browse its
+delimiter-separated prefixes and preview text objects. Previews are capped at
+256 KiB and binary objects are not rendered. Non-admin users need the
+`buckets.objects.read` permission because object names and contents are
+application data.
+
 Object-storage credentials are often account- or project-wide. Do not inject
 OCD's administrative credential into applications. Create separate application
 credentials and restrict them with bucket policies before storing them as
