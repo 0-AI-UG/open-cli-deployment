@@ -10,6 +10,38 @@ permissions:
   packages: write
 
 jobs:
+  cli-release:
+    name: Publish CLI release assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: docker
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify release version
+        run: test "$GITHUB_REF_NAME" = "v$(jq -r .version package.json)"
+
+      - name: Build CLI binaries
+        run: bun run build:cli
+
+      - name: Create checksums
+        working-directory: dist/cli
+        run: sha256sum ocd-* > SHA256SUMS
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" install.sh dist/cli/ocd-* dist/cli/SHA256SUMS --verify-tag --generate-notes
+
   docker:
     name: Build and push Docker image
     runs-on: ubuntu-latest

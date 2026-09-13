@@ -13,13 +13,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function login(args: string[]): Promise<void> {
+export async function login(args: string[], options: { insecureTls?: boolean } = {}): Promise<void> {
   let panelUrl = args[0];
+  let insecureTls = options.insecureTls ?? false;
 
   if (!panelUrl) {
     const existing = loadConfig();
     if (existing?.panel_url) {
       panelUrl = existing.panel_url;
+      insecureTls = existing.insecure_tls ?? false;
     } else {
       console.error("Usage: ocd login <panel-url>");
       console.error("Example: ocd login https://panel.example.com");
@@ -32,9 +34,16 @@ export async function login(args: string[]): Promise<void> {
   if (!panelUrl.startsWith("http://") && !panelUrl.startsWith("https://")) {
     panelUrl = "https://" + panelUrl;
   }
+  const panelFetch: typeof fetch = insecureTls
+    ? ((input: string | URL | Request, init?: RequestInit) => fetch(input, {
+        ...init,
+        tls: { rejectUnauthorized: false },
+      } as RequestInit)) as typeof fetch
+    : fetch;
+  if (insecureTls) console.log(`${DIM}Using the generated panel's self-signed TLS certificate.${RESET}`);
 
   // Request device code
-  const codeRes = await fetch(`${panelUrl}/api/auth/device-code`, { method: "POST" });
+  const codeRes = await panelFetch(`${panelUrl}/api/auth/device-code`, { method: "POST" });
   if (!codeRes.ok) {
     console.error("Failed to start login flow. Is the panel URL correct?");
     process.exit(1);
@@ -65,7 +74,7 @@ export async function login(args: string[]): Promise<void> {
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL);
 
-    const tokenRes = await fetch(`${panelUrl}/api/auth/device-token`, {
+    const tokenRes = await panelFetch(`${panelUrl}/api/auth/device-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ device_code }),
@@ -80,7 +89,7 @@ export async function login(args: string[]): Promise<void> {
       let username: string | undefined;
       let cliAccessDenied = false;
       try {
-        const meRes = await fetch(`${panelUrl}/api/me`, {
+        const meRes = await panelFetch(`${panelUrl}/api/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (meRes.ok) {
@@ -94,7 +103,7 @@ export async function login(args: string[]): Promise<void> {
         }
       } catch {}
 
-      saveConfig({ panel_url: panelUrl, token, username });
+      saveConfig({ panel_url: panelUrl, token, username, ...(insecureTls ? { insecure_tls: true } : {}) });
       console.log(`${GREEN}  Logged in${username ? ` as ${BOLD}${username}` : ""}${RESET}`);
       if (cliAccessDenied) console.error(`  ${CLI_ACCESS_DENIED_MESSAGE}`);
       return;

@@ -63,6 +63,7 @@ infrastructure.
 ## Typical workflow
 
 ```bash
+ocd bootstrap
 ocd login https://panel.example.com
 ocd doctor
 ocd manifest validate .ocd-deploy.json
@@ -88,6 +89,8 @@ OCD without GitHub Actions minutes.
 ## Command map
 
 ```text
+ocd bootstrap [--host=IP|--provider=hetzner] [--domain=HOSTNAME]
+    [--identity=PATH] [--routing-address=IP]
 ocd deploy [manifest] [--auth-password-env=KEY]
     [--commit=sha] [--server=ID] [--app=EXISTING_APP]
     [--dry-run] [--config-only]

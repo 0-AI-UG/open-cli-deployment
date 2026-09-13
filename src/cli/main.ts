@@ -25,6 +25,7 @@ import { manifest } from "./commands/manifest.ts";
 import { runners } from "./commands/runners.ts";
 import { doctor } from "./commands/doctor.ts";
 import { registry, source } from "./commands/connections.ts";
+import { bootstrap } from "./commands/bootstrap.ts";
 import { BOLD, DIM, RESET } from "./format.ts";
 import { VERSION } from "./version.ts";
 
@@ -60,6 +61,7 @@ const commands: Record<string, (args: string[]) => Promise<void>> = {
   doctor,
   registry,
   source,
+  bootstrap,
 };
 
 function printUsage(): void {
@@ -68,6 +70,7 @@ function printUsage(): void {
 ${BOLD}Usage:${RESET} ocd <command> [args]
 
 ${BOLD}Commands:${RESET}
+  bootstrap              Create and configure a new OCD panel
   login <panel-url>      Log in to a panel
   status                 Dashboard overview
   apps                   List all apps

@@ -7,10 +7,15 @@ export function isSetupComplete(): boolean {
   return db.getUserCount() > 0;
 }
 
+export function isSetupAuthenticationReady(): boolean {
+  return db.getUsers().some((user) => db.getWebAuthnCredentialCount(user.id) > 0);
+}
+
 export async function handleSetupStatus(_request: Request): Promise<Response> {
   return Response.json(
     {
       setupComplete: isSetupComplete(),
+      authenticationReady: isSetupAuthenticationReady(),
     },
     { headers: corsHeaders },
   );

@@ -13,22 +13,27 @@ OCD builds immutable images from Git and deploys them to your servers.
 
 ## Bootstrap the panel
 
-For an operator-owned Docker host, copy `example.connected-panel.json`, add
-its pinned SSH details, then run:
+Install the CLI directly from the latest GitHub release, then run the guided
+bootstrap:
 
 ```bash
-bun run bootstrap path/to/connected-panel.json
+curl -fsSL https://github.com/0-AI-UG/open-cli-deployment/releases/latest/download/install.sh | sh
+ocd bootstrap
 ```
 
-No cloud API is required. Optional managed provisioning is available by
-copying `example.panel.json` and running:
+The wizard can connect an operator-owned Docker host or provision a managed
+Hetzner server. It resolves the panel image to an immutable digest, verifies
+SSH/provider access, deploys the panel, and opens browser setup. Provider
+credentials remain outside configuration:
 
 ```bash
-OCD_PROVISIONER_TOKEN=... bun run bootstrap panel.json
+OCD_PROVISIONER_TOKEN=... ocd bootstrap --provider=hetzner --domain=panel.example.com
 ```
 
-Create the printed DNS record, then open the panel and create your admin
-account. Omit `domain` to use a generated `nip.io` address instead.
+Create any printed DNS record, then create the administrator account and
+passkey in the browser. Bootstrap waits for that setup, starts CLI login, and
+runs the readiness check automatically. Omit `--domain` to use a generated
+`nip.io` address instead.
 
 ## Deploy with the CLI
 

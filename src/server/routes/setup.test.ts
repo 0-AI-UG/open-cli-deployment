@@ -9,7 +9,7 @@ mock.module("../lib/auth.ts", () => ({
 
 import * as db from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
-import { handleSetupComplete, handleSetupStatus, isSetupComplete } from "./setup.ts";
+import { handleSetupComplete, handleSetupStatus, isSetupAuthenticationReady, isSetupComplete } from "./setup.ts";
 
 function jsonReq(body: unknown): Request {
   return new Request("http://localhost/api/setup/complete", {
@@ -25,10 +25,11 @@ beforeEach(async () => {
 });
 
 describe("provider-neutral initial setup", () => {
-  test("reports only account setup state", async () => {
+  test("reports account and passkey setup state", async () => {
     expect(isSetupComplete()).toBe(false);
+    expect(isSetupAuthenticationReady()).toBe(false);
     const response = await handleSetupStatus(new Request("http://localhost/api/setup/status"));
-    expect(await response.json()).toEqual({ setupComplete: false });
+    expect(await response.json()).toEqual({ setupComplete: false, authenticationReady: false });
   });
 
   test("creates the admin without infrastructure credentials", async () => {
@@ -36,6 +37,25 @@ describe("provider-neutral initial setup", () => {
     expect(response.status).toBe(201);
     expect(await secretStore.get("hetzner_api_token")).toBeNull();
     expect(db.getUsers()).toHaveLength(1);
+  });
+
+  test("reports authentication ready only after the admin registers a passkey", async () => {
+    await handleSetupComplete(jsonReq({ username: "admin", password: "correct-horse" }));
+    const user = db.getUserByUsername("admin")!;
+    expect(isSetupAuthenticationReady()).toBe(false);
+    db.insertWebAuthnCredential({
+      id: "credential-1",
+      userId: user.id,
+      publicKey: new Uint8Array([1, 2, 3]),
+      counter: 0,
+      deviceType: "singleDevice",
+      backedUp: false,
+      transports: ["internal"],
+      name: "Test passkey",
+    });
+    expect(isSetupAuthenticationReady()).toBe(true);
+    const response = await handleSetupStatus(new Request("http://localhost/api/setup/status"));
+    expect(await response.json()).toEqual({ setupComplete: true, authenticationReady: true });
   });
 
   test("normalizes the optional provider-neutral domain suffix", async () => {

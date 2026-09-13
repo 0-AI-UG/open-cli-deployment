@@ -5,6 +5,7 @@ export interface CLIConfig {
   panel_url: string;
   token: string;
   username?: string;
+  insecure_tls?: boolean;
 }
 
 function getConfigDir(): string {
@@ -30,6 +31,18 @@ export function loadConfig(): CLIConfig | null {
 export function saveConfig(config: CLIConfig): void {
   const dir = getConfigDir();
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+}
+
+/** Remember a freshly bootstrapped panel before device login has produced a token. */
+export function savePanelUrl(panelUrl: string, insecureTls = false): void {
+  const current = loadConfig();
+  const normalized = panelUrl.replace(/\/+$/, "");
+  const dir = getConfigDir();
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const config = current?.panel_url === normalized
+    ? { panel_url: normalized, ...(current.token ? { token: current.token } : {}), ...(current.username ? { username: current.username } : {}), ...(insecureTls ? { insecure_tls: true } : {}) }
+    : { panel_url: normalized, ...(insecureTls ? { insecure_tls: true } : {}) };
   fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
 }
 

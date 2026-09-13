@@ -223,7 +223,12 @@ export async function apiRequest<T>(
   options: ApiRequestOptions = {},
 ): Promise<T> {
   const config = options.config ?? requireConfig();
-  const fetcher = options.fetcher ?? fetch;
+  const fetcher = options.fetcher ?? (config.insecure_tls
+    ? ((input: string | URL | Request, init?: RequestInit) => fetch(input, {
+        ...init,
+        tls: { rejectUnauthorized: false },
+      } as RequestInit)) as typeof fetch
+    : fetch);
   const sleep = options.sleep ?? Bun.sleep;
   const getTimeoutMs = options.getTimeoutMs ?? PANEL_GET_TIMEOUT_MS;
   const url = `${config.panel_url}${path}`;
