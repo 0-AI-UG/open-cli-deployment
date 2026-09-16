@@ -132,5 +132,5 @@ API also works with the injected bearer token. These are managed topic-scoped
 grants; there is no separate manual notification grant/revoke CLI.
 Each app has isolated topics, including staging targets. Increment `generation`
 to rotate credentials; old credentials retire after rollout attestation.
-Removing `notifications` removes the bindings. Account → Notifications configures
+Removing `notifications` removes the bindings. Incidents → Notifications & agent configures
 personal platform alerts independently of application messages.

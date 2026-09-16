@@ -8,7 +8,7 @@ type Incident = { key: string; incident_id: string; title: string; path: string;
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { ...corsHeaders, "cache-control": "no-store" } });
 const incidentId = (request: Request) => new URL(request.url).pathname.match(/^\/api\/incidents\/([^/]+)/)?.[1] || "";
 function incident(id: string, userId: string): Incident | null {
-  const current = db.query("SELECT * FROM panel_alerts WHERE incident_id=?").get(id) as Incident | null;
+  const current = db.query("SELECT * FROM panel_incident_history WHERE incident_id=?").get(id) as Incident | null;
   if (current) return current;
   // A later recurrence replaces panel_alerts' current row. Keep previously
   // delivered notification links useful for the outbox retention window.
@@ -18,6 +18,24 @@ function incident(id: string, userId: string): Incident | null {
   const opId = sent.title.match(/operation #(\d+)/)?.[1];
   const path = key.startsWith("app:") ? `/apps/${Number(key.slice(4))}` : key.startsWith("disk:") ? `/resources/servers/${Number(key.slice(5))}` : opId ? `/engine/op/${opId}` : "/admin";
   return { key, incident_id: id, title: sent.title.replace(/^\[OCD\] /, ""), path, first_seen: sent.created_at, opened_at: sent.created_at, resolved_at: null };
+}
+export async function handleListIncidents(request: Request): Promise<Response> {
+  try {
+    const actor = await requireAuthenticated(request);
+    const url = new URL(request.url);
+    const status = url.searchParams.get("status") || "all";
+    if (!["all", "active", "resolved"].includes(status)) return json({ error: "Invalid incident filter" }, 400);
+    const offset = Number(url.searchParams.get("offset") || 0);
+    if (!Number.isSafeInteger(offset) || offset < 0) return json({ error: "Invalid offset" }, 400);
+    const rows = db.query(`SELECT h.*, r.phase AS agent_phase, r.status AS agent_status
+      FROM panel_incident_history h
+      LEFT JOIN incident_agent_runs r ON r.id=(SELECT id FROM incident_agent_runs WHERE incident_id=h.incident_id AND user_id=? ORDER BY created_at DESC LIMIT 1)
+      ORDER BY h.first_seen DESC, h.incident_id DESC`).all(actor.userId) as Array<Incident & { agent_phase: string | null; agent_status: string | null }>;
+    const visible = rows.filter(row => canAccess(actor.userId, row));
+    const counts = { all: visible.length, active: visible.filter(row => row.resolved_at === null).length, resolved: visible.filter(row => row.resolved_at !== null).length };
+    const filtered = visible.filter(row => status === "all" || (status === "active" ? row.resolved_at === null : row.resolved_at !== null));
+    return json({ incidents: filtered.slice(offset, offset + 50), nextOffset: offset + 50 < filtered.length ? offset + 50 : null, counts });
+  } catch (error) { return handleError(error); }
 }
 function canAccess(userId: string, found: Incident): boolean {
   const user = getUserById(userId);
@@ -66,7 +84,7 @@ export async function handleInvestigateIncident(request: Request): Promise<Respo
     const found = incident(incidentId(request), actor.userId);
     if (!found) return json({ error: "Incident not found" }, 404);
     if (!canAccess(actor.userId, found)) return json({ error: "Forbidden" }, 403);
-    if (!(await agentConfigured())) return json({ error: "Configure a DeepSeek API key in panel settings first" }, 409);
+    if (!(await agentConfigured())) return json({ error: "Configure a DeepSeek API key in Incidents → Notifications & agent first" }, 409);
     const previous = latest(found.incident_id, actor.userId);
     if (previous?.status === "running") return json({ error: "Agent already running" }, 409);
     const run = createRun(found.incident_id, actor.userId, "investigate", [
@@ -84,6 +102,7 @@ export async function handleFixIncident(request: Request): Promise<Response> {
     const found = incident(incidentId(request), actor.userId);
     if (!found) return json({ error: "Incident not found" }, 404);
     if (!canAccess(actor.userId, found)) return json({ error: "Forbidden" }, 403);
+    if (found.resolved_at !== null) return json({ error: "This incident has already resolved" }, 409);
     const prior = latest(found.incident_id, actor.userId);
     if (!prior || prior.phase !== "investigate" || prior.status !== "complete") return json({ error: "Investigate this incident before fixing it" }, 409);
     const result = JSON.parse(prior.result_json) as AgentResult;

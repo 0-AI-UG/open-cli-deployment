@@ -27,6 +27,7 @@ import { EnginePage } from "./pages/engine.tsx";
 import { EngineOpDetailPage } from "./pages/engine-op-detail.tsx";
 import { EngineOpLogsPage } from "./pages/engine-op-logs.tsx";
 import { IncidentPage } from "./pages/incident.tsx";
+import { IncidentsPage } from "./pages/incidents.tsx";
 
 function useHash() {
   const [hash, setHash] = useState(window.location.hash || "#/");
@@ -130,6 +131,8 @@ export function App() {
   let content;
   if (hash === "#/" || hash === "") {
     content = <DashboardPage />;
+  } else if (hash === "#/incidents") {
+    content = <IncidentsPage />;
   } else if (hash.startsWith("#/incidents/")) {
     const id = hash.split("/")[2];
     content = id ? <IncidentPage id={decodeURIComponent(id)} /> : <DashboardPage />;

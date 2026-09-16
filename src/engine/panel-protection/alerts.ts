@@ -1,5 +1,4 @@
 import { enqueueNtfyIncident, deliverNtfy } from "../ntfy/alerts.ts";
-import { ntfySettings } from "../../shared/ntfy.ts";
 import db, { getSettings, saveSetting } from "../../shared/db.ts";
 
 export type Condition = { key: string; title: string; path: string; grace?: number; hold?: boolean };
@@ -15,6 +14,8 @@ export function reconcileIncidents(conditions: Condition[], now = Date.now()): v
         row = db.query("SELECT * FROM panel_alerts WHERE key=?").get(condition.key) as Incident;
       }
       if (row.opened_at === null && now - row.first_seen >= (condition.grace ?? 0)) {
+        db.query("INSERT INTO panel_incident_history (incident_id,key,title,path,first_seen,opened_at) VALUES (?,?,?,?,?,?)")
+          .run(row.incident_id, row.key, row.title, row.path, row.first_seen, now);
         enqueueNtfyIncident(row, false, now);
         db.query("UPDATE panel_alerts SET opened_at=? WHERE key=?").run(now, row.key);
       }
@@ -23,6 +24,7 @@ export function reconcileIncidents(conditions: Condition[], now = Date.now()): v
       if (active.has(row.key)) continue;
       if (row.opened_at !== null) enqueueNtfyIncident(row, true, now);
       db.query("UPDATE panel_alerts SET resolved_at=? WHERE key=?").run(now, row.key);
+      db.query("UPDATE panel_incident_history SET resolved_at=? WHERE incident_id=?").run(now, row.incident_id);
     }
   })();
 }
@@ -50,7 +52,7 @@ export function collectConditions(now = Date.now()): Condition[] {
     if (settings.panel_backup_enabled === "1" && now - last > 26 * 3600_000) result.push({ key: "backup:overdue", title: "Panel backup is overdue", path: "/admin" });
   }
   // One incident per deployment target, resolved by a later successful delivery.
-  const since = settings.ntfy_alert_enabled_at || String(now);
+  const since = settings.incident_tracking_enabled_at || settings.ntfy_alert_enabled_at || String(now);
   const operations = db.query(`SELECT id, kind, status, resource_keys FROM operations WHERE parent_id IS NULL AND kind IN ('deploy','deploy_stack','redeploy','build_app_delivery','build_stack_delivery','webhook_build_source','apply_manifest','promote','promote_stack','rollback') AND finished_at IS NOT NULL AND julianday(finished_at) >= julianday(?, 'unixepoch') ORDER BY id`).all(Number(since) / 1000) as { id: number; kind: string; status: string; resource_keys: string }[];
   const latest = new Map<string, typeof operations[number]>();
   for (const op of operations) if (op.status !== "cancelled") latest.set(op.resource_keys, op);
@@ -62,9 +64,7 @@ export function collectConditions(now = Date.now()): Condition[] {
 
 export async function alertTick(): Promise<void> {
   const s = getSettings();
-  const ntfy = ntfySettings();
-  if (!(ntfy?.enabled && ntfy.alerts)) return;
-  if (!s.ntfy_alert_enabled_at) saveSetting("ntfy_alert_enabled_at", String(Date.now()));
+  if (!s.incident_tracking_enabled_at) saveSetting("incident_tracking_enabled_at", s.ntfy_alert_enabled_at || String(Date.now()));
   reconcileIncidents(collectConditions());
   await deliverNtfy();
 }

@@ -108,11 +108,11 @@ Pending ntfy notifications from the old snapshot are discarded to avoid replayin
 ## Notifications
 
 ntfy is OCD's only alert channel. Enable the shared service and platform alerts
-in **Admin → Panel → Shared notifications**, then configure subscriptions and
-recovery notices in **Account → Notifications**. See [Shared ntfy notifications](notifications.md)
+in **Incidents → Notifications & agent**, then configure subscriptions and
+recovery notices in the same view. See [Shared ntfy notifications](notifications.md)
 for server setup, app bindings, delivery retries, and access controls.
 
 Built-in incidents cover failed deployments, apps unhealthy for two minutes,
 failed or overdue panel backups, and sustained server disk usage of at least 90%.
-The incident list remains visible in Admin. The panel and ntfy must be available
+The incident list remains visible in Incidents. The panel and ntfy must be available
 to deliver alerts; use external monitoring for a total panel-host outage.

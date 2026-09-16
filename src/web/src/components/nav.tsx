@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
+  AlertTriangle,
   Check,
   Cpu,
   HardDrive,
@@ -22,6 +23,7 @@ const navItems = [
   { hash: "#/", label: "Dashboard", icon: Server, match: /^#\/?$/ },
   { hash: "#/environments", label: "Environments", icon: Layers, match: /^#\/environments/ },
   { hash: "#/resources", label: "Resources", icon: HardDrive, match: /^#\/resources/ },
+  { hash: "#/incidents", label: "Incidents", icon: AlertTriangle, match: /^#\/incidents/ },
   { hash: "#/engine", label: "Operations", icon: Cpu, match: /^#\/engine/ },
 ];
 
@@ -151,6 +153,7 @@ function MobileNav({ hash }: { hash: string }) {
   const primaryItems = [
     { hash: "#/", label: "Home", icon: Home, active: /^#\/?$/.test(hash) || /^#\/(apps|stacks)\//.test(hash) },
     { hash: "#/resources", label: "Resources", icon: HardDrive, active: hash.startsWith("#/resources") },
+    { hash: "#/incidents", label: "Incidents", icon: AlertTriangle, active: hash.startsWith("#/incidents") },
   ];
 
   return (
@@ -169,7 +172,7 @@ function MobileNav({ hash }: { hash: string }) {
       </header>
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t-2 border-fg bg-bg-raised pb-[env(safe-area-inset-bottom)]" aria-label="Primary navigation">
-        <div className="grid h-[62px] grid-cols-3">
+        <div className="grid h-[62px] grid-cols-4">
           {primaryItems.map((item) => {
             const Icon = item.icon;
             return (

@@ -1,4 +1,3 @@
-import { UserNtfySettings } from "../components/ntfy-settings.tsx";
 import { useState, useEffect } from "react";
 import { get, post } from "../api/client.ts";
 import { Card, Btn, Spinner, showToast, PageShell, PageHeader } from "../components/ui.tsx";
@@ -230,7 +229,6 @@ export function AccountPage() {
 
       <GitHubSection />
       <SecuritySection />
-      <UserNtfySettings />
     </PageShell>
   );
 }

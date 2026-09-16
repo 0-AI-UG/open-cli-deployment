@@ -1,5 +1,5 @@
 import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
-import { handleGetIncident, handleInvestigateIncident, handleFixIncident } from "./routes/incidents.ts";
+import { handleListIncidents, handleGetIncident, handleInvestigateIncident, handleFixIncident } from "./routes/incidents.ts";
 import { handleGetProtection, handleSaveProtection, handleRecoveryKey, handleBackupNow, handleResumeRecovery } from "./routes/panel-protection.ts";
 import { recoveryPending } from "../engine/panel-protection/recovery-state.ts";
 import { handleStorageAuthorize, handleStorageReaders } from "./routes/storage-access.ts";
@@ -199,6 +199,7 @@ function confirmationCodeFrom(req: Request): string {
 
 
 export const apiRoutes = {
+  "/api/incidents": { GET: handleListIncidents },
   "/api/incidents/:id": { GET: handleGetIncident },
   "/api/incidents/:id/investigate": { POST: handleInvestigateIncident },
   "/api/incidents/:id/fix": { POST: handleFixIncident },

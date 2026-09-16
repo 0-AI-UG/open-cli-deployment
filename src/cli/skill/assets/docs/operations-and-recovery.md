@@ -278,8 +278,8 @@ remain disabled until explicitly re-enabled; stale queued notifications are disc
 ## Panel notifications
 
 ntfy is the only alert channel. Enable the shared service and platform alerts in
-**Admin → Panel → Shared notifications**. Each user configures their private
-subscription and recovery notices in **Account → Notifications**. Built-in
+**Incidents → Notifications & agent**. Each user configures their private
+subscription and recovery notices in that view. Built-in
 incidents cover failed delivery, prolonged unhealthy apps, failed/overdue panel
 backups, and sustained server disk use of at least 90%. The durable outbox retries
 delivery. The panel and ntfy must be running; external monitoring is needed for

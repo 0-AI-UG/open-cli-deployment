@@ -9,7 +9,7 @@ export type AgentOption = { id: string; label: string; description: string; fiel
 export type AgentResult = { headline: string; summary: string; findings: Array<{ label: string; detail: string; tone: "info" | "warning" | "success" }>; options: AgentOption[] };
 export type AgentActivity = { command: string; exitCode: number; output: string; at: number };
 export type AgentRun = { id: string; incident_id: string; user_id: string; phase: "investigate" | "fix"; status: "running" | "complete" | "failed"; result_json: string; messages_json: string; activity_json: string; error: string; created_at: number; updated_at: number };
-type Message = { role: "system" | "user" | "assistant" | "tool"; content: string | null; tool_call_id?: string; tool_calls?: ToolCall[] };
+type Message = { role: "system" | "user" | "assistant" | "tool"; content: string | null; reasoning_content?: string | null; tool_call_id?: string; tool_calls?: ToolCall[] };
 type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
 
 const running = new Set<string>();
@@ -118,21 +118,33 @@ export function startAgent(run: AgentRun, actor: { userId: string; username: str
 
 async function executeAgent(run: AgentRun, actor: { userId: string; username: string; tokenVersion: number }, approvedPlan: string): Promise<void> {
   const key = process.env.DEEPSEEK_API_KEY || await secretStore.get("deepseek_api_key");
-  if (!key) throw new Error("Configure a DeepSeek API key in panel settings first");
+  if (!key) throw new Error("Configure a DeepSeek API key in Incidents → Notifications & agent first");
   const messages = JSON.parse(run.messages_json) as Message[];
   const activity = JSON.parse(run.activity_json) as AgentActivity[];
   while (true) {
     const response = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST", signal: AbortSignal.timeout(120_000),
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || "deepseek-flash", messages, tools, tool_choice: "required", stream: false }),
+      body: JSON.stringify({ model: process.env.DEEPSEEK_MODEL || "deepseek-flash", messages, tools, stream: false }),
     });
-    if (!response.ok) throw new Error(`DeepSeek API returned ${response.status}: ${(await response.text()).slice(0, 400)}`);
+    if (!response.ok) {
+      const raw = await response.text();
+      let detail = raw;
+      try { detail = (JSON.parse(raw) as { error?: { message?: string } }).error?.message || raw; } catch { /* Keep the provider response. */ }
+      throw new Error(`DeepSeek API returned ${response.status}: ${detail.slice(0, 400)}`);
+    }
     const data = await response.json() as { choices?: Array<{ message?: Message }> };
     const answer = data.choices?.[0]?.message;
     if (!answer) throw new Error("DeepSeek returned no answer");
-    messages.push({ role: "assistant", content: answer.content ?? null, ...(answer.tool_calls ? { tool_calls: answer.tool_calls } : {}) });
-    if (!answer.tool_calls?.length) throw new Error("DeepSeek did not call a tool");
+    messages.push({ role: "assistant", content: answer.content ?? null,
+      ...(answer.reasoning_content !== undefined ? { reasoning_content: answer.reasoning_content } : {}),
+      ...(answer.tool_calls ? { tool_calls: answer.tool_calls } : {}) });
+    if (!answer.tool_calls?.length) {
+      messages.push({ role: "user", content: "Call the finish tool now with the structured result for the incident page." });
+      run.messages_json = JSON.stringify(messages);
+      save(run);
+      continue;
+    }
     for (const call of answer.tool_calls) {
       let output: string;
       try {

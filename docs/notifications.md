@@ -2,14 +2,14 @@
 
 ntfy is OCD’s only alert channel. Its server is a regular OCD app, defined in
 [`services/ntfy/.ocd-deploy.json`](../services/ntfy/.ocd-deploy.json).
-In **Admin → Panel → Shared notifications**, create the app on a ready server
+In **Incidents → Notifications & agent**, create the app on a ready server
 or select an existing app deployed with that manifest. Point its domain to
 that server's ingress address. OCD uses the ordinary app deployment operation,
 immutable image resolution, persistent volume, health checks, and HTTPS ingress.
 
 Open the ntfy **app page** for logs, deployments, resources, storage, domain,
 and lifecycle controls. Admin settings contain only setup and notification
-integration options. Per-user preferences remain in Account → Notifications.
+integration options. Per-user preferences are in the same Incidents settings view.
 
 The default resource ceilings are **128 MiB RAM and 0.5 CPU**, configurable on
 the app page. These are limits, not reservations or measured steady-state usage.
@@ -21,13 +21,16 @@ signup are disabled. No additional database server is needed.
 
 ## User alerts
 
-In **Account → Notifications**, enable alerts, select event categories, and
+In **Incidents → Notifications & agent**, enable alerts, select event categories, and
 choose whether to receive recoveries. Add the displayed server, username,
 password, and private topic to the ntfy mobile app or web client. Use **Send
 test** and **Refresh status** to verify delivery.
 
 Unhealthy app and disk-pressure incidents have a two-minute grace period.
-Repeated observations generate one opening notification and one recovery.
+Repeated observations generate one opening notification and one recovery. Each
+notification opens the corresponding incident detail page. Incidents are recorded
+and resolved even when ntfy delivery is disabled; the Incidents tab retains the
+history and offers read-only investigation followed by a selected repair option.
 App events respect the recipient's current app permissions. Deployment,
 disk, and panel-backup incidents are currently admin-only. Preferences and
 permissions are checked again before delivery. Enabling alerts subscribes to

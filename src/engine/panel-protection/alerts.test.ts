@@ -16,10 +16,16 @@ test("grace period, deduplication and recovery survive repeated evaluations", ()
   expect(count()).toBe(0);
   reconcileIncidents(condition, 121000); reconcileIncidents(condition, 200000);
   expect(count()).toBe(1);
+  const first = db.query("SELECT incident_id,opened_at,resolved_at FROM panel_incident_history WHERE key='app:1'").get() as { incident_id: string; opened_at: number; resolved_at: number | null };
+  expect(first.opened_at).toBe(121000);
+  expect(db.query("SELECT path FROM ntfy_outbox WHERE recovered=0 LIMIT 1").get()).toEqual({ path: `/incidents/${first.incident_id}` });
   reconcileIncidents([], 220000); reconcileIncidents([], 240000);
   expect(count()).toBe(2);
+  expect(db.query("SELECT path FROM ntfy_outbox WHERE recovered=1 LIMIT 1").get()).toEqual({ path: `/incidents/${first.incident_id}` });
+  expect((db.query("SELECT resolved_at FROM panel_incident_history WHERE incident_id=?").get(first.incident_id) as { resolved_at: number }).resolved_at).toBe(220000);
   reconcileIncidents(condition, 300000); reconcileIncidents(condition, 420000);
   expect(count()).toBe(3);
+  expect((db.query("SELECT count(*) AS n FROM panel_incident_history WHERE key='app:1'").get() as { n: number }).n).toBe(2);
 });
 test("transient conditions do not send recovery notifications", () => {
   enable(); reconcileIncidents([{ key: "app:1", title: "Unhealthy", path: "/apps/1", grace: 120000 }], 1000);
