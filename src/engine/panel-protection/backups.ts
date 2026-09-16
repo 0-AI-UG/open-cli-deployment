@@ -10,7 +10,7 @@ import { getS3Credentials, putObject, getObject, deleteObject } from "../object-
 import { encryptArchive, sha256, MAX_ARCHIVE_BYTES } from "./archive.ts";
 
 export type BackupRow = { id: string; created_at: number; status: string; connection_id: string; region: string; bucket: string; object_key: string; endpoint: string; checksum: string; size_bytes: number; error: string; finished_at: number | null };
-export const listBackups = () => db.query("SELECT * FROM panel_backups ORDER BY created_at DESC, rowid DESC LIMIT 100").all() as BackupRow[];
+export const listBackups = () => db.query("SELECT * FROM panel_backups ORDER BY created_at DESC, rowid DESC").all() as BackupRow[];
 export async function requestBackup(): Promise<string> {
   const settings = getSettings();
   const credentials = settings.panel_backup_connection ? await getS3Credentials(settings.panel_backup_connection) : null;

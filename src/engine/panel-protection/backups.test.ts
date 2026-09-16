@@ -69,3 +69,14 @@ test("disabled scheduling still processes manual requests, enabled scheduling is
   await backupTick(); await backupTick();
   expect(listBackups().length).toBe(1);
 });
+
+test("backup history includes every recorded backup, newest first", () => {
+  const insert = db.query("INSERT INTO panel_backups (id, created_at, status, bucket, object_key, endpoint, connection_id, region) VALUES (?, ?, 'complete', 'backup-bucket', ?, 'https://storage.example.com', 'test-storage', 'test')");
+  db.transaction(() => {
+    for (let i = 0; i < 105; i++) insert.run(`history-${i}`, i, `history-${i}.ocdb`);
+  })();
+  const history = listBackups();
+  expect(history).toHaveLength(105);
+  expect(history[0].id).toBe("history-104");
+  expect(history[104].id).toBe("history-0");
+});

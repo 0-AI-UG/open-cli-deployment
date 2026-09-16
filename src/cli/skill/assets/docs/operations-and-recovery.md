@@ -245,7 +245,9 @@ S3 connection, existing bucket and prefix, create/download the recovery key,
 and keep the key and independent storage credentials outside the panel.
 Daily backups default to seven retained successes; uploads are downloaded and
 checksum-verified before completion and retention. **Back up now** is available
-without enabling the schedule. The current size limits are 256 MiB for SQLite
+without enabling the schedule. After setup, this page shows backup history; use **Edit settings** to change
+the destination, schedule, retention, or view the recovery key.
+The current size limits are 256 MiB for SQLite
 and 512 MiB for the archive.
 
 Restore with the matching OCD release, stopping the original panel and engine
@@ -254,7 +256,7 @@ first. Run the restore command from the matching OCD release checkout. Supply
 `OCD_S3_ACCESS_KEY`, and `OCD_S3_SECRET_KEY` through the environment:
 
 ```bash
-bun run restore:panel --from s3://bucket/prefix/backup.ocdb --data-dir /srv/ocd-restored
+bun run scripts/restore-panel.ts --from s3://bucket/path.ocdb --data-dir /new/panel-data
 # Or use a previously downloaded encrypted archive:
 bun run restore:panel --file /safe/backup.ocdb --data-dir /srv/ocd-restored
 ```
@@ -262,7 +264,9 @@ bun run restore:panel --file /safe/backup.ocdb --data-dir /srv/ocd-restored
 The destination must not exist. Restore authenticates and validates the archive
 and SQLite before installing it. It preserves recorded hosts and panel placement;
 it does not provision infrastructure or migrate the panel. Mount the restored
-directory as the matching panel's data directory. Omit `JWT_SECRET` to load the
+directory as the matching panel's `/app/data` and start that release with
+`OCD_DATA_DIR=/app/data`. See `docs/panel-protection.md` in the OCD checkout
+for the complete procedure. Omit `JWT_SECRET` to load the
 recovered secret, or supply the identical original value.
 
 Automation starts paused. In **Admin → Panel**, confirm the original panel is
