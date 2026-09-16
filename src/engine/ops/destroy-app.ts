@@ -1,3 +1,4 @@
+import { deleteAppNtfy } from "../../shared/ntfy.ts";
 import { deleteAppStorage } from "../../shared/object-storage.ts";
 import * as db from "../../shared/db.ts";
 import { enqueueOperation, listChildOperations } from "../../shared/db/operations.ts";
@@ -194,6 +195,7 @@ const deleteDbRows: Step<DestroyInput, DeleteDbRowsOut> = {
     if (dbFailures.length === 0) {
       const result = await softStep(ctx, "delete_app", async () => {
         deleteAppStorage(ctx.input.appId);
+        deleteAppNtfy(ctx.input.appId);
         db.deleteApp(ctx.input.appId);
       });
       if (!result.ok) dbFailures.push(`app:${ctx.input.appId}`);

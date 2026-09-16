@@ -180,10 +180,11 @@ export async function sshExecWithStdin(
   command: string,
   stdin: string,
   hostKey?: string,
+  options: { user?: string; port?: number } = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const shortCmd = command.length > 120 ? command.slice(0, 120) + "..." : command;
   log("ssh", `Exec with private stdin on ${ip}: ${shortCmd}`);
-  const { args, tmpKnownHostsPath } = buildSshArgs({ ip, command, hostKey, interactive: false });
+  const { args, tmpKnownHostsPath } = buildSshArgs({ ip, command, hostKey, interactive: false, ...options });
   try {
     const proc = Bun.spawn(args, { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     proc.stdin.write(stdin);

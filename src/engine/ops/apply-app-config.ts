@@ -1,3 +1,4 @@
+import { reconcileNtfyService } from "../ntfy/service.ts";
 import { applyAppConfig } from "../../shared/app-config.ts";
 import * as db from "../../shared/db.ts";
 import type { DeployRequest } from "../../shared/rpc.ts";
@@ -20,6 +21,7 @@ const apply: Step<ApplyAppConfigInput, { changed: string[] }> = {
       },
     });
     await commitManifestDeliverySource(ctx.input.appId, ctx.input.spec.delivery_source);
+    if (Object.keys(ctx.input.spec.notifications ?? {}).length) await reconcileNtfyService();
     await syncAppIngress(ctx.input.appId);
     return { changed: changes.map((change) => change.field) };
   },

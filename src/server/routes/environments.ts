@@ -1,3 +1,4 @@
+import { appNtfyView } from "../../shared/ntfy.ts";
 import { generateEnvironmentValue } from "../../shared/environment-generate.ts";
 import { appStorageView } from "../../shared/object-storage.ts";
 import { corsHeaders } from "../lib/cors.ts";
@@ -304,6 +305,7 @@ export async function handleGetEnvironmentApps(request: Request, id: number): Pr
       return {
         id: a.id, name: a.name, status: a.status, domain: a.domain,
         storage_bindings: appStorageView(a.id),
+        notification_bindings: appNtfyView(a.id),
         runtime_env_vars: Object.keys(platformEnvVars(a)).map((key) => ({
           key,
           value: secretKeys.has(key) && key !== "OCD_DEPLOY_TARGET" ? SECRET_MASK : resolved[key],
@@ -312,6 +314,10 @@ export async function handleGetEnvironmentApps(request: Request, id: number): Pr
         })).concat(appStorageView(a.id).flatMap(binding => [
           { key: binding.variables.token, value: SECRET_MASK, secret: true, injected_by: `Object storage · ${binding.name}` },
           { key: binding.variables.url, value: resolved[binding.variables.url], secret: false, injected_by: `Object storage · ${binding.name}` },
+        ])).concat(appNtfyView(a.id).flatMap(binding => [
+          { key: binding.variables.token, value: SECRET_MASK, secret: true, injected_by: `Notifications · ${binding.name}` },
+          { key: binding.variables.url, value: resolved[binding.variables.url], secret: false, injected_by: `Notifications · ${binding.name}` },
+          { key: binding.variables.topic, value: resolved[binding.variables.topic], secret: false, injected_by: `Notifications · ${binding.name}` },
         ])),
       };
     }));

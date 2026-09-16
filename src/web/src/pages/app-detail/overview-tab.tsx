@@ -64,6 +64,11 @@ export function OverviewTab({ app, appId, replicas, metricsHistory, allServers, 
   return (
     <div className="space-y-4">
       {storage?.mounts && <StorageMounts mounts={storage.mounts} />}
+      {Object.keys(app.notifications ?? {}).length > 0 && <Card className="p-4 space-y-2">
+        <h3 className="font-semibold">Notification bindings</h3>
+        {Object.entries(app.notifications ?? {}).map(([name, binding]) => <p key={name} className="text-sm"><strong>{name}</strong> · {binding.permissions.join(", ")} · Credential generation {binding.generation}</p>)}
+        <p className="text-sm text-muted">Private ntfy topics and credentials are injected into this app. Configure bindings in its deployment manifest.</p>
+      </Card>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="p-4 space-y-3">

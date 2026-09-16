@@ -1,3 +1,4 @@
+import { initializeNtfySchema } from "./db/ntfy-schema.ts";
 import type { Database } from "bun:sqlite";
 import { initializeProtectionSchema } from "./db/protection-schema.ts";
 
@@ -2642,6 +2643,7 @@ export const migrations: Migration[] = [
     },
   },
   { version: 115, description: "Panel backups and email incidents", up: initializeProtectionSchema },
+  { version: 117, description: "Shared ntfy credentials and delivery outbox", up: initializeNtfySchema },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

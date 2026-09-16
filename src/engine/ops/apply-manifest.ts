@@ -1,3 +1,5 @@
+import { reconcileNtfyService } from "../ntfy/service.ts";
+import { getAppNtfy } from "../../shared/ntfy.ts";
 import * as db from "../../shared/db.ts";
 import { enqueueOperation, listChildOperations } from "../../shared/db/operations.ts";
 import { awaitChildren } from "./_children.ts";
@@ -160,6 +162,7 @@ const reconcile: Step<ApplyManifestInput, ApplyOut> = {
     }
 
     if (rollout === "runtime") {
+      if (Object.keys(getAppNtfy(app.id)).length) await reconcileNtfyService();
       childOpIds.push(await runChild(
         ctx,
         "runtime-recreate",

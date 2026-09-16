@@ -1,3 +1,4 @@
+import { NtfyBindingsSchema } from "./ntfy-schema.ts";
 import { StorageBindingsSchema } from "./storage-schema.ts";
 /**
  * Canonical, single-source-of-truth Zod schemas for deploy (`.ocd-deploy.json`)
@@ -319,6 +320,7 @@ export const DeployManifestSchema = z
     ).optional(),
     env: RuntimeEnvSchema.optional(),
     storage: StorageBindingsSchema.optional(),
+    notifications: NtfyBindingsSchema.optional(),
     outputs: RuntimeOutputsSchema.optional(),
     /** Existing environment selected by name; null explicitly detaches it. */
     environment: z.union([

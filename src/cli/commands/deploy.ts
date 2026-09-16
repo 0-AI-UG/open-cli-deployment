@@ -145,6 +145,7 @@ ${BOLD}Options:${RESET}
     env: manifest.env ?? {},
     outputs: manifest.outputs ?? {},
     storage: manifest.storage,
+    notifications: manifest.notifications,
     environment_id: environment?.id ?? null,
     auth_password: authPassword ?? "",
     public: manifest.public ?? true,

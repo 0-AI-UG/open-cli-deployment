@@ -23,6 +23,7 @@ export type EnvironmentData = {
 };
 
 export type AppData = {
+  notifications?: import("../../shared/ntfy-schema.ts").NtfyBindings;
   storage_bindings?: Array<{ name: string; connection: string; connection_name: string; bucket: string; prefix: string; permissions: string[]; variables: { token: string; url: string } }>;
   id: number;
   name: string;

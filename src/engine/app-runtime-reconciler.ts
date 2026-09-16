@@ -1,3 +1,4 @@
+import { retireAppNtfyCredentials } from "../shared/ntfy.ts";
 import { retireAppStorageGrants } from "../shared/object-storage.ts";
 import * as db from "../shared/db.ts";
 import { enqueueOperation, findActiveOperationByResourceKey } from "../shared/db/operations.ts";
@@ -87,7 +88,7 @@ export async function reconcileAppRuntime(): Promise<void> {
         if (!attestation.ok) allAttested = false;
         if (!attestation.ok && wasDivergent) persistentDivergence = true;
       }
-      if (allAttested && app.status === "running") retireAppStorageGrants(app.id);
+      if (allAttested && app.status === "running") { retireAppStorageGrants(app.id); retireAppNtfyCredentials(app.id); }
       if (persistentDivergence && !findActiveOperationByResourceKey("reload_app", key)) {
         enqueueOperation({
           kind: "reload_app",

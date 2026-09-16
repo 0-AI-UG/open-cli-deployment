@@ -1,3 +1,5 @@
+import { reconcileNtfyService } from "../ntfy/service.ts";
+import { normalizeNtfyBindings, prepareNtfyBindings, saveAppNtfy, appNtfyEnv, deleteAppNtfy } from "../../shared/ntfy.ts";
 import { resolveStorageBindings, prepareStorageBindings, saveAppStorage, appStorageEnv, deleteAppStorage } from "../../shared/object-storage.ts";
 import type { DeployRequest, Server } from "../../shared/rpc.ts";
 import dbInstance, * as db from "../../shared/db.ts";
@@ -510,12 +512,17 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
       return result;
     })();
 
+    const notifications = normalizeNtfyBindings(req.notifications);
     const storage = resolveStorageBindings(req.storage);
     try {
+      await prepareNtfyBindings(app.id, notifications);
+      saveAppNtfy(app.id, notifications, true);
+      if (Object.keys(notifications).length) await reconcileNtfyService();
       await prepareStorageBindings(app, storage);
       saveAppStorage(app.id, storage, true);
     } catch (error) {
       deleteAppStorage(app.id);
+      deleteAppNtfy(app.id);
       db.deleteApp(app.id);
       throw error;
     }
@@ -671,6 +678,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
           ...platform,
           ...appOut.flatEnvVars,
           ...await appStorageEnv(appRow!.id),
+          ...await appNtfyEnv(appRow!.id),
           OCD_DEPLOY_TARGET: platform.OCD_DEPLOY_TARGET,
         }
       : appOut.flatEnvVars;

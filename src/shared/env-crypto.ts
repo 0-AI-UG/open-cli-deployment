@@ -1,3 +1,4 @@
+import { appNtfyEnv } from "./ntfy.ts";
 import { encryptValue, decryptValue } from "./secret-store.ts";
 import type { AppRow } from "./db/apps.ts";
 
@@ -217,6 +218,7 @@ export async function resolveAppEnvVars(app: AppRow): Promise<Record<string, str
     ...platform,
     ...ownVars,
     ...await appStorageEnv(app.id),
+    ...await appNtfyEnv(app.id),
     // A staging fail-closed guard must not be bypassable by an environment
     // copied from production or by a manifest value.
     OCD_DEPLOY_TARGET: platform.OCD_DEPLOY_TARGET,

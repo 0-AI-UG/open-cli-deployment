@@ -1,3 +1,4 @@
+import "./configure-ntfy.ts";
 // Registration point for all engine op kinds.
 // Each op kind imports this file and self-registers via registerOp.
 import "./deploy.ts";

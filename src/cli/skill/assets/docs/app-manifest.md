@@ -104,3 +104,24 @@ read-only. Use the OCD storage client, not a standard S3 SDK with this token.
 Increment `generation` to rotate. Old grants are retired after replicas attest
 to the new configuration. Removing `storage` removes the app's bindings.
 Staging manifests must select their own explicit bucket/prefix scope.
+
+## Notifications
+
+`notifications` declares private topics on OCD's managed ntfy service:
+
+```json
+{
+  "notifications": {
+    "primary": { "permissions": ["publish"], "generation": 0 }
+  }
+}
+```
+
+Enable shared ntfy and app access in Admin → Panel first. Binding deployment
+requires an administrator. OCD injects `OCD_NTFY_URL`, `OCD_NTFY_TOPIC`, and
+`OCD_NTFY_TOKEN`; named bindings use `OCD_<NAME>_NTFY_*`. Permissions are
+`publish` and/or `subscribe`. Use the native ntfy API with bearer authentication.
+Each app has isolated topics, including staging targets. Increment `generation`
+to rotate credentials; old credentials retire after rollout attestation.
+Removing `notifications` removes the bindings. Account → Notifications configures
+personal platform alerts independently of application messages.

@@ -1,3 +1,4 @@
+import { getAppNtfy, normalizeNtfyBindings, saveAppNtfy, prepareNtfyBindings, ntfySettings } from "./ntfy.ts";
 import { getAppStorage, resolveStorageBindings, saveAppStorage, prepareStorageBindings } from "./object-storage.ts";
 import * as db from "./db.ts";
 import type { AppRow } from "./db/apps.ts";
@@ -17,7 +18,7 @@ export type AppReconcileMode = "control" | "runtime" | "artifact";
 const ARTIFACT_CONFIG_FIELDS = new Set(["image_ref"]);
 
 const RUNTIME_CONFIG_FIELDS = new Set([
-  "storage", "container_port", "environment_id", "env", "outputs", "memory_mb", "cpu_limit",
+  "notifications", "storage", "container_port", "environment_id", "env", "outputs", "memory_mb", "cpu_limit",
   "health_check", "health_check_mode", "health_check_command", "health_check_file",
   "health_check_max_age_seconds", "health_check_expected_statuses", "internal_protocol",
   "extra_volumes", "desired_volume_id", "desired_volume_size", "desired_volume_path", "desired_volume_driver",
@@ -156,6 +157,7 @@ export function mergeDeployRequestWithExistingApp(
     env: supplied.env ?? {},
     outputs: supplied.outputs ?? {},
     storage: resolveStorageBindings(supplied.storage, getAppStorage(app.id)),
+    notifications: normalizeNtfyBindings(supplied.notifications),
     public: publicApp,
     memory_mb: supplied.memory_mb ?? 0,
     cpu_limit: supplied.cpu_limit ?? 0,
@@ -218,6 +220,7 @@ function normalizedSpec(req: DeployRequest) {
     env: req.env ?? {},
     outputs: req.outputs ?? {},
     storage: req.storage ?? {},
+    notifications: normalizeNtfyBindings(req.notifications),
     public: req.public ?? true,
     memory_mb: req.memory_mb ?? 0,
     cpu_limit: req.cpu_limit ?? 0,
@@ -267,6 +270,7 @@ function comparableApp(app: AppRow) {
     environment_id: app.environment_id,
     ...parseRuntimeConfig(app.env_vars),
     storage: getAppStorage(app.id),
+    notifications: getAppNtfy(app.id),
     public: !!app.public,
     memory_mb: app.memory_mb ?? 0,
     cpu_limit: app.cpu_limit ?? 0,
@@ -327,6 +331,7 @@ export function deployRequestFromApp(app: AppRow): DeployRequest {
     environment_id: app.environment_id,
     ...parseRuntimeConfig(app.env_vars),
     storage: getAppStorage(app.id),
+    notifications: getAppNtfy(app.id),
     public: current.public,
     memory_mb: current.memory_mb,
     cpu_limit: current.cpu_limit,
@@ -436,13 +441,16 @@ export async function applyAppConfig(
     : effective);
   if (!effectiveValidation.valid) throw new Error(effectiveValidation.error);
   if (effective.app_name !== app.name) throw new Error(`Manifest targets "${effective.app_name}", but app #${appId} is "${app.name}"`);
+  if (effective.domain && effective.domain === ntfySettings()?.domain) throw new Error("Domain is reserved for the shared ntfy service");
   const desired = normalizedSpec(effective);
   const changes = diffAppConfig(app, effective);
   const changed = new Set(changes.map((c) => c.field));
   await preflightRuntimeEnv(runtimeAppFromRequest(effective, app.stack_id));
   await prepareStorageBindings(app, desired.storage);
+  await prepareNtfyBindings(app.id, desired.notifications);
   await applyEnvironment(app, effective);
   if (changed.has("storage")) saveAppStorage(app.id, desired.storage);
+  if (changed.has("notifications")) saveAppNtfy(app.id, desired.notifications);
   if ([
     "image_ref", "health_check_mode", "health_check_command",
     "health_check_file", "health_check_max_age_seconds", "health_check_expected_statuses",

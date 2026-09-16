@@ -104,6 +104,7 @@ export type DeployRequest = {
   /** Internal owning stack context for resolving dependency outputs. */
   stack_id?: number | null;
   storage?: import("./storage-schema.ts").StorageBindings;
+  notifications?: import("./ntfy-schema.ts").NtfyBindings;
   /** Complete manifest reconciliation. Browser/API patches are not supported. */
   apply_mode?: "manifest";
   app_name: string;

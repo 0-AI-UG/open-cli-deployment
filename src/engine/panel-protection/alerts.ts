@@ -1,3 +1,5 @@
+import { enqueueNtfyIncident, deliverNtfy } from "../ntfy/alerts.ts";
+import { ntfySettings } from "../../shared/ntfy.ts";
 import db, { getSettings, getPanel, saveSetting } from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
 
@@ -6,11 +8,12 @@ type Incident = { key: string; incident_id: string; title: string; path: string;
 type EmailPayload = { from: string; to: string[]; subject: string; text: string };
 export function enqueueEmail(id: string, subject: string, text: string, now = Date.now()): void {
   const settings = getSettings();
-  if (!settings.panel_alert_recipient) return;
+  if (settings.panel_alert_enabled !== "1" || !settings.panel_alert_recipient) return;
   const payload: EmailPayload = { from: settings.panel_alert_sender || "OCD <onboarding@resend.dev>", to: [settings.panel_alert_recipient], subject, text };
   db.query("INSERT OR IGNORE INTO panel_email_outbox (id, payload, created_at, next_attempt) VALUES (?, ?, ?, ?)").run(id, JSON.stringify(payload), now, now);
 }
 function notify(incident: Incident, recovered: boolean, now: number) {
+  enqueueNtfyIncident(incident, recovered, now);
   const domain = getPanel()?.domain;
   const link = domain ? `https://${domain}/#${incident.path}` : `Open OCD: ${incident.path}`;
   enqueueEmail(`${incident.incident_id}:${recovered ? "recovery" : "open"}`, `[OCD] ${recovered ? "Recovered: " : ""}${incident.title}`, `${incident.title}\n\n${recovered ? "This condition has cleared." : "This condition needs attention."}\nFirst observed: ${new Date(incident.first_seen).toISOString()}\n${link}\n\nOpen the panel to inspect details.`, now);
@@ -89,8 +92,10 @@ export async function deliverEmails(fetcher: typeof fetch = fetch, now = Date.no
 }
 export async function alertTick(): Promise<void> {
   const s = getSettings();
-  if (s.panel_alert_enabled !== "1") return;
+  const ntfy = ntfySettings();
+  if (s.panel_alert_enabled !== "1" && !(ntfy?.enabled && ntfy.alerts)) return;
   if (!s.panel_alert_enabled_at) saveSetting("panel_alert_enabled_at", String(Date.now()));
   reconcileIncidents(collectConditions());
   await deliverEmails();
+  await deliverNtfy();
 }

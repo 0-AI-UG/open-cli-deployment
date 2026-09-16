@@ -1,3 +1,4 @@
+import { reconcileNtfyService } from "../ntfy/service.ts";
 import { backupTick } from "./backups.ts";
 import { alertTick } from "./alerts.ts";
 import { recoveryPending } from "./recovery-state.ts";
@@ -8,6 +9,7 @@ export async function protectionTick(): Promise<void> {
   busy = true;
   try {
     try { await backupTick(); } catch { console.error("[panel-protection] Backup scheduling failed; check backup settings and storage connection"); }
+    try { await reconcileNtfyService(); } catch { console.error("[ntfy] Service reconciliation failed"); }
     try { await alertTick(); } catch { console.error("[panel-protection] Alert evaluation failed"); }
   } finally { busy = false; }
 }

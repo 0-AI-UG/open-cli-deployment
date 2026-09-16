@@ -1,3 +1,4 @@
+import { NtfyBindingsSchema } from "./ntfy-schema.ts";
 import { StorageBindingsSchema } from "./storage-schema.ts";
 import { publicPortRange, type PublicProtocol, type InternalProtocol } from "./db/apps.ts";
 import {
@@ -434,6 +435,7 @@ function fieldValueAt(root: unknown, path: readonly PropertyKey[]): unknown {
 
 export function validateDeployRequest(req: {
   storage?: import("./storage-schema.ts").StorageBindings;
+  notifications?: import("./ntfy-schema.ts").NtfyBindings;
   apply_mode?: "manifest";
   app_name: string;
   domain?: string;
@@ -478,6 +480,9 @@ export function validateDeployRequest(req: {
   cap_add?: string[];
   post_start_command?: string;
 }): ValidationResult<void> {
+  if (req.notifications !== undefined && !NtfyBindingsSchema.safeParse(req.notifications).success) {
+    return { valid: false, error: "Invalid notification bindings" };
+  }
   if (req.storage !== undefined) {
     const result = StorageBindingsSchema.safeParse(req.storage);
     if (!result.success) return { valid: false, error: `Storage: ${result.error.message}` };
