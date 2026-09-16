@@ -38,17 +38,13 @@
     }
   },
   "panels": {
+    "0ebb98ae-ca11-4816-96e0-68b9f6873702": {
+      "type": "terminal",
+      "title": "Codex"
+    },
     "e217f51c-dba7-4007-9d1c-4a0003e2b558": {
       "type": "terminal",
-      "title": "Fix delayed storage panel load"
-    },
-    "3e5561e1-17d2-423f-8ea0-2c4a66748948": {
-      "type": "terminal",
-      "title": "Connect ntfy to OCD"
-    },
-    "6f8468d9-0a9e-45c0-a50c-40dee579b8cd": {
-      "type": "terminal",
-      "title": "Use Geist font for OCD"
+      "title": "Codex 2"
     },
     "00d6c5ad-7100-45c2-82c6-4d0eaab1b0ea": {
       "type": "canvas",
@@ -59,6 +55,28 @@
     "00d6c5ad-7100-45c2-82c6-4d0eaab1b0ea": {
       "id": "00d6c5ad-7100-45c2-82c6-4d0eaab1b0ea",
       "canvasNodes": {
+        "5a98ccd5-d801-4fae-8570-0a99f74f9e17": {
+          "id": "5a98ccd5-d801-4fae-8570-0a99f74f9e17",
+          "origin": {
+            "x": 1580,
+            "y": 1340
+          },
+          "size": {
+            "width": 639.9999999999998,
+            "height": 499.7974006071089
+          },
+          "zOrder": 1155,
+          "creationIndex": 18,
+          "animationState": "idle",
+          "dockLayout": {
+            "type": "tabs",
+            "id": "54d29827-c56c-409b-bfa2-ae97fd84c26f",
+            "panelIds": [
+              "0ebb98ae-ca11-4816-96e0-68b9f6873702"
+            ],
+            "activeIndex": 0
+          }
+        },
         "577e13e1-3268-4b5d-aec3-01b959eb23e4": {
           "id": "577e13e1-3268-4b5d-aec3-01b959eb23e4",
           "origin": {
@@ -69,7 +87,7 @@
             "width": 640,
             "height": 499.797400607109
           },
-          "zOrder": 1216,
+          "zOrder": 1153,
           "creationIndex": 20,
           "animationState": "idle",
           "dockLayout": {
@@ -80,56 +98,12 @@
             ],
             "activeIndex": 0
           }
-        },
-        "9eca62df-11a1-4bdf-a6b5-13756ec84ce2": {
-          "id": "9eca62df-11a1-4bdf-a6b5-13756ec84ce2",
-          "origin": {
-            "x": 1580,
-            "y": 260
-          },
-          "size": {
-            "width": 640,
-            "height": 499.797400607109
-          },
-          "zOrder": 1214,
-          "creationIndex": 23,
-          "animationState": "idle",
-          "dockLayout": {
-            "type": "tabs",
-            "id": "13a3a936-7677-46e9-a7f4-55c7e59b4d5b",
-            "panelIds": [
-              "3e5561e1-17d2-423f-8ea0-2c4a66748948"
-            ],
-            "activeIndex": 0
-          }
-        },
-        "ea808321-d528-4847-9078-a7e408dabd9e": {
-          "id": "ea808321-d528-4847-9078-a7e408dabd9e",
-          "origin": {
-            "x": 2400,
-            "y": 220
-          },
-          "size": {
-            "width": 640,
-            "height": 499.797400607109
-          },
-          "zOrder": 1212,
-          "creationIndex": 24,
-          "animationState": "idle",
-          "dockLayout": {
-            "type": "tabs",
-            "id": "3ef60d5e-6441-42cc-be6e-69a36486d898",
-            "panelIds": [
-              "6f8468d9-0a9e-45c0-a50c-40dee579b8cd"
-            ],
-            "activeIndex": 0
-          }
         }
       },
-      "zoomLevel": 0.8780701652122653,
+      "zoomLevel": 1.003415571878654,
       "viewportOffset": {
-        "x": -1323.539852823723,
-        "y": -156.4884224747134
+        "x": -1358.8544976919577,
+        "y": -1110.9847047797466
       }
     }
   }

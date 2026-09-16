@@ -81,36 +81,6 @@
           }
         ]
       }
-    ],
-    "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/anton/.cate/agent-hooks/cate-hook-bridge-claude-code"
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/anton/.cate/agent-hooks/cate-hook-bridge-claude-code"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/anton/.cate/agent-hooks/cate-hook-bridge-claude-code"
-          }
-        ]
-      }
     ]
   }
 }
