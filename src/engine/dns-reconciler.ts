@@ -1,4 +1,4 @@
-import { resolve4 } from "node:dns/promises";
+import { lookup, resolve4 } from "node:dns/promises";
 import * as db from "../shared/db.ts";
 import { getPanelIngressIpv4 } from "./scale/traefik-manager.ts";
 import { tryAcquire, release, NON_OP_HOLDER } from "./scheduler.ts";
@@ -41,11 +41,21 @@ async function observeARecord(domain: string, target: string): Promise<DnsReadin
   }
 
   let resolved: string[] = [];
+  let lookupError: unknown;
   try {
     resolved = Array.from(new Set(await resolve4(domain))).sort();
-  } catch {
-    // An absent/unpropagated record and a temporary resolver failure are both
-    // operator-observable pending states. OCD never writes to a DNS provider.
+  } catch (error) {
+    lookupError = error;
+  }
+  if (resolved.length === 0) {
+    // Bun's DNS query resolver and the OS resolver use different paths. A
+    // failed or stale query must not hide a record the panel can actually use.
+    try {
+      resolved = Array.from(new Set((await lookup(domain, { all: true, family: 4 })).map(result => result.address))).sort();
+      lookupError = undefined;
+    } catch (error) {
+      lookupError = error;
+    }
   }
 
   const exact = resolved.length === 1 && resolved[0] === target;
@@ -57,7 +67,9 @@ async function observeARecord(domain: string, target: string): Promise<DnsReadin
   const message = status === "correct"
     ? `${domain} resolves to ${target}`
     : status === "pending"
-      ? `Create this record with your DNS provider; no A record is currently observed`
+      ? lookupError && !["ENOTFOUND", "ENODATA"].includes((lookupError as NodeJS.ErrnoException).code ?? "")
+        ? `DNS lookup failed (${(lookupError as NodeJS.ErrnoException).code ?? "unknown error"}); retrying automatically`
+        : `Create this record with your DNS provider; no A record is currently observed`
       : `${domain} resolves to ${resolved.join(", ")}; replace it with ${target}`;
 
   return {

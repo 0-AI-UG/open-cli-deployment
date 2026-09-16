@@ -5,9 +5,13 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 let answers: string[] = [];
+let queryError: Error | null = null;
+let osAnswers: string[] = [];
+let osError: Error | null = null;
 
 mock.module("node:dns/promises", () => ({
-  resolve4: mock(async () => answers),
+  resolve4: mock(async () => { if (queryError) throw queryError; return answers; }),
+  lookup: mock(async () => { if (osError) throw osError; return osAnswers.map(address => ({ address, family: 4 })); }),
 }));
 
 import * as db from "../shared/db.ts";
@@ -27,6 +31,9 @@ function makeApp(domain: string, isPublic = true) {
 
 beforeEach(() => {
   answers = [];
+  queryError = null;
+  osAnswers = [];
+  osError = null;
   db.deletePanel();
   const server = db.insertServer({
     name: `dns-panel-${randomSuffix()}`,
@@ -73,6 +80,22 @@ describe("provider-neutral DNS instructions", () => {
     expect(result.ready).toBe(true);
     expect(db.getApp(app.id)?.public_endpoint_status).toBe("ready");
     expectNoProviderMutation();
+  });
+
+  test("uses the OS resolver when the DNS query resolver has a stale failure", async () => {
+    queryError = Object.assign(new Error("stale negative answer"), { code: "ENOTFOUND" });
+    osAnswers = ["203.0.113.10"];
+    const result = await reconcileAppDns(makeApp("recovered.example.com").id);
+    expect(result.status).toBe("correct");
+    expect(result.observedValues).toEqual(["203.0.113.10"]);
+  });
+
+  test("reports resolver failures without claiming the record is absent", async () => {
+    queryError = Object.assign(new Error("query timed out"), { code: "ETIMEOUT" });
+    osError = Object.assign(new Error("lookup timed out"), { code: "ETIMEOUT" });
+    const result = await reconcileAppDns(makeApp("timeout.example.com").id);
+    expect(result.status).toBe("pending");
+    expect(result.message).toContain("DNS lookup failed (ETIMEOUT)");
   });
 
   test("reports conflicting values and does not replace them", async () => {
