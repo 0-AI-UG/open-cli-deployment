@@ -119,7 +119,7 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
         </>}
       />
 
-      <div className="grid grid-cols-3 gap-3 mb-6 text-[10px] font-mono">
+      <div className="mb-6 grid grid-cols-1 gap-3 font-mono text-[10px] min-[380px]:grid-cols-3">
         <Meta label="Enqueued" value={fmtTs(op.enqueued_at)} />
         <Meta label="Started" value={fmtTs(op.started_at)} />
         <Meta label="Finished" value={fmtTs(op.finished_at)} />
@@ -154,7 +154,7 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
               <a
                 key={c.id}
                 href={`#/engine/op/${c.id}`}
-                className="border-2 border-fg bg-bg-raised shadow-neo-sm px-3 py-2 flex items-center gap-2 hover:bg-alt transition-colors"
+                className="flex min-w-0 flex-wrap items-center gap-2 border-2 border-fg bg-bg-raised px-3 py-2 shadow-neo-sm transition-colors hover:bg-alt"
               >
                 <span className="font-mono text-[9px] text-fg-dim">#{c.id}</span>
                 <span className={`font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border-2 border-fg ${
@@ -164,8 +164,8 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
                     : c.status === "failed" || c.status === "compensated" ? "bg-accent-red text-white"
                     : "bg-alt text-fg"
                 }`}>{c.status}</span>
-                <span className="font-mono text-xs font-bold">{c.kind}</span>
-                <span className="font-mono text-[10px] text-fg-dim ml-auto">{(c.resource_labels ?? c.resource_keys).join(", ")}</span>
+                <span className="min-w-0 break-words font-mono text-xs font-bold">{c.kind}</span>
+                <span className="w-full min-w-0 break-words font-mono text-[10px] text-fg-dim sm:ml-auto sm:w-auto">{(c.resource_labels ?? c.resource_keys).join(", ")}</span>
               </a>
             ))}
           </div>

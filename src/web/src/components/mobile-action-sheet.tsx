@@ -1,5 +1,6 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { useDialogFocus } from "../hooks/use-dialog-focus.ts";
 
 export function MobileActionSheet({
   open,
@@ -14,19 +15,21 @@ export function MobileActionSheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const sheetRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useDialogFocus(open, sheetRef);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -38,6 +41,7 @@ export function MobileActionSheet({
         onClick={onClose}
       />
       <section
+        ref={sheetRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}

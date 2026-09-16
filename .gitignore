@@ -40,4 +40,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 panel.json
-.claude/worktrees/
+# Local agent and workspace configuration
+.cate/
+.claude/

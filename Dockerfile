@@ -5,7 +5,8 @@ RUN bun install --frozen-lockfile
 COPY src/ src/
 COPY services/ntfy/ services/ntfy/
 COPY scripts/ scripts/
-RUN bun build src/web/index.html --outdir=src/web/dist
+COPY tailwind.config.cjs ./
+RUN bun run build
 RUN bun run scripts/build-cli.ts
 
 FROM oven/bun:1.3.5-slim

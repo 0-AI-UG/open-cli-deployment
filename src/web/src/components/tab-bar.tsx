@@ -36,7 +36,7 @@ export function TabBar<K extends string>({
 
   if (isMobile) {
     return (
-      <div className="sticky top-[52px] z-30 -mx-4 mb-4 border-y-2 border-fg bg-bg/95 px-3 py-2 backdrop-blur">
+      <div className="sticky top-[calc(52px+env(safe-area-inset-top))] z-30 -mx-4 mb-4 border-y-2 border-fg bg-bg/95 px-3 py-2 backdrop-blur">
         <div ref={listRef} onKeyDown={onKeyDown} className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Page sections">
           {tabs.map((tab) => (
             <button

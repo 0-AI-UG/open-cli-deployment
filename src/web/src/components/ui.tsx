@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useId, type ReactNode } from "react";
+import React, { useState, useEffect, useCallback, useId, useRef, type ReactNode } from "react";
 import { X, AlertTriangle, Loader2, Copy, Check, Info, ArrowLeft } from "lucide-react";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
+import { useDialogFocus } from "../hooks/use-dialog-focus.ts";
 export { portalAnchorRect } from "./portal-position.ts";
 
 // --- Toast system ---
@@ -131,6 +132,8 @@ export function ConfirmDialog() {
   const [state, setState] = useState<ConfirmState>({ open: false, title: "", message: "" });
   const [typedText, setTypedText] = useState("");
   const isMobile = useMobileLayout();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(state.open, dialogRef);
 
   useEffect(() => {
     confirmListeners.push(setState);
@@ -146,11 +149,8 @@ export function ConfirmDialog() {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") close(false);
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [state.open]);
@@ -165,13 +165,13 @@ export function ConfirmDialog() {
 
   return (
     <div className={`fixed inset-0 z-[90] flex bg-fg/40 animate-fade-in ${isMobile ? "items-end" : "items-center justify-center"}`}>
-      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" className={isMobile ? "w-full rounded-t-[22px] border-2 border-b-0 border-fg bg-bg-raised px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-4 shadow-[0_-5px_0_#1A1A1A] animate-slide-up" : "bg-bg-raised border-2 border-fg shadow-neo p-6 max-w-md w-full mx-4 animate-slide-up"}>
+      <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" className={isMobile ? "w-full max-h-[90dvh] overflow-y-auto rounded-t-[22px] border-2 border-b-0 border-fg bg-bg-raised px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-4 shadow-[0_-5px_0_#1A1A1A] animate-slide-up" : "bg-bg-raised border-2 border-fg shadow-neo p-6 max-w-md w-full mx-4 animate-slide-up"}>
         {isMobile && <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-fg/25" />}
         <div className="flex items-start gap-3 mb-4">
           {state.danger && <AlertTriangle size={20} className="text-accent-red mt-0.5 flex-shrink-0" />}
-          <div>
+          <div className="min-w-0">
             <h3 id="confirm-dialog-title" className="font-mono font-bold text-sm text-fg uppercase">{state.title}</h3>
-            <p id="confirm-dialog-message" className="text-xs text-fg-dim mt-1">{state.message}</p>
+            <p id="confirm-dialog-message" className="mt-1 break-words text-xs text-fg-dim">{state.message}</p>
           </div>
         </div>
         {state.requiredText !== undefined && (
@@ -581,17 +581,34 @@ export function Table({ headers, children }: { headers: string[]; children: Reac
       <div className="space-y-3">
         {React.Children.toArray(children).map((row, rowIndex) => {
           if (!React.isValidElement(row)) return row;
-          const cells = React.Children.toArray((row.props as { children?: ReactNode }).children);
+          const rowProps = row.props as React.HTMLAttributes<HTMLTableRowElement>;
+          const cells = React.Children.toArray(rowProps.children);
           return (
-            <div key={row.key ?? rowIndex} className="border-2 border-fg bg-bg-raised px-4 py-2 shadow-neo-sm">
+            <div
+              key={row.key ?? rowIndex}
+              className={`border-2 border-fg bg-bg-raised px-4 py-2 shadow-neo-sm ${rowProps.onClick ? "cursor-pointer focus-visible:outline-2 focus-visible:outline-fg" : ""}`}
+              role={rowProps.onClick ? "link" : undefined}
+              tabIndex={rowProps.onClick ? 0 : undefined}
+              onClick={rowProps.onClick ? (event) => rowProps.onClick?.(event as unknown as React.MouseEvent<HTMLTableRowElement>) : undefined}
+              onKeyDown={rowProps.onClick ? (event) => {
+                if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+                event.preventDefault();
+                rowProps.onClick?.(event as unknown as React.MouseEvent<HTMLTableRowElement>);
+              } : undefined}
+            >
               {cells.map((cell, cellIndex) => {
                 if (!React.isValidElement(cell)) return null;
-                const content = (cell.props as { children?: ReactNode }).children;
+                const cellProps = cell.props as React.TdHTMLAttributes<HTMLTableCellElement>;
+                const content = cellProps.children;
                 const label = headers[cellIndex] || "";
                 return (
-                  <div key={cell.key ?? cellIndex} className={`flex min-h-10 items-center gap-3 border-b border-fg/10 py-2 last:border-b-0 ${label ? "justify-between" : "justify-end"}`}>
+                  <div
+                    key={cell.key ?? cellIndex}
+                    onClick={cellProps.onClick ? (event) => cellProps.onClick?.(event as unknown as React.MouseEvent<HTMLTableCellElement>) : undefined}
+                    className={`flex min-h-10 items-center gap-3 border-b border-fg/10 py-2 last:border-b-0 ${label ? "justify-between" : "justify-end"}`}
+                  >
                     {label && <span className="shrink-0 font-mono text-[8px] font-bold uppercase tracking-wider text-muted">{label}</span>}
-                    <div className="min-w-0 text-right font-mono text-[10px] text-fg">{content}</div>
+                    <div className="min-w-0 max-w-[70%] break-words text-right font-mono text-[10px] text-fg">{content}</div>
                   </div>
                 );
               })}
