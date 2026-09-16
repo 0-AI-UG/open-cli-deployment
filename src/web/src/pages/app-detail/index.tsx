@@ -7,7 +7,7 @@ import { TabBar } from "../../components/tab-bar.tsx";
 import { PausedBanner } from "../../components/paused-banner.tsx";
 import { trackOperationInToast, useResourceOperations } from "../../hooks/useOperation.ts";
 import { ArrowLeft, Play, Pause, RotateCcw, Trash2 } from "lucide-react";
-import { OverviewTab } from "./overview-tab.tsx";
+import { OverviewTab, type AppStorageData } from "./overview-tab.tsx";
 import { LogsTab } from "./logs-tab.tsx";
 import { DeploymentsTab } from "./deployments-tab.tsx";
 import { ScalingTab } from "./scaling-tab.tsx";
@@ -24,6 +24,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
   const isMobile = useMobileLayout();
   const [app, setApp] = useState<AppData | null>(null);
   const [server, setServer] = useState<ServerData | null>(null);
+  const [storage, setStorage] = useState<AppStorageData | null>(null);
   const [tab, setTab] = useState<"overview" | "logs" | "deployments" | "scaling" | "promotion">("overview");
   const [logs, setLogs] = useState("");
   const [deployments, setDeployments] = useState<DeploymentRecord[]>([]);
@@ -40,7 +41,11 @@ export function AppDetailPage({ appId }: { appId: number }) {
 
   const load = async () => {
     try {
-      const servers: ServerData[] = await get("/api/servers");
+      const [servers, nextStorage]: [ServerData[], AppStorageData | null] = await Promise.all([
+        get("/api/servers"),
+        get(`/api/apps/${appId}/storage`).catch(() => null),
+      ]);
+      setStorage(nextStorage);
       for (const s of servers) {
         const found = s.apps.find((a) => a.id === appId);
         if (found) { setApp(found); setServer(s); break; }
@@ -226,6 +231,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
         <OverviewTab
           app={app}
           appId={appId}
+          storage={storage}
           replicas={replicas}
           metricsHistory={metricsHistory}
           allServers={allServers}

@@ -10,7 +10,6 @@ type State = Form & {
   storage_connections: Array<{ id: string; name: string; region: string }>;
   recovery_key_configured: boolean; storage_configured: boolean; recovery_pending: boolean; pending_operations: number;
   backups: { id: string; created_at: number; status: string; bucket: string; object_key: string; size_bytes: number; error: string }[];
-  alerts: { key: string; title: string; resolved_at: number | null }[];
 };
 export function PanelProtection() {
   const [state, setState] = useState<State | null>(null);
@@ -139,10 +138,5 @@ export function PanelProtection() {
         </div>
       </>}
     </Card>
-    {state.alerts.length > 0 && <Card className="p-5 space-y-3">
-      <h3 className="font-bold">Platform incidents</h3>
-      <p className="text-sm">Notifications are delivered through shared ntfy. Choose your alert preferences in Account → Notifications.</p>
-      {state.alerts.map(a => <p key={a.key} className="text-sm">{a.resolved_at ? "Resolved" : "Active"}: {a.title}</p>)}
-    </Card>}
   </div>;
 }

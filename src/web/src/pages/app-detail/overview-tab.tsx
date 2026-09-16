@@ -15,6 +15,7 @@ import { DnsInstructionView } from "../../components/dns-instruction.tsx";
 interface OverviewTabProps {
   app: AppData;
   appId: number;
+  storage: AppStorageData | null;
   replicas: ReplicaData[];
   metricsHistory: MetricSample[];
   allServers: ServerData[];
@@ -22,22 +23,24 @@ interface OverviewTabProps {
   ops: ResourceOpsResult;
 }
 
-export function OverviewTab({ app, appId, replicas, metricsHistory, allServers, setReplicas, ops }: OverviewTabProps) {
+export type AppStorageData = {
+  mounts: StorageMount[];
+  current: { image_size_bytes?: number } | null;
+  rollback: { image_size_bytes?: number } | null;
+  reclaimable_image_bytes_upper_bound: number;
+  caveat: string;
+};
+
+export function OverviewTab({ app, appId, storage, replicas, metricsHistory, allServers, setReplicas, ops }: OverviewTabProps) {
   const internalUrl = app.internal_protocol === "tcp"
     ? `tcp://${app.name}.ocd.internal:${app.container_port}`
     : `http://${app.name}.ocd.internal`;
   const [migratingId, setMigratingId] = useState<number | null>(null);
   const [availability, setAvailability] = useState<{ uptimePct: number | null; mttrSeconds: number | null; sampleCount: number; current: { running: number; desired: number; distinctHosts: number; distinctLocations: number; meetsTarget: boolean } } | null>(null);
-  const [storage, setStorage] = useState<{ mounts?: StorageMount[]; current: { image_size_bytes?: number } | null; rollback: { image_size_bytes?: number } | null; reclaimable_image_bytes_upper_bound: number; caveat: string } | null>(null);
-
   useEffect(() => {
-    Promise.all([
-      get(`/api/apps/${appId}/availability?window=86400`).catch(() => null),
-      get(`/api/apps/${appId}/storage`).catch(() => null),
-    ]).then(([nextAvailability, nextStorage]) => {
-      setAvailability(nextAvailability);
-      setStorage(nextStorage);
-    });
+    get(`/api/apps/${appId}/availability?window=86400`)
+      .then(setAvailability)
+      .catch(() => setAvailability(null));
   }, [appId]);
 
   const bytes = (value?: number | null) => typeof value === "number" && value > 0
@@ -63,7 +66,10 @@ export function OverviewTab({ app, appId, replicas, metricsHistory, allServers, 
 
   return (
     <div className="space-y-4">
-      {storage?.mounts && <StorageMounts mounts={storage.mounts} />}
+      {storage ? <StorageMounts mounts={storage.mounts} /> : <Card className="p-4 space-y-3">
+        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Storage</h3>
+        <p className="font-mono text-[10px] text-muted">Storage inventory unavailable</p>
+      </Card>}
       {Object.keys(app.notifications ?? {}).length > 0 && <Card className="p-4 space-y-2">
         <h3 className="font-semibold">Notification bindings</h3>
         {Object.entries(app.notifications ?? {}).map(([name, binding]) => <p key={name} className="text-sm"><strong>{name}</strong> · {binding.permissions.join(", ")} · Credential generation {binding.generation}</p>)}

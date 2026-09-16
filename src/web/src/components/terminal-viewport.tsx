@@ -29,7 +29,7 @@ type Props = {
 };
 
 const DEFAULT_OPTIONS: ITerminalOptions = {
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontFamily: "Geist Mono, monospace",
   fontSize: 12,
   theme: { background: "#000000" },
   cursorBlink: true,
@@ -85,6 +85,8 @@ export const TerminalViewport = forwardRef<TerminalViewportHandle, Props>(functi
       fitAndNotify();
       onReadyRef.current?.();
     });
+    // The web font may arrive after xterm's initial character measurement.
+    void document.fonts.load('12px "Geist Mono"').then(fitAndNotify).catch(() => {});
 
     const dataSubscription = terminal.onData((data) => onDataRef.current?.(data));
     const resizeObserver = new ResizeObserver(fitAndNotify);
