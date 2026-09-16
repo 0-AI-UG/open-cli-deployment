@@ -1,32 +1,60 @@
+import template from "../../services/ntfy/.ocd-deploy.json";
+import { ntfyDeployRequest } from "../engine/ntfy/app.ts";
 import { test, expect } from "bun:test";
 import * as db from "./db.ts";
 import { NtfyBindingsSchema, NtfySettingsSchema } from "./ntfy-schema.ts";
 import { ensureNtfyCredential, credentialSecret, prepareNtfyBindings, saveAppNtfy, appNtfyEnv, ntfyCredentials, retireAppNtfyCredentials, ntfyAccess } from "./ntfy.ts";
-import { renderNtfyConfig, buildNtfyInstallScript, renderNtfyIngress } from "../engine/ntfy/service.ts";
+import { renderNtfyEnvironment, reconcileNtfyService } from "../engine/ntfy/service.ts";
 import { enqueueNtfyIncident, deliverNtfy } from "../engine/ntfy/alerts.ts";
 
 function enable() {
-  db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, domain: "notify.example.com", alerts: true, apps: true })));
-  db.saveSetting("ntfy_status", "ready");
+  const env = db.insertEnvironment("ntfy", '{"version":2,"entries":[]}');
+  const app = db.insertApp({ name: "ntfy", domain: "notify.example.com", image_ref: `docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`, container_port: 80, environment_id: env.id, env_vars: JSON.stringify({ env: template.env, outputs: {} }) });
+  db.default.query("UPDATE apps SET status='running', desired_replicas=1, volume_mount='/data:/var/lib/ntfy' WHERE id=?").run(app.id);
+  db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, app_id: app.id, alerts: true, apps: true })));
+  return db.getApp(app.id)!;
 }
 function user(id: string, admin = false) {
   db.insertUser({ id, username: id, password_hash: "unused", is_admin: admin });
   db.saveSetting(`ntfy_user.${id}`, JSON.stringify({ enabled: true, events: ["app", "delivery", "disk", "backup"], recovery: true }));
 }
-test("private server configuration and bounded resources", async () => {
-  const settings = NtfySettingsSchema.parse({ enabled: true, domain: "notify.example.com", alerts: true, apps: true });
+test("normal service manifest has private auth, persistent storage and bounded resources", async () => {
+  const settings = NtfySettingsSchema.parse({ enabled: true, alerts: true, apps: true });
   const c = await ensureNtfyCredential("user", "alice");
-  const config = JSON.parse(renderNtfyConfig(settings, [{ ...c, token: (await credentialSecret(c)).token, access: "ro" }]));
-  expect(config["auth-default-access"]).toBe("deny-all");
-  expect(config["auth-access"]).toEqual([`${c.username}:${c.topic}:ro`]);
-  expect(config["enable-signup"]).toBe(false);
-  expect(config["attachment-cache-dir"]).toBeUndefined();
-  expect(config["upstream-base-url"]).toBeUndefined();
-  const script = buildNtfyInstallScript(`docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`, JSON.stringify(config), renderNtfyIngress(settings.domain), true);
-  expect(script).toContain("--memory 128m --memory-swap 128m --cpus 0.5");
-  expect(script).toContain("127.0.0.1:8894:80");
-  expect(script).toContain("umask 077");
-  expect(() => buildNtfyInstallScript("ntfy:latest", "", "", true)).toThrow();
+  const config = renderNtfyEnvironment(settings, "notify.example.com", [{ ...c, token: (await credentialSecret(c)).token, access: "ro" }]);
+  expect(config.NTFY_AUTH_ACCESS).toBe(`${c.username}:${c.topic}:ro`);
+  expect(config.NTFY_UPSTREAM_BASE_URL).toBe("");
+  expect(template.env.NTFY_AUTH_DEFAULT_ACCESS).toBe("deny-all");
+  expect(template.env.NTFY_ENABLE_SIGNUP).toBe("false");
+  const request = ntfyDeployRequest({ name: "ntfy", domain: "notify.example.com", server_id: 1 }, 2, `docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`);
+  expect(request).toMatchObject({ volume_path: "/var/lib/ntfy", memory_mb: 128, cpu_limit: 0.5, environment_id: 2, replicas: 1, container_port: 80 });
+});
+test("integration uses encrypted normal app environment and reload operations, respects paused apps", async () => {
+  const app = enable();
+  await reconcileNtfyService();
+  const environment = db.getEnvironment(app.environment_id!)!;
+  const system = ntfyCredentials().find(c => c.owner_type === "system")!;
+  expect(environment.env_vars).not.toContain((await credentialSecret(system)).token);
+  const reload = db.default.query("SELECT id,kind FROM operations WHERE kind='reload_app'").all();
+  expect(reload).toHaveLength(1);
+  await reconcileNtfyService();
+  expect(db.default.query("SELECT count(*) AS n FROM operations WHERE kind='reload_app'").get()).toEqual({ n: 1 });
+  db.default.query("UPDATE operations SET status='done'").run();
+  db.default.query("UPDATE apps SET status='paused' WHERE id=?").run(app.id);
+  user("alice"); await ensureNtfyCredential("user", "alice");
+  await reconcileNtfyService();
+  expect(db.getApp(app.id)?.status).toBe("paused");
+  expect(db.default.query("SELECT count(*) AS n FROM operations WHERE kind='reload_app'").get()).toEqual({ n: 1 });
+});
+test("attested app configuration does not trigger repeated reloads", async () => {
+  const app = enable();
+  await reconcileNtfyService();
+  db.default.query("UPDATE operations SET status='done'").run();
+  const server = db.insertServer({ name: "host", provider_id: "host", ipv4: "192.0.2.1", ipv6: "", type: "test", location: "test", status: "ready" });
+  const replica = db.insertReplica({ app_id: app.id, server_id: server.id, host_port: 10000, container_name: "ntfy", status: "running" });
+  db.default.query("UPDATE replicas SET config_revision=?,attested_at=datetime('now') WHERE id=?").run(db.getApp(app.id)!.config_revision, replica.id);
+  await reconcileNtfyService();
+  expect(db.default.query("SELECT count(*) AS n FROM operations WHERE kind='reload_app'").get()).toEqual({ n: 1 });
 });
 test("concurrent credential creation converges and stored credentials are encrypted", async () => {
   const [a, b] = await Promise.all([ensureNtfyCredential("user", "alice"), ensureNtfyCredential("user", "alice")]);

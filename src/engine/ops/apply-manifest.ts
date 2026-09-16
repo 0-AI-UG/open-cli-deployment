@@ -162,7 +162,7 @@ const reconcile: Step<ApplyManifestInput, ApplyOut> = {
     }
 
     if (rollout === "runtime") {
-      if (Object.keys(getAppNtfy(app.id)).length) await reconcileNtfyService();
+      if (Object.keys(getAppNtfy(app.id)).length) await reconcileNtfyService(ctx, true);
       childOpIds.push(await runChild(
         ctx,
         "runtime-recreate",

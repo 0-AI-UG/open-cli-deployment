@@ -1,16 +1,21 @@
 # Shared ntfy notifications
 
-OCD can run one private ntfy server on the panel host, behind its existing
-Traefik HTTPS ingress. Enable it in **Admin → Panel → Shared notifications**.
-Choose a dedicated domain and point its DNS to the panel ingress address.
-OCD resolves the pinned ntfy release to an immutable digest, reserves a
-loopback port, and provisions a persistent container. Configuration changes
-are engine operations, and the engine reconciles service health and access.
+ntfy is OCD’s only alert channel. Its server is a regular OCD app, defined in
+[`services/ntfy/.ocd-deploy.json`](../services/ntfy/.ocd-deploy.json).
+In **Admin → Panel → Shared notifications**, create the app on a ready server
+or select an existing app deployed with that manifest. Point its domain to
+that server's ingress address. OCD uses the ordinary app deployment operation,
+immutable image resolution, persistent volume, health checks, and HTTPS ingress.
 
-The default resource ceilings are **128 MiB RAM and 0.5 CPU**, configurable in
-Admin. These are limits, not reservations or measured steady-state usage.
-The minimal v2.28.0 server measured approximately 16 MiB and 0% CPU at idle in
-local Docker; concurrent subscribers and traffic increase usage. Authentication
+Open the ntfy **app page** for logs, deployments, resources, storage, domain,
+and lifecycle controls. Admin settings contain only setup and notification
+integration options. Per-user preferences remain in Account → Notifications.
+
+The default resource ceilings are **128 MiB RAM and 0.5 CPU**, configurable on
+the app page. These are limits, not reservations or measured steady-state usage.
+Local Docker checks measured approximately 16 MiB for a minimal idle server
+and 61 MiB after provisioning users and exercising authenticated delivery,
+with 0% idle CPU. Concurrent subscribers and traffic increase usage. Authentication
 and the message cache use SQLite. Attachments, email, billing, and public
 signup are disabled. No additional database server is needed.
 
@@ -81,22 +86,27 @@ usually within 30 seconds, and restart ntfy; clients must reconnect.
 
 ## Operations and persistence
 
-The container is `ocd-ntfy`, bound only to `127.0.0.1:8894` on the panel host.
-Data and the generated private configuration live at `/var/lib/ocd/ntfy`.
-Traefik loads `/etc/traefik/dynamic/ntfy.yml`. OCD credentials are encrypted
-in the panel database; the generated server configuration is mode 0600.
-Do not edit its users or ACLs manually: OCD owns the declarative configuration.
+The app mounts persistent storage at `/var/lib/ntfy` for its authentication
+and message-cache SQLite databases. It has a dedicated OCD environment;
+managed users, tokens, and ACLs are encrypted environment secrets. OCD applies
+access changes through normal app reload operations. This uses ntfy's
+[declarative environment configuration](https://docs.ntfy.sh/config/#users-via-the-config).
+Do not manually edit the managed authentication variables. Keep one replica,
+private authentication, and the persistent mount when editing the app manifest.
 
-Disabling retains the data and stops the container. Disabling only app access
-revokes app ACLs; it does not delete app binding declarations. Changing the
-service domain requires removing existing app bindings first, then rebinding
-and redeploying apps for their new URL.
+Disabling integration revokes OCD access and leaves the app's lifecycle under
+your control. Pause or stop it on its app page. Integration changes never
+unpause it. Disabling app access retains binding declarations. After changing
+the ntfy app's domain, redeploy consuming apps to refresh their injected URL.
 
 Panel database backups preserve configuration, credentials, and queued platform
-notifications. The separate ntfy cache directory is **not** included: after
-panel recovery OCD can recreate accounts, but previously delivered cached
-messages are lost unless `/var/lib/ocd/ntfy` is backed up separately. Do not run
-two restored copies of the panel simultaneously.
+notifications. Restore discards pending messages from the old timeline. The
+ntfy app's volume needs its own backup for cached messages, just like other
+stateful apps. Do not run two restored copies of the panel simultaneously.
 
-ntfy shares the panel host's failure domain. It cannot deliver alerts while
-that host is offline; external monitoring is needed for total panel outages.
+OCD events are queued while ntfy is unavailable and retried after it recovers.
+The panel must be running to observe and publish events. Place ntfy on a
+separate server if desired; external monitoring covers total panel outages.
+
+This is a hard cut to app-based hosting. There is no conversion of the former
+special-purpose ntfy container or configuration.

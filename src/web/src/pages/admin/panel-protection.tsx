@@ -5,18 +5,16 @@ import { Card, Btn, Field, Badge, Table, showToast } from "../../components/ui.t
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { Archive, Download, Settings2, ShieldCheck } from "lucide-react";
 
-type Form = { backup_connection: string; backup_enabled: boolean; backup_bucket: string; backup_prefix: string; backup_retention: number; alert_enabled: boolean; alert_recipient: string; alert_sender: string };
+type Form = { backup_connection: string; backup_enabled: boolean; backup_bucket: string; backup_prefix: string; backup_retention: number };
 type State = Form & {
   storage_connections: Array<{ id: string; name: string; region: string }>;
-  resend_configured: boolean; recovery_key_configured: boolean; storage_configured: boolean; recovery_pending: boolean; pending_operations: number;
+  recovery_key_configured: boolean; storage_configured: boolean; recovery_pending: boolean; pending_operations: number;
   backups: { id: string; created_at: number; status: string; bucket: string; object_key: string; size_bytes: number; error: string }[];
-  deliveries: { id: string; sent_at: number | null; attempts: number; error: string }[];
   alerts: { key: string; title: string; resolved_at: number | null }[];
 };
 export function PanelProtection() {
   const [state, setState] = useState<State | null>(null);
   const [form, setForm] = useState<Form | null>(null);
-  const [apiKey, setApiKey] = useState("");
   const [recoveryKey, setRecoveryKey] = useState("");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,7 +43,7 @@ export function PanelProtection() {
   const load = async (reset = false) => {
     const s = await get("/api/admin/protection");
     setState(s);
-    setForm(f => !f || reset ? { backup_connection: s.backup_connection, backup_enabled: s.backup_enabled, backup_bucket: s.backup_bucket, backup_prefix: s.backup_prefix, backup_retention: s.backup_retention, alert_enabled: s.alert_enabled, alert_recipient: s.alert_recipient, alert_sender: s.alert_sender } : f);
+    setForm(f => !f || reset ? { backup_connection: s.backup_connection, backup_enabled: s.backup_enabled, backup_bucket: s.backup_bucket, backup_prefix: s.backup_prefix, backup_retention: s.backup_retention } : f);
   };
   useEffect(() => { void load().catch(e => setError(e.message)); const timer = setInterval(() => void load().catch(() => {}), 10000); return () => clearInterval(timer); }, []);
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(""); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Action failed"); } finally { setBusy(false); } };
@@ -59,8 +57,7 @@ export function PanelProtection() {
   const activeBackup = state.backups.some(b => b.status === "pending" || b.status === "running");
   const inputClass = "w-full border-2 border-fg bg-bg-raised px-3 py-2 font-mono text-[11px]";
   const save = async () => {
-    await put("/api/admin/protection", { ...form, ...(apiKey ? { resend_key: apiKey } : {}) });
-    setApiKey("");
+    await put("/api/admin/protection", form);
     await load(true); setEditing(false); setRecoveryKey(""); showToast("Backup settings saved", "success");
   };
   const downloadKey = () => {
@@ -122,7 +119,7 @@ export function PanelProtection() {
         </section>
         <div className="flex flex-wrap gap-2 border-t border-fg/20 pt-5">
           <Btn variant="primary" loading={busy} disabled={!canSave} onClick={() => action(save)}>{configured ? "Save settings" : "Finish setup"}</Btn>
-          {configured && <Btn disabled={busy} onClick={() => { setForm({ backup_connection: state.backup_connection, backup_enabled: state.backup_enabled, backup_bucket: state.backup_bucket, backup_prefix: state.backup_prefix, backup_retention: state.backup_retention, alert_enabled: state.alert_enabled, alert_recipient: state.alert_recipient, alert_sender: state.alert_sender }); setEditing(false); setRecoveryKey(""); setError(""); }}>Cancel</Btn>}
+          {configured && <Btn disabled={busy} onClick={() => { setForm({ backup_connection: state.backup_connection, backup_enabled: state.backup_enabled, backup_bucket: state.backup_bucket, backup_prefix: state.backup_prefix, backup_retention: state.backup_retention }); setEditing(false); setRecoveryKey(""); setError(""); }}>Cancel</Btn>}
         </div>
       </div> : <>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-fg/20 bg-alt px-5 py-4">
@@ -142,17 +139,10 @@ export function PanelProtection() {
         </div>
       </>}
     </Card>
-    <Card className="p-5 space-y-3">
-      <h3 className="font-bold">Email alerts</h3>
-      <p className="text-sm">Deployment failures, unhealthy apps, failed or overdue panel backups, and low disk space. One opening email and one recovery email per incident.</p>
-      <Field label="Resend API key"><input type="password" autoComplete="new-password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={state.resend_configured ? "Configured — leave blank to keep" : "re_…"} /></Field>
-      <Field label="Recipient email"><input type="email" value={form.alert_recipient} onChange={e => set("alert_recipient", e.target.value)} /></Field>
-      <details><summary>Custom sender (optional)</summary><Field label="Sender email"><input type="email" value={form.alert_sender} onChange={e => set("alert_sender", e.target.value)} placeholder="alerts@your-domain.com" /></Field></details>
-      <p className="text-sm">The default Resend test sender sends to your Resend account email. For other recipients, use a sender on your verified domain.</p>
-      <label className="block"><input type="checkbox" checked={form.alert_enabled} onChange={e => set("alert_enabled", e.target.checked)} /> Enable email alerts</label>
-      <div className="flex gap-2"><Btn disabled={busy} onClick={() => action(save)}>Save settings</Btn><Btn disabled={busy || !form.alert_enabled} onClick={() => action(async () => { await save(); const r = await post("/api/admin/protection/test-email", {}); if (!r.ok) throw new Error(r.error || "Test email is queued"); showToast("Test email sent", "success"); })}>Send test email</Btn></div>
+    {state.alerts.length > 0 && <Card className="p-5 space-y-3">
+      <h3 className="font-bold">Platform incidents</h3>
+      <p className="text-sm">Notifications are delivered through shared ntfy. Choose your alert preferences in Account → Notifications.</p>
       {state.alerts.map(a => <p key={a.key} className="text-sm">{a.resolved_at ? "Resolved" : "Active"}: {a.title}</p>)}
-      {state.deliveries.length > 0 && <details><summary>Email delivery status</summary>{state.deliveries.map(d => <p key={d.id} className="text-sm">{d.sent_at ? "Sent" : d.attempts >= 12 ? "Failed" : "Pending"}{d.error ? ` — ${d.error}` : ""}</p>)}</details>}
-    </Card>
+    </Card>}
   </div>;
 }

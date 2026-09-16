@@ -102,7 +102,7 @@ export function initializeCurrentSchema(db: Database): void {
   db.run("BEGIN TRANSACTION");
   try {
     for (const statement of CURRENT_SCHEMA_STATEMENTS) db.run(statement);
-    initializeProtectionSchema(db);
+    initializeProtectionSchema(db, false);
     initializeNtfySchema(db);
     db.run("INSERT INTO schema_version (version) VALUES (?)", [CURRENT_SCHEMA_VERSION]);
     const insertSetting = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)");

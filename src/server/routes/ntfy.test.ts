@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import * as db from "../../shared/db.ts";
 import { createToken } from "../lib/auth.ts";
-import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest } from "./ntfy.ts";
+import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./ntfy.ts";
 import { NtfySettingsSchema } from "../../shared/ntfy-schema.ts";
 import { ntfyPreferences, ntfyCredentials, canReceiveNtfy } from "../../shared/ntfy.ts";
 async function actor(id: string, admin = false) {
@@ -9,7 +9,10 @@ async function actor(id: string, admin = false) {
   return createToken({ userId: id, username: id });
 }
 const req = (token: string, method = "GET", body?: unknown) => new Request("https://panel.example.com/api/auth/notifications", { method, headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-function enable() { db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, domain: "notify.example.com", alerts: true, apps: true }))); }
+function enable() {
+  const app = db.insertApp({ name: "ntfy", domain: "notify.example.com", image_ref: `docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`, container_port: 80, env_vars: '{"env":{},"outputs":{}}' });
+  db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, app_id: app.id, alerts: true, apps: true })));
+}
 test("administrative configuration requires an administrator", async () => {
   expect((await handleAdminNtfy(req(await actor("user")))).status).toBe(403);
   expect((await handleAdminNtfy(req(await actor("admin", true)))).status).toBe(200);
@@ -45,4 +48,18 @@ test("app permission revocation stops future alerts", async () => {
   expect(canReceiveNtfy("alice", `app:${app.id}`, false)).toBe(true);
   db.setUserPermissions("alice", []);
   expect(canReceiveNtfy("alice", `app:${app.id}`, true)).toBe(false);
+});
+
+test("admin setup queues app creation and rejects obsolete infrastructure settings", async () => {
+  const admin = await actor("admin", true);
+  const server = db.insertServer({ name: "host", provider_id: "host", ipv4: "192.0.2.1", ipv6: "", type: "test", location: "test", status: "ready" });
+  expect((await handleAdminNtfy(req(admin, "PUT", { enabled: true, domain: "notify.example.com", alerts: true, apps: true }))).status).toBe(400);
+  const input = { name: "ntfy", domain: "notify.example.com", server_id: server.id };
+  const result = await handleCreateNtfyApp(req(admin, "POST", input));
+  expect(result.status).toBe(202);
+  expect(db.getApps()).toHaveLength(0);
+  const { opId } = await result.json();
+  const { getOperation } = await import("../../shared/db/operations.ts");
+  expect(getOperation(opId)?.kind).toBe("configure_ntfy");
+  expect((await handleCreateNtfyApp(req(admin, "POST", input))).status).toBe(409);
 });

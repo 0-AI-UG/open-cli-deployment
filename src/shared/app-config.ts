@@ -1,4 +1,4 @@
-import { getAppNtfy, normalizeNtfyBindings, saveAppNtfy, prepareNtfyBindings, ntfySettings } from "./ntfy.ts";
+import { getAppNtfy, normalizeNtfyBindings, saveAppNtfy, prepareNtfyBindings } from "./ntfy.ts";
 import { getAppStorage, resolveStorageBindings, saveAppStorage, prepareStorageBindings } from "./object-storage.ts";
 import * as db from "./db.ts";
 import type { AppRow } from "./db/apps.ts";
@@ -441,7 +441,6 @@ export async function applyAppConfig(
     : effective);
   if (!effectiveValidation.valid) throw new Error(effectiveValidation.error);
   if (effective.app_name !== app.name) throw new Error(`Manifest targets "${effective.app_name}", but app #${appId} is "${app.name}"`);
-  if (effective.domain && effective.domain === ntfySettings()?.domain) throw new Error("Domain is reserved for the shared ntfy service");
   const desired = normalizedSpec(effective);
   const changes = diffAppConfig(app, effective);
   const changed = new Set(changes.map((c) => c.field));

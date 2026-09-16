@@ -1,114 +1,112 @@
 import * as db from "../../shared/db.ts";
-import { sshExecWithStdin } from "../../shared/remote/index.ts";
-import { resolveOciImage } from "../oci-image.ts";
+import { processIncomingEnvVars, resolveEnvVarsForDeploy, parseEnvVars } from "../../shared/env-crypto.ts";
+import { parseRuntimeConfig } from "../../shared/runtime-env.ts";
+import { applyAppConfig, deployRequestFromApp } from "../../shared/app-config.ts";
+import { enqueueOperation, getOperation, findActiveOperationByResourceKey } from "../../shared/db/operations.ts";
 import { recoveryPending } from "../panel-protection/recovery-state.ts";
-import { NTFY_CONTAINER, NTFY_IMAGE, NTFY_PORT, ntfySettings, ntfyCredentials, ntfyPreferences, ensureNtfyCredential, credentialSecret, ntfyHash, type NtfyCredential } from "../../shared/ntfy.ts";
+import { ntfySettings, ntfyApp, ntfyCredentials, ntfyPreferences, ensureNtfyCredential, credentialSecret, type NtfyCredential } from "../../shared/ntfy.ts";
 import type { NtfySettings } from "../../shared/ntfy-schema.ts";
+import { tryAcquire, release, NON_OP_HOLDER } from "../scheduler.ts";
+import type { OpContext } from "../types.ts";
 
-export function renderNtfyConfig(settings: NtfySettings, credentials: Array<NtfyCredential & { token: string; access: string }>): string {
-  // JSON is valid YAML; secrets are written only via private stdin to a mode-0600 file.
-  return JSON.stringify({
-    "base-url": `https://${settings.domain}`, "listen-http": ":80",
-    "cache-file": "/var/lib/ntfy/cache.db", "cache-duration": `${settings.cache_hours}h`,
-    "auth-file": "/var/lib/ntfy/auth.db", "auth-default-access": "deny-all",
-    "enable-login": true, "enable-signup": false, "enable-reservations": false,
-    "behind-proxy": true,
-    "visitor-request-limit-burst": 60, "visitor-request-limit-replenish": "5s",
-    "visitor-subscription-limit": 30,
-    ...(settings.ios_push ? { "upstream-base-url": "https://ntfy.sh" } : {}),
-    "auth-users": credentials.map(c => `${c.username}:${c.password_hash}:user`),
-    "auth-tokens": credentials.map(c => `${c.username}:${c.token}`),
-    "auth-access": credentials.map(c => `${c.username}:${c.owner_type === "system" ? "ocd-user-*" : c.topic}:${c.access}`),
-  }, null, 2);
+export function isNtfyApp(app: { image_ref: string }): boolean {
+  return /^(?:docker\.io\/)?binwiederhier\/ntfy@sha256:[a-f0-9]{64}$/.test(app.image_ref);
 }
-export function renderNtfyIngress(domain: string): string {
-  return JSON.stringify({ http: {
-    routers: { "ocd-ntfy": { entryPoints: ["websecure"], rule: `Host(\`${domain}\`)`, service: "ocd-ntfy", tls: { certResolver: "letsencrypt" } } },
-    services: { "ocd-ntfy": { loadBalancer: { servers: [{ url: `http://127.0.0.1:${NTFY_PORT}` }] } } },
-  } });
+export function renderNtfyEnvironment(settings: NtfySettings, domain: string, credentials: Array<NtfyCredential & { token: string; access: string }>): Record<string, string> {
+  return {
+    NTFY_BASE_URL: `https://${domain}`,
+    NTFY_CACHE_DURATION: `${settings.cache_hours}h`,
+    NTFY_UPSTREAM_BASE_URL: settings.ios_push ? "https://ntfy.sh" : "",
+    NTFY_AUTH_USERS: credentials.map(c => `${c.username}:${c.password_hash}:user`).join(","),
+    NTFY_AUTH_TOKENS: credentials.map(c => `${c.username}:${c.token}`).join(","),
+    NTFY_AUTH_ACCESS: credentials.map(c => `${c.username}:${c.owner_type === "system" ? "ocd-user-*" : c.topic}:${c.access}`).join(","),
+  };
 }
-const quote = (s: string) => `'${s.replace(/'/g, `'"'"'`)}'`;
-export function buildNtfyInstallScript(image: string, config: string, ingress: string, enabled: boolean, memoryMb = 128, cpuLimit = 0.5): string {
-  if (enabled && !/^docker\.io\/binwiederhier\/ntfy@sha256:[a-f0-9]{64}$/.test(image)) throw new Error("ntfy requires the official immutable image");
-  if (!Number.isInteger(memoryMb) || memoryMb < 64 || memoryMb > 4096 || !Number.isFinite(cpuLimit) || cpuLimit < 0.1 || cpuLimit > 4) throw new Error("Invalid ntfy resource limits");
-  const root = "/var/lib/ocd/ntfy";
-  const fingerprint = ntfyHash(image + config + memoryMb + cpuLimit);
-  return `set -eu
-umask 077
-mkdir -p ${root} /etc/traefik/dynamic
-${!enabled ? `rm -f /etc/traefik/dynamic/ntfy.yml
-docker stop ${NTFY_CONTAINER} >/dev/null 2>&1 || true
-exit 0` : ""}
-printf '%s' ${quote(config)} > ${root}/server.yml.next
-chmod 600 ${root}/server.yml.next
-mv ${root}/server.yml.next ${root}/server.yml
-if [ "$(docker inspect --format '{{index .Config.Labels "ocd.ntfy.config"}}' ${NTFY_CONTAINER} 2>/dev/null || true)" != '${fingerprint}' ]; then
-  docker pull ${quote(image)} >/dev/null
-  docker rm -f ${NTFY_CONTAINER} >/dev/null 2>&1 || true
-  docker run -d --name ${NTFY_CONTAINER} --restart unless-stopped --memory ${memoryMb}m --memory-swap ${memoryMb}m --cpus ${cpuLimit} --log-opt max-size=10m --log-opt max-file=3 --label ocd.ntfy.config=${fingerprint} -p 127.0.0.1:${NTFY_PORT}:80 -v ${root}:/var/lib/ntfy -v ${root}/server.yml:/etc/ntfy/server.yml:ro ${quote(image)} serve >/dev/null
-else
-  docker start ${NTFY_CONTAINER} >/dev/null
-fi
-for attempt in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1:${NTFY_PORT}/v1/health >/dev/null; then
-    printf '%s' ${quote(ingress)} > /etc/traefik/dynamic/ntfy.yml.next
-    chmod 644 /etc/traefik/dynamic/ntfy.yml.next
-    mv /etc/traefik/dynamic/ntfy.yml.next /etc/traefik/dynamic/ntfy.yml
-    exit 0
-  fi
-  sleep 1
-done
-exit 1
-`;
-}
-let pending: Promise<void> | undefined;
-export function reconcileNtfyService(): Promise<void> {
-  // A caller that changed bindings during an in-flight sync must get its own
-  // fresh render before starting an app with those credentials.
-  const next = (pending ?? Promise.resolve()).catch(() => {}).then(reconcile).catch(error => {
-    db.saveSetting("ntfy_status", "error");
-    throw error;
-  });
-  pending = next;
-  void next.finally(() => { if (pending === next) pending = undefined; }).catch(() => {});
-  return next;
-}
-async function reconcile(): Promise<void> {
-  const settings = ntfySettings();
-  if (!settings || recoveryPending()) return;
-  const panel = db.getPanel();
-  const server = panel && db.getServer(panel.server_id);
-  if (!server?.ssh_host_key) throw new Error("ntfy requires a panel server with a pinned SSH host key");
-  if (settings.enabled && (settings.domain === panel?.domain || db.getApps().some(a => a.domain === settings.domain))) throw new Error("ntfy domain is already in use");
-  const reservation = db.default.query("SELECT id FROM port_reservations WHERE server_id=? AND owner_type='ntfy' AND owner_id='shared'").get(server.id);
-  if (settings.enabled && !reservation) db.reserveHostPort({ serverId: server.id, bindAddress: "127.0.0.1", hostPort: NTFY_PORT, ownerType: "ntfy", ownerId: "shared" });
-  if (settings.enabled && settings.alerts) await ensureNtfyCredential("system", "events");
+export async function ntfyEnvironment(settings: NtfySettings, domain: string): Promise<Record<string, string>> {
+  // The publisher identity remains provisioned with no access while integration
+  // is disabled, ensuring empty lists still revoke all former ACLs on restart.
+  await ensureNtfyCredential("system", "events");
   const credentials: Array<NtfyCredential & { token: string; access: string }> = [];
-  for (const credential of ntfyCredentials()) {
+  for (const c of ntfyCredentials()) {
     let access = "";
-    if (credential.owner_type === "system" && settings.alerts) access = "wo";
-    if (credential.owner_type === "user" && settings.alerts && db.getUserById(credential.owner_id) && ntfyPreferences(credential.owner_id).enabled) access = "ro";
-    if (credential.owner_type === "app" && settings.apps && db.getApp(Number(credential.owner_id))) {
-      // Prepared grants stay valid until rollout attestation retires them.
-      access = credential.permissions;
+    if (c.owner_type === "system") access = settings.enabled && settings.alerts ? "wo" : "none";
+    if (settings.enabled && c.owner_type === "user" && settings.alerts && db.getUserById(c.owner_id) && ntfyPreferences(c.owner_id).enabled) access = "ro";
+    if (settings.enabled && c.owner_type === "app" && settings.apps && db.getApp(Number(c.owner_id))) access = c.permissions;
+    if (access) credentials.push({ ...c, token: (await credentialSecret(c)).token, access });
+  }
+  return renderNtfyEnvironment(settings, domain, credentials);
+}
+export function validateNtfyApp(app: NonNullable<ReturnType<typeof db.getApp>>): void {
+  if (!isNtfyApp(app)) throw new Error("Select an app running the official ntfy image");
+  if (!app.domain) throw new Error("The ntfy app needs an HTTPS domain");
+  if (!app.environment_id || !db.getEnvironment(app.environment_id)) throw new Error("The ntfy app needs its own environment");
+  if (db.getApps().some(a => a.id !== app.id && a.environment_id === app.environment_id)) throw new Error("Use a dedicated environment for the ntfy app's credentials");
+  if (app.desired_replicas !== 1 || !app.volume_mount.endsWith(":/var/lib/ntfy")) throw new Error("ntfy needs one replica and persistent storage at /var/lib/ntfy");
+  const env = parseRuntimeConfig(app.env_vars).env;
+  if (env.NTFY_AUTH_DEFAULT_ACCESS !== "deny-all" || env.NTFY_ENABLE_SIGNUP !== "false") throw new Error("The ntfy app must deny anonymous access and disable signup; use services/ntfy/.ocd-deploy.json");
+}
+let pending: Promise<number | null> | undefined;
+/** Only synchronize integration credentials. App hosting is entirely standard OCD. */
+export async function reconcileNtfyService(ctx?: OpContext, requireReady = false): Promise<void> {
+  const stage = (pending ?? Promise.resolve()).catch(() => null).then(() => synchronize(ctx));
+  pending = stage;
+  ctx?.park();
+  try {
+    let operationId: number | null;
+    try { operationId = await stage; }
+    finally { if (pending === stage) pending = undefined; }
+    if (ctx && operationId) {
+      for (;;) {
+        if (ctx.isCancelRequested()) throw new Error("Cancelled while waiting for ntfy app configuration");
+        const op = getOperation(operationId);
+        if (!op) throw new Error("ntfy app reload operation disappeared");
+        if (op.status === "done") break;
+        if (["failed", "cancelled", "compensated", "compensation_failed"].includes(op.status)) throw new Error(`ntfy app reload #${operationId} ${op.status}; inspect the app's deployment history`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
-    if (access) credentials.push({ ...credential, token: (await credentialSecret(credential)).token, access });
+  } finally { ctx?.unpark(); }
+  if (requireReady && ntfyApp()?.status !== "running") throw new Error("The ntfy app is not running; start it from its app page");
+}
+async function synchronize(ctx?: OpContext): Promise<number | null> {
+  const settings = ntfySettings();
+  const app = ntfyApp();
+  if (!settings || !app || recoveryPending()) return null;
+  const keys = [`app:${app.id}`];
+  while (!tryAcquire(keys, NON_OP_HOLDER, "ntfy-config").ok) {
+    if (!ctx) return null;
+    if (ctx.isCancelRequested()) throw new Error("Cancelled waiting for ntfy app");
+    await new Promise(r => setTimeout(r, 1000));
   }
-  const config = renderNtfyConfig(settings, credentials);
-  let image = db.getSettings().ntfy_image_digest;
-  if (!image && settings.enabled) {
-    image = await resolveOciImage(NTFY_IMAGE);
-    db.saveSetting("ntfy_image_digest", image);
+  try { return await synchronizeApp(app.id, settings, ctx); }
+  finally { release(keys); }
+}
+async function synchronizeApp(appId: number, settings: NtfySettings, ctx?: OpContext): Promise<number | null> {
+  const app = db.getApp(appId);
+  if (!app || app.deletion_requested_at) return null;
+  validateNtfyApp(app);
+  const env = db.getEnvironment(app.environment_id!)!;
+  const desired = await ntfyEnvironment(settings, app.domain);
+  const current = await resolveEnvVarsForDeploy(env.env_vars);
+  if (Object.entries(desired).some(([key, value]) => current[key] !== value)) {
+    const retained = parseEnvVars(env.env_vars).entries.filter(e => !Object.hasOwn(desired, e.key));
+    const managed = await processIncomingEnvVars(Object.entries(desired).map(([key, value]) => ({ key, value, secret: key.startsWith("NTFY_AUTH_") })));
+    db.updateEnvironment(env.id, env.name, JSON.stringify({ version: 2, entries: [...retained, ...managed.entries] }));
   }
-  const fingerprint = ntfyHash(JSON.stringify(settings) + config + image + server.id);
-  // Probe on every tick; unchanged config does not restart the process.
-  const script = buildNtfyInstallScript(image || "", config, renderNtfyIngress(settings.domain), settings.enabled, settings.memory_mb, settings.cpu_limit);
-  const result = await sshExecWithStdin(server.management_address || server.ipv4, server.ssh_user && server.ssh_user !== "root" ? "sudo -n sh -s" : "sh -s", script, server.ssh_host_key, { user: server.ssh_user, port: server.ssh_port });
-  if (result.exitCode !== 0) {
-    db.saveSetting("ntfy_status", "error");
-    throw new Error("ntfy reconciliation failed; inspect the ntfy container on the panel server");
+  const runtime = parseRuntimeConfig(app.env_vars);
+  const mapping = Object.fromEntries(Object.keys(desired).map(key => [key, { from: `environment.${key}` }]));
+  if (Object.entries(mapping).some(([key, value]) => JSON.stringify(runtime.env[key]) !== JSON.stringify(value))) {
+    await applyAppConfig(app.id, { ...deployRequestFromApp(db.getApp(app.id)!), env: { ...runtime.env, ...mapping } });
   }
-  db.saveSetting("ntfy_status", settings.enabled ? "ready" : "disabled");
-  db.saveSetting("ntfy_applied", fingerprint);
-  db.saveSetting("ntfy_checked_at", new Date().toISOString());
+  const updated = db.getApp(app.id)!;
+  const replicas = db.getReplicas(app.id).filter(r => r.status === "running");
+  if (replicas.length === updated.desired_replicas && replicas.every(r => r.attested_at && r.config_revision === updated.config_revision)) return null;
+  // Respect ordinary lifecycle intent: integration must never restart a paused,
+  // sleeping, deleting, or currently deploying app behind the operator's back.
+  if (!["running", "unhealthy"].includes(updated.status)) return null;
+  const active = findActiveOperationByResourceKey("reload_app", `app:${app.id}`);
+  if (active) return active.id;
+  const op = enqueueOperation({ kind: "reload_app", resourceKeys: [`app:${app.id}`], input: { appId: app.id }, trigger: "ntfy-config", triggeredBy: ctx?.triggeredBy ?? "system:ntfy", parentId: ctx?.opId });
+  db.saveSetting("ntfy_operation_id", String(op.id));
+  return op.id;
 }

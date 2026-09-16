@@ -1,38 +1,65 @@
 import { useEffect, useState } from "react";
 import { get, put, post } from "../api/client.ts";
-import { Card, Btn, showToast } from "./ui.tsx";
+import { Card, Btn, Field, showToast } from "./ui.tsx";
+import { NeoSelect } from "./neo-select.tsx";
 import type { NtfyPreferences, NtfySettings } from "../../../shared/ntfy-schema.ts";
 
+const defaultSettings: NtfySettings = { enabled: true, app_id: null, alerts: true, apps: true, ios_push: false, cache_hours: 24 };
+type ServiceState = { settings: NtfySettings | null; app: { id: number; name: string; domain: string; status: string } | null; apps: { id: number; name: string }[]; servers: { id: number; name: string }[]; opId: number | null; delivery: { pending: number; failed: number } };
 export function AdminNtfySettings() {
-  const [form, setForm] = useState<NtfySettings>({ enabled: false, domain: "", alerts: true, apps: true, ios_push: false, cache_hours: 24, memory_mb: 128, cpu_limit: 0.5 });
-  const [state, setState] = useState<any>(null);
+  const [form, setForm] = useState(defaultSettings);
+  const [state, setState] = useState<ServiceState | null>(null);
+  const [create, setCreate] = useState({ name: "ntfy", domain: "", server_id: 0 });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { get("/api/admin/ntfy").then(s => { setState(s); if (s.settings) setForm(s.settings); }).catch(e => setError(e.message)); }, []);
-  useEffect(() => { const timer = window.setInterval(() => { get("/api/admin/ntfy").then(setState).catch(() => {}); }, 10000); return () => window.clearInterval(timer); }, []);
-  async function save() {
+  async function load(initial = false) {
+    const s = await get("/api/admin/ntfy") as ServiceState;
+    setState(s);
+    if (initial && s.settings) setForm(s.settings);
+    else setForm(f => ({ ...f, app_id: s.app?.id ?? f.app_id }));
+    setCreate(c => ({ ...c, server_id: c.server_id || s.servers[0]?.id || 0 }));
+  }
+  useEffect(() => { load(true).catch(e => setError(e.message)); const timer = window.setInterval(() => { load().catch(() => {}); }, 10000); return () => window.clearInterval(timer); }, []);
+  async function apply(creating = false) {
     setBusy(true); setError("");
-    try { const result = await put("/api/admin/ntfy", form); showToast("ntfy configuration queued", "success"); setState({ ...state, status: "pending", opId: result.opId }); }
-    catch (e: any) { setError(e.message); } finally { setBusy(false); }
+    try {
+      const result = creating ? await post("/api/admin/ntfy/app", create) : await put("/api/admin/ntfy", form);
+      setState(s => s ? { ...s, opId: result.opId } : s);
+      showToast(creating ? "ntfy app deployment queued" : "Notification settings queued", "success");
+      await load();
+    } catch (e: any) { setError(e.message); } finally { setBusy(false); }
   }
   return <Card className="p-5 space-y-4">
-    <h2 className="font-semibold">Shared notifications · ntfy</h2>
-    <p className="text-sm text-muted">OCD runs a private notification server on the panel host. Users subscribe to platform alerts; hosted apps get isolated topics and credentials.</p>
+    <h2 className="font-mono text-xs font-bold uppercase tracking-wider">Shared notifications</h2>
+    <p className="text-sm text-muted">Private OCD alerts and notification topics for your apps, powered by ntfy.</p>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-    <label className="flex gap-2"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} /> Enable shared ntfy</label>
-    <label className="block">HTTPS domain<input className="block w-full" value={form.domain} placeholder="notify.example.com" onChange={e => setForm({ ...form, domain: e.target.value })} /></label>
-    <p className="text-sm text-muted">Point this domain to the panel's ingress address. OCD provisions HTTPS automatically.</p>
-    <label className="flex gap-2"><input type="checkbox" checked={form.alerts} onChange={e => setForm({ ...form, alerts: e.target.checked })} /> Allow platform alerts in Account → Notifications</label>
-    <label className="flex gap-2"><input type="checkbox" checked={form.apps} onChange={e => setForm({ ...form, apps: e.target.checked })} /> Allow hosted app notification bindings</label>
-    <label className="block">RAM limit (MiB)<input type="number" min={64} max={4096} value={form.memory_mb} onChange={e => setForm({ ...form, memory_mb: Number(e.target.value) })} /></label>
-    <label className="block">CPU limit (cores)<input type="number" min={0.1} max={4} step={0.1} value={form.cpu_limit} onChange={e => setForm({ ...form, cpu_limit: Number(e.target.value) })} /></label>
-    <label className="block">Message retention (hours)<input type="number" min={1} max={168} value={form.cache_hours} onChange={e => setForm({ ...form, cache_hours: Number(e.target.value) })} /></label>
-    <label className="flex gap-2"><input type="checkbox" checked={form.ios_push} onChange={e => setForm({ ...form, ios_push: e.target.checked })} /> Enable instant iOS push through ntfy.sh</label>
-    <p className="text-sm text-muted">The optional iOS relay receives wake-up requests; notification content stays on this server.</p>
-    <p className="text-sm">Service: {state?.status || "Loading…"}{state?.checked_at && ` · Checked ${new Date(state.checked_at).toLocaleString()}`}</p>
-    {state?.delivery?.pending > 0 && <p className="text-sm">Queued messages: {state.delivery.pending} · Exhausted retries: {state.delivery.failed || 0}</p>}
-    <div className="flex gap-3 items-center"><Btn loading={busy} disabled={!state || !form.domain} onClick={save}>Save and apply</Btn>{state?.opId && <a href={`#/engine/op/${state.opId}`}>View operation</a>}</div>
-    <p className="text-sm text-muted">Disabling stops the service and retains its data. Platform alerts use a durable retry queue. The service shares the panel host's availability.</p>
+    {!state ? <p className="text-sm text-muted">Loading…</p> : state.app ? <>
+      <div className="flex items-center justify-between gap-3 border-2 border-fg p-3">
+        <div><a className="font-bold underline" href={`#/apps/${state.app.id}`}>{state.app.name}</a><p className="text-xs text-muted">{state.app.domain}</p></div>
+        <span className="font-mono text-xs">{state.app.status}</span>
+      </div>
+      <p className="text-sm text-muted">Manage deployments, logs, storage, resources, and start or pause the service from its app page.</p>
+    </> : <>
+      <Field label="App name"><input value={create.name} onChange={e => setCreate({ ...create, name: e.target.value })} /></Field>
+      <Field label="HTTPS domain" hint="Point this domain to the selected server's ingress address. OCD provisions HTTPS."><input value={create.domain} placeholder="notify.example.com" onChange={e => setCreate({ ...create, domain: e.target.value })} /></Field>
+      <Field label="Server"><NeoSelect value={String(create.server_id || "")} options={state.servers.map(s => ({ value: String(s.id), label: s.name }))} onChange={v => setCreate({ ...create, server_id: Number(v) })} placeholder="Select a server" /></Field>
+      <p className="text-xs text-muted">Creates a regular app with persistent storage, a 128 MiB memory limit, and a 0.5 CPU limit.</p>
+      <Btn loading={busy} disabled={!create.domain || !create.server_id} onClick={() => apply(true)}>Create ntfy app</Btn>
+      {!!state.apps.length && <Field label="Use an existing ntfy app"><NeoSelect value={String(form.app_id || "")} options={state.apps.map(a => ({ value: String(a.id), label: a.name }))} onChange={v => setForm({ ...form, app_id: Number(v) })} placeholder="Select an app" /></Field>}
+    </>}
+    {!!form.app_id && <>
+      <label className="flex gap-2 text-sm"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} /> Enable notification integration</label>
+      <label className="flex gap-2 text-sm"><input type="checkbox" checked={form.alerts} onChange={e => setForm({ ...form, alerts: e.target.checked })} /> Allow OCD event alerts</label>
+      <label className="flex gap-2 text-sm"><input type="checkbox" checked={form.apps} onChange={e => setForm({ ...form, apps: e.target.checked })} /> Allow hosted app notification bindings</label>
+      <details><summary className="cursor-pointer font-mono text-xs font-bold">Delivery options</summary>
+        <Field label="Message retention (hours)"><input type="number" min={1} max={168} value={form.cache_hours} onChange={e => setForm({ ...form, cache_hours: Number(e.target.value) })} /></Field>
+        <label className="flex gap-2 text-sm"><input type="checkbox" checked={form.ios_push} onChange={e => setForm({ ...form, ios_push: e.target.checked })} /> Instant iOS push through ntfy.sh</label>
+        <p className="mt-2 text-xs text-muted">The optional iOS relay receives wake-up requests; notification content stays on your server.</p>
+      </details>
+      <Btn loading={busy} onClick={() => apply()}>Save integration</Btn>
+    </>}
+    {state?.opId && <a className="block text-xs underline" href={`#/engine/op/${state.opId}`}>View configuration operation</a>}
+    {!!state?.delivery?.pending && <p className="text-xs text-muted">Queued messages: {state.delivery.pending} · Exhausted retries: {state.delivery.failed || 0}</p>}
   </Card>;
 }
 

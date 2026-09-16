@@ -1,4 +1,4 @@
-import { getAppNtfy, ntfySettings } from "../../shared/ntfy.ts";
+import { getAppNtfy } from "../../shared/ntfy.ts";
 import { getAppStorage, appStorageView } from "../../shared/object-storage.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { requireAdmin, requirePermission, requireCliPermission, requireAuthenticated, appScope } from "../lib/permissions.ts";
@@ -284,7 +284,6 @@ export async function handleDeploy(request: Request): Promise<Response> {
   try {
     const payload = await requireCliPermission(request, "apps.deploy");
     const req = await request.json() as AppDeployRequest;
-    if (req.domain && req.domain === ntfySettings()?.domain) return Response.json({ error: "Domain is reserved for the shared ntfy service" }, { status: 409, headers: corsHeaders });
     if ((req.storage && Object.keys(req.storage).length) || (req.notifications && Object.keys(req.notifications).length)) await requireAdmin(request);
     if (!req?.app_name || typeof req.app_name !== "string") {
       return Response.json({ ok: false, error: "app_name is required" }, { status: 400, headers: corsHeaders });

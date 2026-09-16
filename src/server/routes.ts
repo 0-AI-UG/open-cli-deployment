@@ -1,5 +1,5 @@
-import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest } from "./routes/ntfy.ts";
-import { handleGetProtection, handleSaveProtection, handleRecoveryKey, handleBackupNow, handleTestEmail, handleResumeRecovery } from "./routes/panel-protection.ts";
+import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
+import { handleGetProtection, handleSaveProtection, handleRecoveryKey, handleBackupNow, handleResumeRecovery } from "./routes/panel-protection.ts";
 import { recoveryPending } from "../engine/panel-protection/recovery-state.ts";
 import { handleStorageAuthorize, handleStorageGrants } from "./routes/storage-access.ts";
 import { handleSetupStatus, handleSetupComplete } from "./routes/setup.ts";
@@ -335,14 +335,14 @@ export const apiRoutes = {
   // no browser wake page or token dance. Explicit wake actions use the
   // dedicated operational endpoint and never mutate desired app config.)
 
+  "/api/admin/ntfy/app": { POST: handleCreateNtfyApp },
   "/api/admin/ntfy": { GET: handleAdminNtfy, PUT: handleAdminNtfy },
   "/api/auth/notifications": { GET: handleUserNtfy, PUT: handleUserNtfy },
   "/api/auth/notifications/credentials": { POST: handleNtfyCredentials },
-  "/api/auth/notifications/test": { POST: handleNtfyTest },
+  "/api/auth/notifications/test": { POST: handleNtfyTest, handleCreateNtfyApp },
   "/api/admin/protection": { GET: handleGetProtection, PUT: handleSaveProtection },
   "/api/admin/protection/recovery-key": { POST: handleRecoveryKey },
   "/api/admin/protection/backup": { POST: handleBackupNow },
-  "/api/admin/protection/test-email": { POST: handleTestEmail },
   "/api/admin/protection/resume": { POST: handleResumeRecovery },
   // --- Admin: Settings ---
   "/api/admin/settings": {

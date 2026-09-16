@@ -14,7 +14,7 @@
 - [Volume recovery](#volume-recovery)
 - [Database consolidation and backups](#database-consolidation-and-backups)
 - [Panel backups and recovery](#panel-backups-and-recovery)
-- [Panel email alerts](#panel-email-alerts)
+- [Panel notifications](#panel-notifications)
 - [Host disk pressure](#host-disk-pressure)
 
 ## Durable operation model
@@ -269,15 +269,17 @@ Automation starts paused. In **Admin → Panel**, confirm the original panel is
 stopped, review saved operations, and use **Verify servers and resume**. OCD
 checks pinned host keys and Docker access; this does not prove application data
 consistency or that old pending operations should be replayed. Scheduled backups
-remain disabled until explicitly re-enabled; stale queued mail is discarded.
+remain disabled until explicitly re-enabled; stale queued notifications is discarded.
 
-## Panel email alerts
+## Panel notifications
 
-**Admin → Panel** supports Resend credentials, recipient, optional sender, and a
-test email. Built-in incidents cover failed delivery, prolonged unhealthy apps,
-failed/overdue panel backups, and sustained server disk use of at least 90%.
-The durable outbox retries delivery and tracks recovery notices. The panel must
-be running to send alerts; it cannot report its own total outage by email.
+ntfy is the only alert channel. Enable the shared service and platform alerts in
+**Admin → Panel → Shared notifications**. Each user configures their private
+subscription and recovery notices in **Account → Notifications**. Built-in
+incidents cover failed delivery, prolonged unhealthy apps, failed/overdue panel
+backups, and sustained server disk use of at least 90%. The durable outbox retries
+delivery. The panel and ntfy must be running; external monitoring is needed for
+a total panel-host outage.
 
 ## Host disk pressure
 

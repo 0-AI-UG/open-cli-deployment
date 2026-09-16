@@ -3,9 +3,13 @@ import db, { getSettings, saveSetting, getApp, getUserById, hasPermission } from
 import { encryptValue, decryptValue } from "./secret-store.ts";
 import { NtfyBindingsSchema, type NtfyBindings, type NtfyPreferences, type NtfySettings } from "./ntfy-schema.ts";
 export const NTFY_IMAGE = "docker.io/binwiederhier/ntfy:v2.28.0";
-export const NTFY_CONTAINER = "ocd-ntfy";
-export const NTFY_PORT = 8894;
 export const ntfySettings = (): NtfySettings | null => JSON.parse(getSettings().ntfy_settings || "null");
+export const ntfyApp = () => { const id = ntfySettings()?.app_id; return id ? getApp(id) : null; };
+export function ntfyUrl(): string {
+  const app = ntfyApp();
+  if (!app?.domain) throw new Error("Select an ntfy app with an HTTPS domain in Admin");
+  return `https://${app.domain}`;
+}
 export const ntfyPreferences = (id: string): NtfyPreferences => JSON.parse(getSettings()[`ntfy_user.${id}`] || '{"enabled":false,"events":["app","delivery","disk","backup"],"recovery":true}');
 export const getAppNtfy = (id: number): NtfyBindings => JSON.parse(getSettings()[`app_ntfy.${id}`] || "{}");
 export const ntfyHash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -31,7 +35,8 @@ export function normalizeNtfyBindings(value: NtfyBindings = {}): NtfyBindings {
 export async function prepareNtfyBindings(appId: number, bindings: NtfyBindings): Promise<void> {
   if (!Object.keys(bindings).length) return;
   const settings = ntfySettings();
-  if (!settings?.enabled || !settings.apps) throw new Error("Enable the shared ntfy service and app access in Admin first");
+  if (!settings?.enabled || !settings.apps || !ntfyApp()) throw new Error("Select the ntfy app and enable app access in Admin first");
+  if (settings.app_id === appId) throw new Error("The ntfy server cannot depend on its own notification binding");
   for (const [name, spec] of Object.entries(bindings)) await ensureNtfyCredential("app", String(appId), name, spec.generation, ntfyAccess(spec));
 }
 export function saveAppNtfy(appId: number, bindings: NtfyBindings, initial = false): void {
@@ -58,7 +63,7 @@ export async function appNtfyEnv(appId: number, bindings = getAppNtfy(appId)): P
   for (const [name, spec] of Object.entries(bindings)) {
     const credential = await ensureNtfyCredential("app", String(appId), name, spec.generation, ntfyAccess(spec));
     const names = ntfyVariableNames(name);
-    result[names.url] = `https://${settings.domain}`;
+    result[names.url] = ntfyUrl();
     result[names.topic] = credential.topic;
     result[names.token] = (await credentialSecret(credential)).token;
   }

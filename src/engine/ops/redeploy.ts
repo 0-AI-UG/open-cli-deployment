@@ -18,7 +18,7 @@ import { wakeApp } from "../scale/wake.ts";
 import { syncAppIngress } from "../scale/traefik-manager.ts";
 import { replicaBindHost } from "../scale/types.ts";
 import { registerOp } from "./registry.ts";
-import type { OpKindDefinition, Step } from "../types.ts";
+import type { OpKindDefinition, Step, OpContext } from "../types.ts";
 import { attestReplica, hashEnvironment, latestDesiredImage } from "../revision.ts";
 import type { AppRow } from "../../shared/db/apps.ts";
 import type { DeployRequest } from "../../shared/rpc.ts";
@@ -104,13 +104,13 @@ function candidateApp(app: AppRow, candidate: DeployRequest | null): AppRow {
   };
 }
 
-async function candidateEnvVars(app: AppRow, candidate: DeployRequest | null): Promise<Record<string, string>> {
+async function candidateEnvVars(app: AppRow, candidate: DeployRequest | null, ctx: OpContext<any>): Promise<Record<string, string>> {
   if (!candidate) return resolveAppEnvVars(app);
   const effectiveApp = candidateApp(app, candidate);
   const values = await resolveRuntimeEnv(effectiveApp);
   const notifications = normalizeNtfyBindings(candidate.notifications);
   await prepareNtfyBindings(app.id, notifications);
-  if (Object.keys(notifications).length) await reconcileNtfyService();
+  if (Object.keys(notifications).length) await reconcileNtfyService(ctx, true);
   const bindings = resolveStorageBindings(candidate.storage, getAppStorage(app.id));
   await prepareStorageBindings(app, bindings);
   const platform = platformEnvVars(effectiveApp);
@@ -280,7 +280,7 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
     if (!server) throw new Error("Server not found");
 
     const containerPort = app.container_port;
-    const envVars = await candidateEnvVars(storedApp, candidate);
+    const envVars = await candidateEnvVars(storedApp, candidate, ctx);
     const bindAddr = replicaBindHost(server);
     const extraVolumes = db.parseExtraVolumes(app.extra_volumes);
     const imageTag = app.image_ref;
@@ -361,7 +361,7 @@ const rollExtraReplicas: Step<RedeployInput, { ok: true }> = {
     const candidate = effectiveCandidate(stored, ctx.input);
     const app = candidateApp(stored, candidate);
     const build = prior["pull_and_run_candidate"] as ArtifactOut;
-    const envVars = await candidateEnvVars(stored, candidate);
+    const envVars = await candidateEnvVars(stored, candidate, ctx);
     const rolling = await rollingRedeploy(
       ctx.input.appId,
       (step, detail) => ctx.log(`[${step}] ${detail}`),

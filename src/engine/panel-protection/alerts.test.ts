@@ -1,10 +1,14 @@
 import { test, expect } from "bun:test";
-import db, { saveSetting } from "../../shared/db.ts";
-import { secretStore } from "../../shared/secret-store.ts";
-import { reconcileIncidents, deliverEmails, collectConditions } from "./alerts.ts";
+import db, { saveSetting, insertUser } from "../../shared/db.ts";
+import { NtfySettingsSchema } from "../../shared/ntfy-schema.ts";
+import { reconcileIncidents, alertTick, collectConditions } from "./alerts.ts";
 
-function enable() { saveSetting("panel_alert_enabled", "1"); saveSetting("panel_alert_recipient", "owner@example.com"); }
-const count = () => (db.query("SELECT count(*) AS n FROM panel_email_outbox").get() as { n: number }).n;
+function enable() {
+  saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, alerts: true, apps: true })));
+  insertUser({ id: "recipient", username: "recipient", password_hash: "unused", is_admin: true });
+  saveSetting("ntfy_user.recipient", JSON.stringify({ enabled: true, events: ["app", "backup", "disk", "delivery"], recovery: true }));
+}
+const count = () => (db.query("SELECT count(*) AS n FROM ntfy_outbox").get() as { n: number }).n;
 test("grace period, deduplication and recovery survive repeated evaluations", () => {
   enable();
   const condition = [{ key: "app:1", title: "App unhealthy", path: "/apps/1", grace: 120000 }];
@@ -17,23 +21,16 @@ test("grace period, deduplication and recovery survive repeated evaluations", ()
   reconcileIncidents(condition, 300000); reconcileIncidents(condition, 420000);
   expect(count()).toBe(3);
 });
-test("transient conditions do not send recovery mail", () => {
+test("transient conditions do not send recovery notifications", () => {
   enable(); reconcileIncidents([{ key: "app:1", title: "Unhealthy", path: "/apps/1", grace: 120000 }], 1000);
   reconcileIncidents([], 3000); expect(count()).toBe(0);
 });
-test("delivery retries use the same payload and idempotency key without exposing provider errors", async () => {
-  enable(); await secretStore.set("panel_alert_resend_key", "test-key");
-  reconcileIncidents([{ key: "backup", title: "Backup failed", path: "/admin" }], 1000);
-  const calls: RequestInit[] = [];
-  const fail = (async (_url: unknown, init: RequestInit) => { calls.push(init); return new Response("secret diagnostic", { status: 503 }); }) as typeof fetch;
-  await deliverEmails(fail, 1000);
-  expect((db.query("SELECT error FROM panel_email_outbox").get() as { error: string }).error).not.toContain("secret diagnostic");
-  await deliverEmails(fail, 2000); expect(calls.length).toBe(1);
-  const ok = (async (_url: unknown, init: RequestInit) => { calls.push(init); return Response.json({ id: "sent" }); }) as typeof fetch;
-  await deliverEmails(ok, 32000);
-  expect(calls[0].body).toBe(calls[1].body);
-  expect((calls[0].headers as Record<string, string>)["idempotency-key"]).toBe((calls[1].headers as Record<string, string>)["idempotency-key"]);
-  await deliverEmails(ok, 90000); expect(calls.length).toBe(2);
+test("legacy email settings cannot enable alert evaluation", async () => {
+  saveSetting("panel_alert_enabled", "1");
+  saveSetting("panel_alert_recipient", "former@example.com");
+  await alertTick();
+  expect(db.query("SELECT count(*) AS n FROM panel_alerts").get()).toEqual({ n: 0 });
+  expect(count()).toBe(0);
 });
 test("overdue panel backups use last successful backup or initial enable time", () => {
   saveSetting("panel_backup_enabled", "1"); saveSetting("panel_backup_enabled_at", "1000");

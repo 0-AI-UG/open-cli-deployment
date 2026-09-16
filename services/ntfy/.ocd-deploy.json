@@ -1,0 +1,31 @@
+{
+  "$schema": 1,
+  "name": "Shared ntfy notifications",
+  "description": "Private notifications for OCD events, users, and app bindings.",
+  "suggested_app_name": "ntfy",
+  "image": "docker.io/binwiederhier/ntfy:v2.28.0",
+  "container_port": 80,
+  "public": true,
+  "replicas": 1,
+  "memory_mb": 128,
+  "cpu_limit": 0.5,
+  "command": ["serve"],
+  "volume": { "size": 1, "path": "/var/lib/ntfy" },
+  "health_check": { "mode": "http", "path": "/v1/health", "expected_statuses": [200] },
+  "env": {
+    "NTFY_BASE_URL": { "from": "environment.NTFY_BASE_URL" },
+    "NTFY_LISTEN_HTTP": ":80",
+    "NTFY_CACHE_FILE": "/var/lib/ntfy/cache.db",
+    "NTFY_CACHE_DURATION": { "from": "environment.NTFY_CACHE_DURATION" },
+    "NTFY_AUTH_FILE": "/var/lib/ntfy/auth.db",
+    "NTFY_AUTH_DEFAULT_ACCESS": "deny-all",
+    "NTFY_ENABLE_LOGIN": "true",
+    "NTFY_ENABLE_SIGNUP": "false",
+    "NTFY_ENABLE_RESERVATIONS": "false",
+    "NTFY_BEHIND_PROXY": "true",
+    "NTFY_UPSTREAM_BASE_URL": { "from": "environment.NTFY_UPSTREAM_BASE_URL" },
+    "NTFY_AUTH_USERS": { "from": "environment.NTFY_AUTH_USERS" },
+    "NTFY_AUTH_TOKENS": { "from": "environment.NTFY_AUTH_TOKENS" },
+    "NTFY_AUTH_ACCESS": { "from": "environment.NTFY_AUTH_ACCESS" }
+  }
+}

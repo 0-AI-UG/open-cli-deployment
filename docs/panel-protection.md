@@ -1,4 +1,4 @@
-# Panel backups and email alerts
+# Panel backups and notifications
 
 Open **Admin → Panel**. These settings protect OCD's own control-plane data.
 Applications continue to own their PostgreSQL databases, PGMQ workers, and cron
@@ -103,38 +103,16 @@ after that backup. This access check does not prove application data consistency
 
 Daily backups remain disabled after restore so an old retention history cannot
 immediately prune backups. Confirm the destination and enable backups again.
-Pending emails from the old snapshot are discarded to avoid replaying stale mail.
+Pending ntfy notifications from the old snapshot are discarded to avoid replaying stale alerts.
 
-## Email alerts
+## Notifications
 
-Enter a **Resend API key** and **recipient email**, enable alerts, and save. No
-manifest edits, SMTP server settings, Slack, or webhook destinations are needed.
-Use **Send test email** to check the saved configuration.
+ntfy is OCD's only alert channel. Enable the shared service and platform alerts
+in **Admin → Panel → Shared notifications**, then configure subscriptions and
+recovery notices in **Account → Notifications**. See [Shared ntfy notifications](notifications.md)
+for server setup, app bindings, delivery retries, and access controls.
 
-The default sender is `OCD <onboarding@resend.dev>`. Resend's test sender can send
-to the Resend account owner's address. To send to other recipients, set the
-optional sender to an address on a verified Resend domain. See
-[Resend's sending API](https://resend.com/docs/api-reference/emails/send-email)
-and [sending errors](https://resend.com/docs/api-reference/errors).
-
-Built-in rules cover:
-
-- Failed delivery/build operations, grouped by target; a later successful delivery
-  resolves the incident. Historical failures before enabling alerts are ignored.
-- Apps unhealthy for two minutes. Planned paused/sleeping/deploying states do not
-  open unhealthy incidents.
-- Failed panel backups and no successful scheduled backup for 26 hours.
-- Server disks at least 90% full for two minutes, based on recent metrics.
-
-Incidents and a retrying outbox persist in SQLite. OCD sends one opening email
-and one recovery email per incident; repeated evaluations do not send duplicates.
-Each email has a short description and a panel link. Raw logs and environment
-values are excluded. Delivery retries use the same payload and Resend idempotency
-key, with exponential backoff capped at an hour and a maximum of 12 attempts.
-Delivery status appears in the panel. Resend idempotency keys expire after 24
-hours, so a retry after a longer panel outage may duplicate an accepted email.
-Successful delivery history is retained for 30 days.
-
-The panel must be running and able to reach Resend to send email. It cannot email
-about its own total outage. Failed notification delivery stays visible in the
-panel; it cannot reliably report itself through the same broken email channel.
+Built-in incidents cover failed deployments, apps unhealthy for two minutes,
+failed or overdue panel backups, and sustained server disk usage of at least 90%.
+The incident list remains visible in Admin. The panel and ntfy must be available
+to deliver alerts; use external monitoring for a total panel-host outage.

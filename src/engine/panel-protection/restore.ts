@@ -21,7 +21,7 @@ export function restoreArchive(bytes: Buffer, recoveryKey: string, target: strin
       const version = restored.query("SELECT version FROM schema_version").get() as { version: number };
       if (version.version !== archive.schemaVersion) throw new Error("Backup schema metadata does not match database");
       // Outbox entries and an in-flight backup in the snapshot refer to the old timeline.
-      restored.run("DELETE FROM panel_email_outbox WHERE sent_at IS NULL");
+      restored.run("DELETE FROM ntfy_outbox WHERE sent_at IS NULL");
       restored.run("UPDATE panel_backups SET status='failed', error='Interrupted by panel restore' WHERE status IN ('pending','running')");
       restored.run("INSERT OR REPLACE INTO settings (key,value) VALUES ('panel_backup_enabled','0')");
       restored.run("PRAGMA wal_checkpoint(TRUNCATE)");

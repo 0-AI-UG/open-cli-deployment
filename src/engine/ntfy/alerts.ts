@@ -1,5 +1,5 @@
 import * as db from "../../shared/db.ts";
-import { ntfySettings, ntfyPreferences, ntfyCredentials, canReceiveNtfy, credentialSecret } from "../../shared/ntfy.ts";
+import { ntfyApp, ntfyUrl, ntfySettings, ntfyPreferences, ntfyCredentials, canReceiveNtfy, credentialSecret } from "../../shared/ntfy.ts";
 export function enqueueNtfyIncident(incident: { key: string; incident_id: string; title: string; path: string }, recovered: boolean, now: number): void {
   const settings = ntfySettings();
   if (!settings?.enabled || !settings.alerts) return;
@@ -19,7 +19,7 @@ export function enqueueNtfyTest(userId: string): string {
 type Delivery = { id: string; user_id: string; incident_key: string; recovered: number; title: string; message: string; path: string; attempts: number };
 export async function deliverNtfy(fetcher: typeof fetch = fetch, now = Date.now()): Promise<void> {
   const settings = ntfySettings();
-  if (!settings?.enabled || !settings.alerts || db.getSettings().ntfy_status !== "ready") return;
+  if (!settings?.enabled || !settings.alerts || ntfyApp()?.status !== "running") return;
   const credentials = ntfyCredentials();
   const publisher = credentials.find(c => c.owner_type === "system");
   if (!publisher) return;
@@ -34,7 +34,7 @@ export async function deliverNtfy(fetcher: typeof fetch = fetch, now = Date.now(
     if (!recipient) continue;
     try {
       const panel = db.getPanel();
-      const response = await fetcher(`https://${settings.domain}`, {
+      const response = await fetcher(ntfyUrl(), {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(10_000),
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({ topic: recipient.topic, title: item.title, message: item.message,

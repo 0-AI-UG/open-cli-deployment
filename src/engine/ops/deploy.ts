@@ -517,7 +517,7 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
     try {
       await prepareNtfyBindings(app.id, notifications);
       saveAppNtfy(app.id, notifications, true);
-      if (Object.keys(notifications).length) await reconcileNtfyService();
+      if (Object.keys(notifications).length) await reconcileNtfyService(ctx, true);
       await prepareStorageBindings(app, storage);
       saveAppStorage(app.id, storage, true);
     } catch (error) {
