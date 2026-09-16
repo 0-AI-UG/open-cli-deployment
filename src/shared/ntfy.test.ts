@@ -27,7 +27,7 @@ test("normal service manifest has private auth, persistent storage and bounded r
   expect(template.env.NTFY_AUTH_DEFAULT_ACCESS).toBe("deny-all");
   expect(template.env.NTFY_ENABLE_SIGNUP).toBe("false");
   const request = ntfyDeployRequest({ name: "ntfy", domain: "notify.example.com", server_id: 1 }, 2, `docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`);
-  expect(request).toMatchObject({ volume_path: "/var/lib/ntfy", memory_mb: 128, cpu_limit: 0.5, environment_id: 2, replicas: 1, container_port: 80 });
+  expect(request).toMatchObject({ volume_driver: "local-directory", volume_size: 1, volume_path: "/var/lib/ntfy", memory_mb: 128, cpu_limit: 0.5, environment_id: 2, replicas: 1, container_port: 80 });
 });
 test("integration uses encrypted normal app environment and reload operations, respects paused apps", async () => {
   const app = enable();

@@ -6,9 +6,16 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  typecheck:
-    name: Type Check
+  quality:
+    name: Type check, test, and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +32,12 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+      - name: Build web application
+        run: bun run build
+
+      - name: Build CLI binaries
+        run: bun run build:cli
 
   build-component:
     name: Build worker / registry component

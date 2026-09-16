@@ -102,10 +102,7 @@ ocd delete stack <name>
 ocd resources <ls|volume|volumes|delete>
 ocd volumes <list|show|audit|ls|cat|delete>
 ocd buckets <list|create|delete> [--storage=<connection>]
-ocd storage list
-ocd storage grant <app> <bucket> --prefix=path/ --token-file=/private/path
-    [--storage=<connection>] [--methods=GET,HEAD,PUT,DELETE,LIST]
-ocd storage revoke <grant-id>
+ocd storage-readers <list|create|adopt|revoke>
 ocd ssh
 ocd cp <app|server>:/absolute/path <local-path> [--force] [--server] [--replica=ID]
 ```
@@ -124,6 +121,9 @@ deletion refuses non-empty buckets and never recursively removes objects.
 
 `ocd volumes` lists provider disks; local directories appear in
 `ocd servers show <name|id> --storage` and `ocd app show <app> --storage`.
-Prefer manifest `storage` bindings for app-owned object access. Manual grant
-commands are administrative and write a new mode-0600 token file without
-printing the token. See [Environments and secrets](environments-and-secrets.md).
+Declare app-owned object access with manifest `storage` bindings. OCD creates
+and injects the scoped token during deployment. Use `ocd storage-readers create`
+for external read-only consumers such as a CDN. `adopt` relabels an existing
+read-only manual grant without rotating its token; convert these before removing
+legacy authorization. See
+[Environments and secrets](environments-and-secrets.md).

@@ -1,0 +1,67 @@
+name: Bug report
+description: Report reproducible behavior that is not working as expected
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include credentials or sensitive infrastructure data. Report security issues through the private process in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: OCD version
+      description: Paste the output of `ocd --version`, or the commit SHA when running from source.
+      placeholder: 0.8.2
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation type
+      options:
+        - Guided CLI bootstrap
+        - Existing Docker host
+        - Managed Hetzner server
+        - Development environment
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence that reproduces the problem.
+      placeholder: |
+        1. Run ...
+        2. Configure ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove tokens, secrets, private hostnames, and customer data before pasting logs.
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the panel host OS/architecture, Docker version, browser if relevant, and infrastructure provider.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed credentials and sensitive data from this report.
+          required: true

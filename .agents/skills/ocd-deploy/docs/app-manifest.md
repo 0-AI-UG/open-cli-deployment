@@ -104,3 +104,33 @@ read-only. Use the OCD storage client, not a standard S3 SDK with this token.
 Increment `generation` to rotate. Old grants are retired after replicas attest
 to the new configuration. Removing `storage` removes the app's bindings.
 Staging manifests must select their own explicit bucket/prefix scope.
+
+## Notifications
+
+`notifications` declares private topics on OCD's managed ntfy service:
+
+```json
+{
+  "notifications": {
+    "primary": { "permissions": ["publish"], "generation": 0 }
+  }
+}
+```
+
+Enable shared ntfy and app access in Admin → Panel first. Binding deployment
+requires an administrator. OCD injects `OCD_NTFY_URL`, `OCD_NTFY_TOPIC`, and
+`OCD_NTFY_TOKEN`; named bindings use `OCD_<NAME>_NTFY_*`. In a TypeScript app,
+import `OcdNtfyClient` from `@0-ai-ug/ocd-ntfy-client` (local Bun package in
+`packages/ntfy-client`, not registry-published), then call
+`OcdNtfyClient.fromEnv(process.env).publish("Job completed")`. Pass the binding
+name to `fromEnv` for a named binding. `subscribe(signal)` streams ntfy JSON
+events and requires `subscribe` permission. For a Bun app with this repository
+checked out nearby, install with `bun add file:../open-cli-deployment/packages/ntfy-client`
+(adjust the path); independent build repositories must vendor the client source
+until it is published.
+
+These are managed grants: each app and binding has an isolated topic and token
+scoped to `publish` and/or `subscribe`. Increment `generation` to rotate; old
+credentials retire after rollout attestation. Removing the binding removes its
+access. There is no separate manual notification grant/revoke CLI. Account →
+Notifications configures personal platform alerts independently.

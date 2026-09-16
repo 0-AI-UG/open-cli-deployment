@@ -34,9 +34,8 @@ delimiter-separated prefixes and preview text objects. Previews are capped at
 application data.
 
 Object-storage credentials are often account- or project-wide. Do not inject
-OCD's administrative credential into applications. Create separate application
-credentials and restrict them with bucket policies before storing them as
-environment secrets.
+OCD's administrative credential into applications. Apps should declare scoped
+storage bindings in their manifests instead.
 
 ## OCD-scoped application access
 
@@ -47,24 +46,33 @@ and transfers bytes directly to object storage. List requests are constrained
 to the token's prefix. Provider assignment, endpoint, or region changes cause
 existing grants to fail closed until rebound.
 
+Declare the bucket, prefix, and permissions in the app manifest as shown below.
+OCD creates and injects a scoped token during deployment. Apps must opt into
+the OCD storage driver. The TypeScript fetch client is in
+`packages/storage-client/index.ts`; see [SDK clients](sdk-clients.md) for
+installation.
+
+New app grants come only from manifest bindings. For readers outside OCD, such
+as a CDN, create a separately named, read-only external reader:
+
 ```text
-ocd storage list
-ocd storage grant my-app my-bucket --prefix=my-app/ --methods=GET,HEAD,PUT,DELETE,LIST --token-file=/private/path/storage-token
-ocd storage revoke <grant-id>
+ocd storage-readers create skyline-cdn skyline-media-nbg1 --prefix=uploads/editorial/ --token-file=/private/path/cdn-token
+ocd storage-readers list
+ocd storage-readers revoke <reader-id>
 ```
 
-These commands require an administrator. The token file is created with mode
-0600 and is never overwritten. Store its value in an encrypted OCD environment
-as OCD_STORAGE_TOKEN, with OCD_STORAGE_URL set to the panel's HTTPS
-`/api/storage/authorize` URL, then remove the temporary file. Apps must opt into
-the OCD storage driver. The TypeScript fetch client is in
-`packages/storage-client/index.ts`.
+An external reader is pinned to one storage connection, bucket, and optional
+prefix. Its token can authorize only GET and HEAD; it cannot list, write, or
+delete. The token is written once to a mode-0600 file and never shown again.
+Install it in the external service's secret store, not in an OCD app manifest.
+Revocation blocks new authorizations immediately; previously signed object
+URLs can remain valid for up to one hour.
 
-Grants may be prepared before an app is created and require explicit revocation
-when retired. Revocation blocks new authorizations immediately; previously
-issued object URLs remain usable until they expire, at most one hour later.
-Use GET/HEAD for readers and GET/PUT for the shared backup service. Grant DELETE
-and LIST only where application deletion or retention needs them.
+Existing read-only manual grants can be converted without rotating their tokens
+or changing their scope: `ocd storage-readers adopt <grant-id> --name=<reader-name>`.
+Adopt the four Skyline CDN grants before disabling legacy authorization in a
+later panel release. The adoption command rejects grants with write or list
+permission. Until adoption, legacy tokens continue to authorize their old scope.
 
 For Hetzner Object Storage, use the location as the signing region and
 `https://<location>.your-objectstorage.com` as the endpoint. Other providers
@@ -109,8 +117,9 @@ Permissions map to GET/HEAD (`read`), PUT (`write`), DELETE (`delete`), and LIST
 (`list`). Increment a binding's `generation` to rotate its token. Preparation
 keeps the previous grant valid; retirement happens only after all replicas attest
 to the desired environment. Removing a binding follows the same retirement rule.
-Deleting an app revokes its managed grants. Standalone manually issued grants
-still require explicit revocation.
+Deleting an app revokes its managed grants. External-reader grants have an
+independent lifecycle and must be explicitly revoked when the external service
+stops using them.
 
 Connection deletion and endpoint/region changes are blocked while referenced by
 app bindings, grants, or enabled panel backups. Rebind to another connection

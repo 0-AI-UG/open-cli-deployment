@@ -66,7 +66,19 @@ and `OCD_NTFY_TOKEN`. A `jobs` binding injects `OCD_JOBS_NTFY_URL`,
 `OCD_JOBS_NTFY_TOPIC`, and `OCD_JOBS_NTFY_TOKEN`. These values are managed by
 OCD and override same-named user environment variables.
 
-Publish using the native ntfy HTTP API:
+Use the small fetch client in `packages/ntfy-client/index.ts` ([local installation](sdk-clients.md)):
+
+```ts
+import { OcdNtfyClient } from "@0-ai-ug/ocd-ntfy-client";
+
+const ntfy = OcdNtfyClient.fromEnv(process.env);
+await ntfy.publish("Background job completed", { title: "Worker" });
+```
+
+Named bindings use `OcdNtfyClient.fromEnv(process.env, "jobs")`. The client
+also exposes `subscribe(signal)` as an async stream of native ntfy JSON events;
+request `"subscribe"` permission for that binding. Apps can alternatively
+publish using the native ntfy HTTP API:
 
 ```ts
 await fetch(`${process.env.OCD_NTFY_URL}/${process.env.OCD_NTFY_TOPIC}`, {
@@ -78,6 +90,12 @@ await fetch(`${process.env.OCD_NTFY_URL}/${process.env.OCD_NTFY_TOPIC}`, {
 
 A subscription-enabled binding can use `/<topic>/json`, SSE, or WebSockets
 with the same bearer token. See [ntfy's subscription API](https://docs.ntfy.sh/subscribe/api/).
+These manifest bindings are the notification equivalent of managed object-storage
+grants: OCD issues a topic-scoped token with `publish` and/or `subscribe` access,
+injects it into only that app, and retires it after binding removal or rotation.
+There is no separate manual `ocd notifications grant`/`revoke` command. Unlike
+object-storage grants, a notification binding does not choose an arbitrary
+shared topic; OCD creates an isolated topic for each app and binding.
 Increment `generation` to rotate credentials. Old credentials remain during
 rollout and retire after live replicas attest to the desired configuration.
 Removing a binding removes its access after that rollout; destroying the app

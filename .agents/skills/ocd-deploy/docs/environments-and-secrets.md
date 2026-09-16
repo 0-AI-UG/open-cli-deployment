@@ -75,11 +75,13 @@ directly between the app and storage using short-lived authorized URLs.
 Bindings do not copy objects. Explicitly migrate and verify objects before
 changing a bucket/prefix. Staging needs its own scope. Managed grants retire
 after all replicas attest to replacement configuration; app deletion revokes
-managed grants. Standalone `ocd storage grant` grants must be revoked explicitly.
+managed grants. External readers use separate GET/HEAD-only grants and must be
+revoked explicitly. Existing read-only manual grants can be adopted in place
+with `ocd storage-readers adopt` without rotating their tokens.
 Revocation blocks new authorizations; already issued URLs can remain valid for
 up to one hour. Provider credentials stay in the panel.
 
-For a manual grant, use `--methods` to restrict access: readers need GET/HEAD;
-a backup writer that verifies its uploads needs GET/PUT. Transfer the generated
-token file into an encrypted environment and remove the temporary file. Do not
-print tokens or place them in manifests.
+Specify only the needed manifest permissions: readers need `read`, while a
+backup writer that verifies uploads needs `read` and `write`. Add `delete` or
+`list` only when the app needs those operations. Do not print tokens or place
+them in manifests.

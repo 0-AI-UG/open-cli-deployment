@@ -130,9 +130,13 @@ ocd servers connect --name=X --address=X --routing-address=X --host-key='...'
 ocd resources
 ocd volumes
 ocd buckets <list|create|delete> [--storage=<connection>]
-ocd storage <list|grant|revoke>
+ocd storage-readers <list|create|adopt|revoke>
 ocd ssh
 ```
+
+Hosted apps can declare `notifications` bindings for isolated ntfy topics.
+OCD injects topic-scoped publish/subscribe tokens; use
+`packages/ntfy-client/index.ts` from the app. See [Notifications](docs/app-manifest.md#notifications).
 
 ## Documentation
 

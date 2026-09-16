@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose an improvement to Open CLI Deployment
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or limitation should this change address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like, including a CLI or manifest example when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: How are you handling this today, and what tradeoffs did you consider?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, links, or operational constraints that help explain the request.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and documentation for this request.
+          required: true

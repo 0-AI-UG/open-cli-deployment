@@ -10,7 +10,7 @@
   "memory_mb": 128,
   "cpu_limit": 0.5,
   "command": ["serve"],
-  "volume": { "size": 1, "path": "/var/lib/ntfy" },
+  "volume": { "driver": "local-directory", "size": 1, "path": "/var/lib/ntfy" },
   "health_check": { "mode": "http", "path": "/v1/health", "expected_statuses": [200] },
   "env": {
     "NTFY_BASE_URL": { "from": "environment.NTFY_BASE_URL" },

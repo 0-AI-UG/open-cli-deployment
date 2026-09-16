@@ -17,6 +17,8 @@ Users subscribe to private OCD event topics through Account → Notifications.
 Other apps use manifest `notifications` bindings for their own isolated topics
 and tokens. See [notification documentation](../../docs/notifications.md).
 
-Defaults: one replica, 128 MiB RAM ceiling, 0.5 CPU ceiling, and persistent
-storage mounted at `/var/lib/ntfy`. Change resources on the app page. Keep one
-replica because the service uses SQLite. Pause and resume it like any other app.
+Defaults: one replica, 128 MiB RAM ceiling, 0.5 CPU ceiling, and a server-local
+persistent directory mounted at `/var/lib/ntfy`. It shares the server disk and
+has no separately reserved or billed capacity; the manifest's 1 GB size is not
+an enforced quota. Change resources on the app page. Keep one replica because
+the service uses SQLite. Pause and resume it like any other app.

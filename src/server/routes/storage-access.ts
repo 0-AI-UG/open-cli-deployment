@@ -1,6 +1,5 @@
-import { getStorageGrants, saveStorageGrants } from "../../shared/object-storage.ts";
+import { getStorageGrants, saveStorageGrants, type StorageGrant } from "../../shared/object-storage.ts";
 import { createHash, randomBytes } from "node:crypto";
-import * as db from "../../shared/db.ts";
 import { storageConnection } from "../../shared/provider-connections.ts";
 import { getS3Credentials, listBuckets, validateBucketName } from "../../engine/object-storage/s3.ts";
 import { presignObject, validObjectKey } from "../../engine/object-storage/presign.ts";
@@ -10,10 +9,13 @@ import { handleError } from "../lib/utils.ts";
 type Method = "GET" | "HEAD" | "PUT" | "DELETE" | "LIST";
 type Grant = { id: string; app: string; providerId: string; endpoint: string; region: string; bucket: string; prefix: string;
   methods: Method[]; tokenHash: string; createdAt: string };
-const SETTING = "object_storage_grants";
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const grants = getStorageGrants;
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+const readerName = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(value);
+const readOnly = (grant: StorageGrant) => grant.methods.length > 0 && grant.methods.every(method => method === "GET" || method === "HEAD");
+const publicReader = (grant: StorageGrant) => ({ id: grant.id, name: grant.reader ?? grant.app, connection: grant.providerId,
+  bucket: grant.bucket, prefix: grant.prefix, createdAt: grant.createdAt, legacy: !grant.reader });
 
 export function authorizeObject(grant: Pick<Grant, "prefix" | "methods">, body: Record<string, unknown>): {
   key: string; method: Exclude<Method, "LIST">; expiresIn: number; contentType?: string; sha256?: string;
@@ -39,6 +41,7 @@ export async function handleStorageAuthorize(request: Request): Promise<Response
   if (!token) return reply({ error: "Unauthorized" }, 401);
   const grant = grants().find(item => item.tokenHash === tokenHash(token));
   if (!grant) return reply({ error: "Unauthorized" }, 401);
+  if (grant.reader && !readOnly(grant)) return reply({ error: "Unauthorized" }, 401);
   const provider = storageConnection(grant.providerId);
   if (provider?.id !== grant.providerId || provider.config.endpoint !== grant.endpoint || provider.config.region !== grant.region) return reply({ error: "Storage provider changed; rebind app" }, 409);
   try {
@@ -64,37 +67,44 @@ export async function handleStorageAuthorize(request: Request): Promise<Response
   } catch { return reply({ error: "Storage request rejected" }, 400); }
 }
 
-export async function handleStorageGrants(request: Request): Promise<Response> {
+/** External readers are deliberately separate from manifest-owned app bindings. */
+export async function handleStorageReaders(request: Request): Promise<Response> {
   try {
     await requireAdmin(request);
-    if (request.method === "GET") return reply(grants().map(({ tokenHash: _, encrypted_value: _encrypted, iv: _iv, ...grant }) => grant));
-    const body = await request.json() as Record<string, unknown>;
+    if (request.method === "GET") return reply(grants().filter(g => !g.appId && readOnly(g)).map(publicReader));
+    const body = await request.json() as Record<string, unknown> | null;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return reply({ error: "Invalid request" }, 400);
     if (request.method === "DELETE") {
-      const existing = grants();
-      if (typeof body.id !== "string") return reply({ error: "Grant id required" }, 400);
-      if (existing.some(grant => grant.id === body.id && grant.appId != null)) return reply({ error: "Managed grant: remove or rotate its app binding instead" }, 409);
-      saveStorageGrants(existing.filter(grant => grant.id !== body.id));
+      const current = grants();
+      const reader = current.find(g => g.id === body.id && g.reader && !g.appId);
+      if (!reader) return reply({ error: "External reader not found" }, 404);
+      saveStorageGrants(current.filter(g => g.id !== reader.id));
       return reply({ ok: true });
     }
-    // Grants can be prepared before the first deployment. Their lifecycle is
-    // explicit: deleting an app does not revoke an independently issued token.
-    const app = typeof body.app === "string" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(body.app) ? body.app : null;
+    const name = body.name;
+    if (!readerName(name)) return reply({ error: "Valid external reader name required" }, 400);
+    const current = grants();
+    if (current.some(g => g.reader === name)) return reply({ error: "External reader name already exists" }, 409);
+    if (body.adopt_id !== undefined) {
+      const grant = current.find(g => g.id === body.adopt_id && !g.appId && !g.reader && readOnly(g));
+      if (!grant) return reply({ error: "Read-only legacy grant not found" }, 404);
+      saveStorageGrants(current.map(g => g.id === grant.id ? { ...g, reader: name } : g));
+      return reply({ ...publicReader({ ...grant, reader: name }), adopted: true });
+    }
     const bucket = validateBucketName(typeof body.bucket === "string" ? body.bucket : "");
     const prefix = body.prefix ?? "";
-    const methods = body.methods;
-    if (!app || !bucket.valid || typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") || !validObjectKey(prefix))) ||
-        !Array.isArray(methods) || !methods.length || methods.some(method => !["GET", "HEAD", "PUT", "DELETE", "LIST"].includes(method))) {
-      return reply({ error: "Valid app, bucket, prefix ending in /, and methods are required" }, 400);
+    if (!bucket.valid || typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") || !validObjectKey(prefix)))) {
+      return reply({ error: "Valid bucket and relative prefix ending in / required" }, 400);
     }
-    const provider = storageConnection(typeof body.storage === "string" ? body.storage : undefined);
+    const provider = storageConnection(typeof body.connection === "string" ? body.connection : undefined);
     const credentials = provider ? await getS3Credentials(provider.id) : null;
     if (!provider || !credentials) return reply({ error: "Object storage is not configured" }, 409);
     if (!(await listBuckets(credentials)).some(item => item.name === bucket.value)) return reply({ error: "Bucket not found" }, 404);
     const token = `ocds_${randomBytes(32).toString("hex")}`;
-    const grant: Grant = { id: crypto.randomUUID(), app, providerId: provider.id, endpoint: credentials.endpoint, region: credentials.region,
-      bucket: bucket.value, prefix, methods: methods as Method[], tokenHash: tokenHash(token), createdAt: new Date().toISOString() };
-    db.saveSetting(SETTING, JSON.stringify([...grants(), grant]));
-    const { tokenHash: _, ...publicGrant } = grant;
-    return reply({ ...publicGrant, token }, 201);
+    const grant: StorageGrant = { id: crypto.randomUUID(), app: name, reader: name,
+      providerId: provider.id, endpoint: credentials.endpoint, region: credentials.region,
+      bucket: bucket.value, prefix, methods: ["GET", "HEAD"], tokenHash: tokenHash(token), createdAt: new Date().toISOString() };
+    saveStorageGrants([...current, grant]);
+    return reply({ ...publicReader(grant), token }, 201);
   } catch (error) { return handleError(error); }
 }

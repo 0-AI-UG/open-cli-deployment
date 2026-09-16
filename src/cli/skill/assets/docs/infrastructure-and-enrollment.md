@@ -66,7 +66,7 @@ Until compatible infrastructure is configured, requests for new managed capacity
 fail with guidance to configure a provider or connect an existing host.
 
 Named object-storage connections can coexist. Select one by ID or unique name
-with `--storage=<connection>` for bucket commands and manual storage grants.
+with `--storage=<connection>` for bucket commands.
 Existing managed app bindings and panel backups pin their connection ID;
 changing the global default does not redirect them. Endpoint/region changes or
 deletion are blocked while a connection is referenced; rotate credentials on

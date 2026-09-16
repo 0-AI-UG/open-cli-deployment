@@ -120,7 +120,16 @@ Staging manifests must select their own explicit bucket/prefix scope.
 Enable shared ntfy and app access in Admin → Panel first. Binding deployment
 requires an administrator. OCD injects `OCD_NTFY_URL`, `OCD_NTFY_TOPIC`, and
 `OCD_NTFY_TOKEN`; named bindings use `OCD_<NAME>_NTFY_*`. Permissions are
-`publish` and/or `subscribe`. Use the native ntfy API with bearer authentication.
+`publish` and/or `subscribe`. Apps can use `OcdNtfyClient.fromEnv(process.env)`
+from the local `@0-ai-ug/ocd-ntfy-client` package (`packages/ntfy-client`) to
+publish, or `subscribe(signal)` to stream
+JSON events; pass a binding name to `fromEnv` for named bindings. In a Bun app
+with this repository checked out nearby, install it with
+`bun add file:../open-cli-deployment/packages/ntfy-client` (adjust the path);
+independent build repositories must vendor the source until it is published.
+The native ntfy
+API also works with the injected bearer token. These are managed topic-scoped
+grants; there is no separate manual notification grant/revoke CLI.
 Each app has isolated topics, including staging targets. Increment `generation`
 to rotate credentials; old credentials retire after rollout attestation.
 Removing `notifications` removes the bindings. Account → Notifications configures

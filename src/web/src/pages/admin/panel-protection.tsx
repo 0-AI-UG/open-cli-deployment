@@ -74,7 +74,7 @@ export function PanelProtection() {
       <Btn disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/admin/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn>
       <p className="text-sm">Backups stay disabled after restore until you enable them again.</p>
     </Card>}
-    <Card className="overflow-hidden">
+    <Card>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-fg p-5">
         <div className="flex items-start gap-3">
           <div className="border-2 border-fg bg-accent p-2 shadow-neo-sm"><ShieldCheck size={20} /></div>

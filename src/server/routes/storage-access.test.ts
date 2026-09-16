@@ -27,3 +27,27 @@ test("grants use their pinned connection after the global default changes", asyn
   saveProviderConnections([{ id: "first", kind: "s3-compatible", name: "first", created_at: "now", config: { endpoint: "https://changed.example.com", region: "nbg1" } }]);
   expect((await handleStorageAuthorize(request())).status).toBe(409);
 });
+
+test("external readers adopt read-only tokens without changing their scope", async () => {
+  const db = await import("../../shared/db.ts");
+  const { createToken } = await import("../lib/auth.ts");
+  const { getStorageGrants, saveStorageGrants } = await import("../../shared/object-storage.ts");
+  const { handleStorageReaders } = await import("./storage-access.ts");
+  db.insertUser({ id: "reader-admin", username: "reader-admin", password_hash: "unused", is_admin: true });
+  const token = await createToken({ userId: "reader-admin", username: "reader-admin" });
+  const req = (method: string, body?: unknown) => new Request("https://panel.example/api/admin/storage-readers", {
+    method, headers: { authorization: `Bearer ${token}` }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  saveStorageGrants([
+    { id: "cdn", app: "old-cdn", providerId: "first", endpoint: "https://first.example.com", region: "nbg1", bucket: "media-bucket", prefix: "media/", methods: ["GET", "HEAD"], tokenHash: "same-hash", createdAt: "now" },
+    { id: "writer", app: "old-writer", providerId: "first", endpoint: "https://first.example.com", region: "nbg1", bucket: "media-bucket", prefix: "", methods: ["PUT"], tokenHash: "writer-hash", createdAt: "now" },
+  ]);
+  expect((await handleStorageReaders(req("POST", { adopt_id: "writer", name: "writer" }))).status).toBe(404);
+  expect((await handleStorageReaders(req("POST", { adopt_id: "cdn", name: "skyline-cdn" }))).status).toBe(200);
+  expect(getStorageGrants().find(g => g.id === "cdn")).toMatchObject({ reader: "skyline-cdn", tokenHash: "same-hash", bucket: "media-bucket", prefix: "media/", methods: ["GET", "HEAD"] });
+  const listed = await (await handleStorageReaders(req("GET"))).json();
+  expect(listed).toEqual([{ id: "cdn", name: "skyline-cdn", connection: "first", bucket: "media-bucket", prefix: "media/", createdAt: "now", legacy: false }]);
+  expect(JSON.stringify(listed)).not.toContain("same-hash");
+  expect((await handleStorageReaders(req("DELETE", { id: "cdn" }))).status).toBe(200);
+  expect(getStorageGrants().map(g => g.id)).toEqual(["writer"]);
+});

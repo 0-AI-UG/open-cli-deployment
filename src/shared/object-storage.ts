@@ -12,6 +12,7 @@ export type StorageGrant = {
   id: string; app: string; providerId: string; endpoint: string; region: string;
   bucket: string; prefix: string; methods: StorageMethod[]; tokenHash: string; createdAt: string;
   appId?: number; binding?: string; specKey?: string; encrypted_value?: string; iv?: string;
+  reader?: string;
 };
 const GRANTS = "object_storage_grants";
 const bindingsKey = (id: number) => `app_storage_bindings.${id}`;
