@@ -26,6 +26,7 @@ import { CliConfirmPage } from "./pages/cli-confirm.tsx";
 import { EnginePage } from "./pages/engine.tsx";
 import { EngineOpDetailPage } from "./pages/engine-op-detail.tsx";
 import { EngineOpLogsPage } from "./pages/engine-op-logs.tsx";
+import { IncidentPage } from "./pages/incident.tsx";
 
 function useHash() {
   const [hash, setHash] = useState(window.location.hash || "#/");
@@ -129,6 +130,9 @@ export function App() {
   let content;
   if (hash === "#/" || hash === "") {
     content = <DashboardPage />;
+  } else if (hash.startsWith("#/incidents/")) {
+    const id = hash.split("/")[2];
+    content = id ? <IncidentPage id={decodeURIComponent(id)} /> : <DashboardPage />;
   } else if (hash.startsWith("#/apps/")) {
     const appId = parseInt(hash.split("/")[2], 10);
     content = appId ? <AppDetailPage appId={appId} /> : <DashboardPage />;

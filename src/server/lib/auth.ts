@@ -54,11 +54,11 @@ export async function createToken(payload: TokenPayload): Promise<string> {
  * the CLI. It deliberately does not carry the local-CLI gate: the originating
  * browser session is already authenticated and command-specific permissions
  * remain enforced by the normal API handlers. */
-export async function createUiCliToken(payload: Omit<TokenPayload, "client">): Promise<string> {
+export async function createUiCliToken(payload: Omit<TokenPayload, "client">, expiration = "5m"): Promise<string> {
   return new SignJWT({ ...payload, client: "ui-cli" } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("5m")
+    .setExpirationTime(expiration)
     .sign(JWT_SECRET);
 }
 

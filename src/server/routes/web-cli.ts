@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { authenticateRequest, createUiCliToken } from "../lib/auth.ts";
@@ -6,6 +6,7 @@ import { PermissionError } from "../lib/errors.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { handleError } from "../lib/utils.ts";
 import { getUserById } from "../../shared/db.ts";
+import { cliInvocation } from "../lib/cli-invocation.ts";
 import {
   buildWebCliInvocation,
   findWebCliCommand,
@@ -76,21 +77,6 @@ async function requireUiActionUser(request: Request) {
 function localPanelUrl(): string {
   if (process.env.OCD_WEB_CLI_PANEL_URL) return process.env.OCD_WEB_CLI_PANEL_URL;
   return `http://127.0.0.1:${process.env.PORT || "3001"}`;
-}
-
-function cliInvocation(argv: string[]): string[] {
-  const override = process.env.OCD_WEB_CLI_BINARY;
-  if (override) return [override, ...argv];
-
-  const binary = path.resolve(
-    import.meta.dir,
-    `../../../dist/cli/ocd-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`,
-  );
-  if (existsSync(binary)) return [binary, ...argv];
-
-  // Development and source-test path: this is the same CLI entrypoint that is
-  // compiled into the downloadable production binary.
-  return [process.execPath, "run", path.resolve(import.meta.dir, "../../cli/main.ts"), ...argv];
 }
 
 function event(type: string, data: Record<string, unknown> = {}): Uint8Array {

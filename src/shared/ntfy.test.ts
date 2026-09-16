@@ -86,6 +86,7 @@ test("event fanout is permission-scoped and deduplicated", () => {
   const incident = { key: "backup:failed", incident_id: "incident", title: "Backup failed", path: "/admin" };
   enqueueNtfyIncident(incident, false, 1000); enqueueNtfyIncident(incident, false, 1000);
   expect(db.default.query("SELECT user_id FROM ntfy_outbox").all()).toEqual([{ user_id: "admin" }]);
+  expect(db.default.query("SELECT path FROM ntfy_outbox LIMIT 1").get()).toEqual({ path: "/incidents/incident" });
   enqueueNtfyIncident(incident, true, 2000);
   expect(db.default.query("SELECT count(*) AS n FROM ntfy_outbox").get()).toEqual({ n: 2 });
 });
@@ -114,13 +115,14 @@ test("schema 116 upgrades ntfy tables without changing existing settings", async
   try {
     const path = `${folder}/db.sqlite`;
     const previous = new Database(path); initializeCurrentSchema(previous);
-    previous.run("DROP TABLE ntfy_outbox"); previous.run("DROP TABLE ntfy_credentials");
+    previous.run("DROP TABLE ntfy_outbox"); previous.run("DROP TABLE ntfy_credentials"); previous.run("DROP TABLE incident_agent_runs");
     previous.run("UPDATE schema_version SET version=116");
     previous.run("INSERT INTO settings(key,value) VALUES ('preserve','value')"); previous.close();
     const upgraded = createDatabase(path);
     expect(upgraded.query("SELECT value FROM settings WHERE key='preserve'").get()).toEqual({ value: "value" });
     expect(upgraded.query("SELECT count(*) AS n FROM ntfy_credentials").get()).toEqual({ n: 0 });
-    expect(upgraded.query("SELECT version FROM schema_version").get()).toEqual({ version: 117 });
+    expect(upgraded.query("SELECT version FROM schema_version").get()).toEqual({ version: 118 });
+    expect(upgraded.query("SELECT count(*) AS n FROM incident_agent_runs").get()).toEqual({ n: 0 });
     upgraded.close();
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });

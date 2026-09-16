@@ -7,7 +7,7 @@ export function enqueueNtfyIncident(incident: { key: string; incident_id: string
     if (!canReceiveNtfy(user.id, incident.key, recovered)) continue;
     const id = `${incident.incident_id}:${recovered ? "recovery" : "open"}:${user.id}`;
     db.default.query(`INSERT OR IGNORE INTO ntfy_outbox (id,user_id,incident_key,recovered,title,message,path,created_at,next_attempt) VALUES (?,?,?,?,?,?,?,?,?)`)
-      .run(id, user.id, incident.key, Number(recovered), `[OCD] ${recovered ? "Recovered: " : ""}${incident.title}`, recovered ? "This condition has cleared." : "This condition needs attention. Open OCD to inspect details.", incident.path, now, now);
+      .run(id, user.id, incident.key, Number(recovered), `[OCD] ${recovered ? "Recovered: " : ""}${incident.title}`, recovered ? "This condition has cleared." : "This condition needs attention. Open OCD to inspect details.", `/incidents/${incident.incident_id}`, now, now);
   }
 }
 export function enqueueNtfyTest(userId: string): string {
