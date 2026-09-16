@@ -23,6 +23,25 @@ export function PanelProtection() {
   const [error, setError] = useState("");
   const [stopped, setStopped] = useState(false);
   const [resumeOps, setResumeOps] = useState(false);
+  const [bucketList, setBucketList] = useState<{ connection: string; names: string[]; error: string } | null>(null);
+  const [bucketRefresh, setBucketRefresh] = useState(0);
+  const configured = !!(state?.storage_configured && state.recovery_key_configured && state.backup_bucket);
+  const showSetup = editing || !configured;
+  const connection = form?.backup_connection || "";
+  useEffect(() => {
+    if (!showSetup || !connection) return;
+    let cancelled = false;
+    setBucketList(null);
+    void get(`/api/resources/buckets?storage=${encodeURIComponent(connection)}`)
+      .then((result: { configured: boolean; buckets: { name: string }[] }) => {
+        if (cancelled) return;
+        setBucketList({ connection, names: result.buckets.map(b => b.name), error: result.configured ? "" : "Configure credentials for this storage connection in Admin → Providers." });
+      })
+      .catch(() => {
+        if (!cancelled) setBucketList({ connection, names: [], error: "Could not load buckets. Check this connection’s credentials and permission to list buckets, then retry." });
+      });
+    return () => { cancelled = true; };
+  }, [connection, showSetup, bucketRefresh]);
   const load = async (reset = false) => {
     const s = await get("/api/admin/protection");
     setState(s);
@@ -32,9 +51,11 @@ export function PanelProtection() {
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(""); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Action failed"); } finally { setBusy(false); } };
   if (!form || !state) return <Card className="p-5">{error || "Loading panel protection…"}</Card>;
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm({ ...form, [key]: value });
-  const configured = state.storage_configured && state.recovery_key_configured && !!state.backup_bucket;
-  const showSetup = editing || !configured;
-  const canSave = !!form.backup_bucket.trim() && state.storage_connections.some(c => c.id === form.backup_connection) && state.recovery_key_configured;
+  const bucketsLoading = !!connection && bucketList?.connection !== connection;
+  const buckets = bucketList?.connection === connection ? bucketList.names : [];
+  const bucketError = bucketList?.connection === connection ? bucketList.error : "";
+  const validBucket = !bucketsLoading && !bucketError && buckets.includes(form.backup_bucket);
+  const canSave = validBucket && state.storage_connections.some(c => c.id === form.backup_connection) && state.recovery_key_configured;
   const activeBackup = state.backups.some(b => b.status === "pending" || b.status === "running");
   const inputClass = "w-full border-2 border-fg bg-bg-raised px-3 py-2 font-mono text-[11px]";
   const save = async () => {
@@ -73,21 +94,29 @@ export function PanelProtection() {
       {showSetup ? <div className="p-5 space-y-6">
         <p className="text-xs text-muted">Choose where to store your backups and save a recovery key. Application databases and volumes are excluded.</p>
         <section className="space-y-3">
-          <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">01 / Storage destination</h4>
+          <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Storage destination</h4>
           {state.storage_connections.length === 0 && <p className="border-2 border-fg bg-alt p-3 text-xs">Add an S3-compatible connection in Admin → Providers to get started.</p>}
-          <Field label="Storage connection"><NeoSelect value={form.backup_connection} onChange={value => set("backup_connection", value)} placeholder="Select S3 connection" disabled={busy || state.storage_connections.length === 0} options={state.storage_connections.map(c => ({ value: c.id, label: `${c.name}${c.region ? ` · ${c.region}` : ""}` }))} /></Field>
-          <Field label="Bucket" hint="Use an existing bucket accessible by this connection."><input className={inputClass} disabled={busy} value={form.backup_bucket} onChange={e => set("backup_bucket", e.target.value)} placeholder="my-panel-backups" /></Field>
+          <Field label="Storage connection"><NeoSelect value={form.backup_connection} onChange={value => { if (value !== form.backup_connection) setForm({ ...form, backup_connection: value, backup_bucket: "" }); }} placeholder="Select S3 connection" disabled={busy || state.storage_connections.length === 0} options={state.storage_connections.map(c => ({ value: c.id, label: `${c.name}${c.region ? ` · ${c.region}` : ""}` }))} /></Field>
+          <Field label="Bucket" hint="Buckets available on the selected S3 connection.">
+            <div className="space-y-2">
+              <NeoSelect value={validBucket ? form.backup_bucket : ""} onChange={value => set("backup_bucket", value)} options={buckets.map(name => ({ value: name, label: name }))} disabled={busy || !connection || bucketsLoading || !!bucketError || buckets.length === 0} placeholder={!connection ? "Select a storage connection first" : bucketsLoading ? "Loading buckets…" : bucketError ? "Buckets unavailable" : buckets.length === 0 ? "No buckets found" : "Select a bucket"} />
+              {bucketError && <p role="alert" className="text-xs text-accent-red">{bucketError}</p>}
+              {connection && !bucketsLoading && !bucketError && form.backup_bucket && !validBucket && <p role="alert" className="text-xs text-accent-red">The saved bucket “{form.backup_bucket}” is unavailable on this connection. Select an existing bucket.</p>}
+              {connection && !bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="underline">Resources</a>, then refresh this list.</p>}
+              {connection && <Btn size="xs" disabled={busy || bucketsLoading} onClick={() => { setBucketList(null); setBucketRefresh(value => value + 1); }}>{bucketError ? "Retry" : "Refresh buckets"}</Btn>}
+            </div>
+          </Field>
           <Field label="Path prefix"><input className={inputClass} disabled={busy} value={form.backup_prefix} onChange={e => set("backup_prefix", e.target.value)} placeholder="ocd-panel" /></Field>
         </section>
         <section className="space-y-3 border-t border-fg/20 pt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">02 / Recovery key</h4><p className="mt-2 text-xs text-muted">Keep this key outside the panel. You’ll need it to restore a backup.</p></div>
+            <div><h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Recovery key</h4><p className="mt-2 text-xs text-muted">Keep this key outside the panel. You’ll need it to restore a backup.</p></div>
             <Btn disabled={busy} onClick={() => action(async () => { const r = await post("/api/admin/protection/recovery-key", {}); setRecoveryKey(r.recovery_key); })}>{state.recovery_key_configured ? "Show recovery key" : "Create recovery key"}</Btn>
           </div>
           {recoveryKey && <div className="space-y-3 border-2 border-fg bg-alt p-4"><code className="block break-all select-all font-mono text-xs">{recoveryKey}</code><div className="flex flex-wrap gap-2"><Btn onClick={downloadKey}><Download size={12} /> Download key</Btn><Btn onClick={() => setRecoveryKey("")}>Hide key</Btn></div></div>}
         </section>
         <section className="space-y-3 border-t border-fg/20 pt-5">
-          <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">03 / Schedule & retention</h4>
+          <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Schedule & retention</h4>
           <Field label="Daily backups"><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.backup_enabled} disabled={busy || !canSave || state.recovery_pending} onChange={e => set("backup_enabled", e.target.checked)} /> Back up every 24 hours</label></Field>
           <Field label="Backups to retain" hint="Older successful backups are removed after a new backup is verified."><input className={inputClass} type="number" min={1} max={90} disabled={busy} value={form.backup_retention} onChange={e => set("backup_retention", Number(e.target.value))} /></Field>
         </section>
