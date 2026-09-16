@@ -2,22 +2,15 @@ import { writeFile } from "node:fs/promises";
 import { del, get, post } from "../api.ts";
 import { table } from "../format.ts";
 
-type Reader = { id: string; name: string; connection: string; bucket: string; prefix: string; createdAt: string; legacy: boolean };
+type Reader = { id: string; name: string; connection: string; bucket: string; prefix: string; createdAt: string };
 const path = "/api/admin/storage-readers";
 const option = (args: string[], name: string) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 
 export async function storageReaders(args: string[]): Promise<void> {
   if (!args[0] || args[0] === "list") {
     const readers = await get<Reader[]>(path);
-    table(["ID", "NAME", "CONNECTION", "BUCKET", "PREFIX", "STATE"], readers.map(reader =>
-      [reader.id, reader.name, reader.connection, reader.bucket, reader.prefix, reader.legacy ? "legacy" : "external reader"]));
-    return;
-  }
-  if (args[0] === "adopt") {
-    const name = option(args, "name");
-    if (!args[1] || !name) throw new Error("Usage: ocd storage-readers adopt <legacy-grant-id> --name=<reader-name>");
-    const reader = await post<Reader>(path, { adopt_id: args[1], name });
-    console.log(`Adopted ${reader.id} as external reader ${reader.name}; existing token and scope are unchanged.`);
+    table(["ID", "NAME", "CONNECTION", "BUCKET", "PREFIX"], readers.map(reader =>
+      [reader.id, reader.name, reader.connection, reader.bucket, reader.prefix]));
     return;
   }
   if (args[0] === "create") {
@@ -35,5 +28,5 @@ export async function storageReaders(args: string[]): Promise<void> {
     console.log("External reader revoked. Previously issued object URLs may remain usable for up to one hour.");
     return;
   }
-  throw new Error("Usage: ocd storage-readers <list|create|adopt|revoke>");
+  throw new Error("Usage: ocd storage-readers <list|create|revoke>");
 }

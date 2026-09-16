@@ -130,7 +130,7 @@ ocd servers connect --name=X --address=X --routing-address=X --host-key='...'
 ocd resources
 ocd volumes
 ocd buckets <list|create|delete> [--storage=<connection>]
-ocd storage-readers <list|create|adopt|revoke>
+ocd storage-readers <list|create|revoke>
 ocd ssh
 ```
 

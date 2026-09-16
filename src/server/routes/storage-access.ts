@@ -14,8 +14,8 @@ const grants = getStorageGrants;
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const readerName = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(value);
 const readOnly = (grant: StorageGrant) => grant.methods.length > 0 && grant.methods.every(method => method === "GET" || method === "HEAD");
-const publicReader = (grant: StorageGrant) => ({ id: grant.id, name: grant.reader ?? grant.app, connection: grant.providerId,
-  bucket: grant.bucket, prefix: grant.prefix, createdAt: grant.createdAt, legacy: !grant.reader });
+const publicReader = (grant: StorageGrant) => ({ id: grant.id, name: grant.reader, connection: grant.providerId,
+  bucket: grant.bucket, prefix: grant.prefix, createdAt: grant.createdAt });
 
 export function authorizeObject(grant: Pick<Grant, "prefix" | "methods">, body: Record<string, unknown>): {
   key: string; method: Exclude<Method, "LIST">; expiresIn: number; contentType?: string; sha256?: string;
@@ -41,6 +41,7 @@ export async function handleStorageAuthorize(request: Request): Promise<Response
   if (!token) return reply({ error: "Unauthorized" }, 401);
   const grant = grants().find(item => item.tokenHash === tokenHash(token));
   if (!grant) return reply({ error: "Unauthorized" }, 401);
+  if (!grant.appId && !grant.reader) return reply({ error: "Unauthorized" }, 401);
   if (grant.reader && !readOnly(grant)) return reply({ error: "Unauthorized" }, 401);
   const provider = storageConnection(grant.providerId);
   if (provider?.id !== grant.providerId || provider.config.endpoint !== grant.endpoint || provider.config.region !== grant.region) return reply({ error: "Storage provider changed; rebind app" }, 409);
@@ -71,7 +72,7 @@ export async function handleStorageAuthorize(request: Request): Promise<Response
 export async function handleStorageReaders(request: Request): Promise<Response> {
   try {
     await requireAdmin(request);
-    if (request.method === "GET") return reply(grants().filter(g => !g.appId && readOnly(g)).map(publicReader));
+    if (request.method === "GET") return reply(grants().filter(g => !g.appId && g.reader && readOnly(g)).map(publicReader));
     const body = await request.json() as Record<string, unknown> | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) return reply({ error: "Invalid request" }, 400);
     if (request.method === "DELETE") {
@@ -85,12 +86,6 @@ export async function handleStorageReaders(request: Request): Promise<Response> 
     if (!readerName(name)) return reply({ error: "Valid external reader name required" }, 400);
     const current = grants();
     if (current.some(g => g.reader === name)) return reply({ error: "External reader name already exists" }, 409);
-    if (body.adopt_id !== undefined) {
-      const grant = current.find(g => g.id === body.adopt_id && !g.appId && !g.reader && readOnly(g));
-      if (!grant) return reply({ error: "Read-only legacy grant not found" }, 404);
-      saveStorageGrants(current.map(g => g.id === grant.id ? { ...g, reader: name } : g));
-      return reply({ ...publicReader({ ...grant, reader: name }), adopted: true });
-    }
     const bucket = validateBucketName(typeof body.bucket === "string" ? body.bucket : "");
     const prefix = body.prefix ?? "";
     if (!bucket.valid || typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") || !validObjectKey(prefix)))) {

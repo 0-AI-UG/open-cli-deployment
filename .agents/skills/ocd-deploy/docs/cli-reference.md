@@ -102,7 +102,7 @@ ocd delete stack <name>
 ocd resources <ls|volume|volumes|delete>
 ocd volumes <list|show|audit|ls|cat|delete>
 ocd buckets <list|create|delete> [--storage=<connection>]
-ocd storage-readers <list|create|adopt|revoke>
+ocd storage-readers <list|create|revoke>
 ocd ssh
 ocd cp <app|server>:/absolute/path <local-path> [--force] [--server] [--replica=ID]
 ```
@@ -123,7 +123,5 @@ deletion refuses non-empty buckets and never recursively removes objects.
 `ocd servers show <name|id> --storage` and `ocd app show <app> --storage`.
 Declare app-owned object access with manifest `storage` bindings. OCD creates
 and injects the scoped token during deployment. Use `ocd storage-readers create`
-for external read-only consumers such as a CDN. `adopt` relabels an existing
-read-only manual grant without rotating its token; convert these before removing
-legacy authorization. See
+for external read-only consumers such as a CDN. See
 [Environments and secrets](environments-and-secrets.md).

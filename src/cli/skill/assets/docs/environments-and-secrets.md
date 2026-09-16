@@ -76,8 +76,7 @@ Bindings do not copy objects. Explicitly migrate and verify objects before
 changing a bucket/prefix. Staging needs its own scope. Managed grants retire
 after all replicas attest to replacement configuration; app deletion revokes
 managed grants. External readers use separate GET/HEAD-only grants and must be
-revoked explicitly. Existing read-only manual grants can be adopted in place
-with `ocd storage-readers adopt` without rotating their tokens.
+revoked explicitly.
 Revocation blocks new authorizations; already issued URLs can remain valid for
 up to one hour. Provider credentials stay in the panel.
 

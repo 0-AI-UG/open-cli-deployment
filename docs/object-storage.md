@@ -68,11 +68,8 @@ Install it in the external service's secret store, not in an OCD app manifest.
 Revocation blocks new authorizations immediately; previously signed object
 URLs can remain valid for up to one hour.
 
-Existing read-only manual grants can be converted without rotating their tokens
-or changing their scope: `ocd storage-readers adopt <grant-id> --name=<reader-name>`.
-Adopt the four Skyline CDN grants before disabling legacy authorization in a
-later panel release. The adoption command rejects grants with write or list
-permission. Until adoption, legacy tokens continue to authorize their old scope.
+External readers are the only non-app storage consumers. App tokens must come
+from manifest bindings; untyped manual grants are not authorized.
 
 For Hetzner Object Storage, use the location as the signing region and
 `https://<location>.your-objectstorage.com` as the endpoint. Other providers
