@@ -6,6 +6,7 @@ import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { redeployPanel, getPanelContainerLogs } from "../../engine/deploy/panel.ts";
 import { reconcilePanelDns } from "../../engine/dns-reconciler.ts";
+import { latestMainPanelRelease } from "../lib/panel-main-release.ts";
 
 export async function handleGetPanel(request: Request): Promise<Response> {
   try {
@@ -46,6 +47,37 @@ export async function handleRedeployPanel(request: Request): Promise<Response> {
       // Progress goes to logs; no SSE for the minimal panel UI.
     }, { image: body.image, commit: body.commit, source: "release" });
     return Response.json(result, { headers: corsHeaders });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+export async function handleGetLatestPanelRelease(request: Request): Promise<Response> {
+  try {
+    await requirePermission(request, "panel.manage");
+    const panel = db.getPanel();
+    if (!panel) return Response.json({ error: "Panel is not configured" }, { status: 409, headers: corsHeaders });
+    const release = await latestMainPanelRelease();
+    return Response.json({ ...release, currentImage: panel.image_ref, upToDate: panel.image_ref === release.image }, {
+      headers: { ...corsHeaders, "cache-control": "no-store" },
+    });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+export async function handleRedeployLatestPanel(request: Request): Promise<Response> {
+  try {
+    await requirePermission(request, "panel.manage");
+    const panel = db.getPanel();
+    if (!panel) return Response.json({ error: "Panel is not configured" }, { status: 409, headers: corsHeaders });
+    const body = await request.json() as { commit?: unknown; image?: unknown };
+    const release = await latestMainPanelRelease();
+    if (body.commit !== release.commit || body.image !== release.image) {
+      return Response.json({ error: "Main changed since you opened this release. Refresh the target and confirm again." }, { status: 409, headers: corsHeaders });
+    }
+    const result = await redeployPanel(() => {}, { ...release, source: "admin-main-release" });
+    return Response.json({ ...result, ...release }, { status: result.ok ? 200 : 502, headers: corsHeaders });
   } catch (error) {
     return handleError(error);
   }

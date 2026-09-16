@@ -96,6 +96,7 @@ type ProvidersResponse = {
 };
 
 type AdminSection = "overview" | "providers" | "infrastructure" | "build" | "panel" | "users";
+type LatestPanelRelease = { commit: string; image: string; currentImage: string; upToDate: boolean };
 
 const ADMIN_SECTIONS: Array<{ key: AdminSection; label: string }> = [
   { key: "overview", label: "Overview" },
@@ -151,6 +152,9 @@ export function UsersPage() {
   const [panelBusy, setPanelBusy] = useState(false);
   const [panelImage, setPanelImage] = useState("");
   const [panelReleaseOpen, setPanelReleaseOpen] = useState(false);
+  const [latestPanelRelease, setLatestPanelRelease] = useState<LatestPanelRelease | null>(null);
+  const [latestPanelError, setLatestPanelError] = useState("");
+  const [latestPanelLoading, setLatestPanelLoading] = useState(false);
 
   // --- OCD BuildKit workers and repository webhooks ---
   const [runners, setRunners] = useState<BuildWorker[]>([]);
@@ -208,6 +212,23 @@ export function UsersPage() {
       })
       .catch(() => {});
   };
+
+  const refreshLatestPanelRelease = async () => {
+    setLatestPanelLoading(true);
+    try {
+      setLatestPanelRelease(await get("/api/admin/panel/latest-release"));
+      setLatestPanelError("");
+    } catch (error) {
+      setLatestPanelRelease(null);
+      setLatestPanelError(error instanceof Error ? error.message : "Could not find the latest main image");
+    } finally {
+      setLatestPanelLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (section === "panel" && panel) void refreshLatestPanelRelease();
+  }, [section, !!panel]);
 
   useEffect(() => {
     loadUsers();
@@ -474,15 +495,15 @@ export function UsersPage() {
       return;
     }
     if (!await confirm(
-      "Release Panel Image",
-      `Deploy ${image} to the panel? The panel will briefly become unavailable and you will need to reload this page once it comes back.`,
+      "Redeploy Panel Image",
+      `Redeploy ${image} to the panel? The panel will briefly become unavailable and you will need to reload this page once it comes back.`,
       true,
     )) return;
     setPanelBusy(true);
     try {
       const result = await post("/api/admin/panel/redeploy", { image });
       if (result?.ok) {
-        showToast("Panel release dispatched", "success");
+        showToast("Panel redeploy dispatched", "success");
         setPanelReleaseOpen(false);
         setTimeout(refreshPanel, 2000);
       } else {
@@ -490,6 +511,28 @@ export function UsersPage() {
       }
     } catch (err: any) {
       showToast(err.message, "error");
+    } finally {
+      setPanelBusy(false);
+    }
+  };
+
+  const redeployLatestPanel = async () => {
+    if (!latestPanelRelease) return;
+    const { commit, image, upToDate } = latestPanelRelease;
+    if (!await confirm(
+      upToDate ? "Redeploy Current Panel" : "Redeploy Latest Main",
+      `${upToDate ? "Restart the panel on" : "Redeploy the panel from"} main commit ${commit.slice(0, 12)} using ${image}? The panel will briefly become unavailable.`,
+      true,
+    )) return;
+    setPanelBusy(true);
+    try {
+      const result = await post("/api/admin/panel/latest-release", { commit, image });
+      if (!result?.ok) throw new Error(result?.error || "Could not dispatch panel release");
+      showToast("Panel redeploy dispatched; wait for it to return, then refresh", "success");
+      setTimeout(refreshPanel, 5000);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not release panel", "error");
+      void refreshLatestPanelRelease();
     } finally {
       setPanelBusy(false);
     }
@@ -945,16 +988,31 @@ export function UsersPage() {
           {panel.dns_instruction && <DnsInstructionView value={panel.dns_instruction} />}
 
           <PermissionGate permission="panel.manage">
-            <div className="pt-1 space-y-2">
-              <Btn size="xs" variant={panelReleaseOpen ? "ghost" : "primary"} onClick={() => setPanelReleaseOpen((open) => !open)}>
-                <RefreshCw size={12} /> {panelReleaseOpen ? "Cancel release" : "Release new version"}
+            <div className="pt-2 space-y-4">
+              <div className="border-2 border-fg bg-alt/30 p-4 space-y-3">
+                <div className="font-mono text-[10px] font-bold uppercase">Manual panel redeploy</div>
+                <p className="text-xs text-muted">Release the image built for the latest commit on main. If it is already running, this restarts the same version.</p>
+                {latestPanelRelease && <div className="space-y-1 font-mono text-[10px] break-all">
+                  <div>Latest main: <strong>{latestPanelRelease.commit.slice(0, 12)}</strong> · {latestPanelRelease.upToDate ? "currently deployed" : "new image available"}</div>
+                  <div className="text-muted">Image: {latestPanelRelease.image}</div>
+                </div>}
+                {latestPanelError && <p className="text-xs text-accent-red" role="alert">{latestPanelError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <Btn variant="primary" disabled={!latestPanelRelease || latestPanelLoading || panelBusy} loading={panelBusy} onClick={redeployLatestPanel}>
+                    <RefreshCw size={13} /> {latestPanelRelease?.upToDate ? "Redeploy current panel" : "Redeploy latest main"}
+                  </Btn>
+                  <Btn disabled={latestPanelLoading || panelBusy} loading={latestPanelLoading} onClick={() => void refreshLatestPanelRelease()}>Refresh target</Btn>
+                </div>
+              </div>
+              <Btn size="xs" variant="ghost" onClick={() => setPanelReleaseOpen((open) => !open)}>
+                <RefreshCw size={12} /> {panelReleaseOpen ? "Hide specific image" : "Advanced: redeploy a specific image"}
               </Btn>
               {panelReleaseOpen && <div className="animate-slide-up border-2 border-fg bg-alt/30 p-3">
               <Field label="New panel image" align="start" hint="Build and publish the image in CI, then paste its digest-qualified reference here.">
                 <input type="text" value={panelImage} onChange={(event) => setPanelImage(event.target.value)} placeholder="ghcr.io/owner/ocd@sha256:..." />
               </Field>
               <Btn variant="primary" loading={panelBusy} onClick={redeployPanelNow}>
-                <RefreshCw size={13} /> Release panel image
+                <RefreshCw size={13} /> Redeploy panel image
               </Btn>
               </div>}
             </div>

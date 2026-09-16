@@ -96,11 +96,11 @@ async function manifestRequest(parsed: ParsedOciImage, authorization?: string): 
 
 /** Resolve a user-facing tag or digest to the exact immutable artifact OCD
  * stores and runs. No desired state changes before this function succeeds. */
-export async function resolveOciImage(input: string): Promise<string> {
+export async function resolveOciImage(input: string, options: { anonymous?: boolean } = {}): Promise<string> {
   const parsed = parseOciImage(input);
   if (DIGEST.test(parsed.reference)) return `${parsed.canonicalRepository}@${parsed.reference.toLowerCase()}`;
 
-  const credentials = await resolveRegistryCredentialsForImage(parsed.requested);
+  const credentials = options.anonymous ? {} : await resolveRegistryCredentialsForImage(parsed.requested);
   const basic = credentials.username && credentials.password
     ? `Basic ${btoa(`${credentials.username}:${credentials.password}`)}`
     : undefined;

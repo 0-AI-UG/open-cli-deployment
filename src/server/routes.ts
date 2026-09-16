@@ -51,6 +51,8 @@ import { handleGetAvailability } from "./routes/availability.ts";
 import {
   handleGetPanel,
   handleRedeployPanel,
+  handleGetLatestPanelRelease,
+  handleRedeployLatestPanel,
   handleGetPanelLogs,
   handleGetPanelDeployments,
 } from "./routes/panel.ts";
@@ -379,6 +381,7 @@ export const apiRoutes = {
   // --- Admin: Panel (hosted self) ---
   "/api/admin/panel": { GET: (req: Request) => handleGetPanel(req) },
   "/api/admin/panel/redeploy": { POST: (req: Request) => handleRedeployPanel(req) },
+  "/api/admin/panel/latest-release": { GET: (req: Request) => handleGetLatestPanelRelease(req), POST: (req: Request) => handleRedeployLatestPanel(req) },
   "/api/admin/panel/release-webhook": {
     GET: (req: Request) => handleGetPanelReleaseWebhook(req),
     POST: (req: Request) => handleRotatePanelReleaseWebhook(req),

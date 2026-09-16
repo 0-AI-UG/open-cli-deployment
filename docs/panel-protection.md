@@ -1,6 +1,14 @@
 # Panel backups and notifications
 
 Open **Admin → Panel**. These settings protect OCD's own control-plane data.
+
+The **Manual panel redeploy** card resolves the current `main` commit to its
+published, immutable GHCR image and lets an operator redeploy it with one
+confirmation. If the same image is already running, the action restarts that
+version. If CI has not published the commit's image yet, refresh the target
+after the build finishes. **Advanced: redeploy a specific image** remains
+available for an explicitly chosen digest.
+
 Applications continue to own their PostgreSQL databases, PGMQ workers, and cron
 scheduling; OCD does not back up application data or schedule application jobs.
 
