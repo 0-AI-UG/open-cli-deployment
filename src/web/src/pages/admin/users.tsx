@@ -1,4 +1,6 @@
 import { PanelProtection } from "./panel-protection.tsx";
+import { AdminNtfySettings } from "../../components/ntfy-settings.tsx";
+import { IncidentAgentSettings } from "../../components/incident-agent-settings.tsx";
 import { useState, useEffect } from "react";
 import { get, post, del, put } from "../../api/client.ts";
 import { Card, Btn, Table, Spinner, Field, Divider, InfoTip, showToast, confirm, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
@@ -953,7 +955,7 @@ export function UsersPage() {
       </Card>}
 
       {/* Panel */}
-      {section === "panel" && <PanelProtection />}
+      {section === "panel" && <><PanelProtection /><AdminNtfySettings /><IncidentAgentSettings /></>}
       {section === "panel" && !panel && <Card className="p-5 font-mono text-[10px] text-muted">This instance is not managed as a self-hosted panel app.</Card>}
       {section === "panel" && panel && (
         <Card className="p-5 space-y-4">

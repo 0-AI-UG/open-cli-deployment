@@ -118,7 +118,7 @@ export function startAgent(run: AgentRun, actor: { userId: string; username: str
 
 async function executeAgent(run: AgentRun, actor: { userId: string; username: string; tokenVersion: number }, approvedPlan: string): Promise<void> {
   const key = process.env.DEEPSEEK_API_KEY || await secretStore.get("deepseek_api_key");
-  if (!key) throw new Error("Configure a DeepSeek API key in Incidents → Notifications & agent first");
+  if (!key) throw new Error("Configure a DeepSeek API key in Admin → Panel → Incident agent first");
   const messages = JSON.parse(run.messages_json) as Message[];
   const activity = JSON.parse(run.activity_json) as AgentActivity[];
   while (true) {

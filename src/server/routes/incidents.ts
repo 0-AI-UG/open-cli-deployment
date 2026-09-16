@@ -84,7 +84,7 @@ export async function handleInvestigateIncident(request: Request): Promise<Respo
     const found = incident(incidentId(request), actor.userId);
     if (!found) return json({ error: "Incident not found" }, 404);
     if (!canAccess(actor.userId, found)) return json({ error: "Forbidden" }, 403);
-    if (!(await agentConfigured())) return json({ error: "Configure a DeepSeek API key in Incidents → Notifications & agent first" }, 409);
+    if (!(await agentConfigured())) return json({ error: "Configure a DeepSeek API key in Admin → Panel → Incident agent first" }, 409);
     const previous = latest(found.incident_id, actor.userId);
     if (previous?.status === "running") return json({ error: "Agent already running" }, 409);
     const run = createRun(found.incident_id, actor.userId, "investigate", [

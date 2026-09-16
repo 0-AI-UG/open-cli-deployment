@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, ArrowRight, BellRing, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
-import { AdminNtfySettings, UserNtfySettings } from "../components/ntfy-settings.tsx";
-import { IncidentAgentSettings } from "../components/incident-agent-settings.tsx";
-import { TabBar } from "../components/tab-bar.tsx";
 import { Badge, Btn, Card, PageHeader, PageShell } from "../components/ui.tsx";
-import { useAuth } from "../stores/auth.ts";
 
 type IncidentItem = {
   incident_id: string; key: string; title: string; path: string;
@@ -14,13 +10,10 @@ type IncidentItem = {
 };
 type Filter = "all" | "active" | "resolved";
 type ResponseData = { incidents: IncidentItem[]; nextOffset: number | null; counts: Record<Filter, number> };
-const sections = [{ key: "incidents", label: "Incidents" }, { key: "settings", label: "Notifications & agent" }] as const;
 const filters: Array<{ key: Filter; label: string }> = [{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "resolved", label: "Resolved" }];
 const date = (value: number | null) => value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
 
 export function IncidentsPage() {
-  const { user } = useAuth();
-  const [section, setSection] = useState<(typeof sections)[number]["key"]>("incidents");
   const [filter, setFilter] = useState<Filter>("all");
   const [items, setItems] = useState<IncidentItem[]>([]);
   const [counts, setCounts] = useState<Record<Filter, number>>({ all: 0, active: 0, resolved: 0 });
@@ -42,10 +35,8 @@ export function IncidentsPage() {
   }, [filter]);
   useEffect(() => { void load(); }, [load]);
 
-  return <PageShell width="xl">
-    <PageHeader title="Incidents" eyebrow="Operations" description="Outages, recovery, notifications, and guided repair." actions={section === "incidents" ? <Btn onClick={() => void load()}><RefreshCw size={13} /> Refresh</Btn> : undefined} />
-    <TabBar tabs={sections} active={section} onChange={setSection} />
-    {section === "settings" ? <div className="grid gap-5 lg:grid-cols-2"><div className="space-y-5"><UserNtfySettings />{user?.isAdmin && <AdminNtfySettings />}</div>{user?.isAdmin && <div><IncidentAgentSettings /></div>}</div> : <>
+  return <PageShell>
+    <PageHeader title="Incidents" eyebrow="Operations" description="Outages, recovery, and guided repair." actions={<Btn onClick={() => void load()}><RefreshCw size={13} /> Refresh</Btn>} />
       <div className="flex flex-wrap gap-2" aria-label="Filter incidents">{filters.map(item => <button key={item.key} type="button" aria-pressed={filter === item.key} onClick={() => setFilter(item.key)} className={`min-h-11 border-2 border-fg px-3 py-2 font-mono text-[10px] font-bold uppercase shadow-neo-sm ${filter === item.key ? "bg-accent" : "bg-bg-raised"}`}>{item.label} <span className="ml-1 opacity-60">{counts[item.key]}</span></button>)}</div>
       {error && <div className="border-2 border-accent-red bg-bg-raised p-4 text-xs text-accent-red" role="alert">{error}</div>}
       {loading ? <Card className="p-6 font-mono text-xs text-muted">Loading incidents…</Card> : items.length ? <div className="space-y-3">
@@ -59,6 +50,5 @@ export function IncidentsPage() {
         </a>)}
         {nextOffset !== null && <div className="flex justify-center py-2"><Btn loading={moreBusy} disabled={moreBusy} onClick={() => void load(nextOffset)}>Load more</Btn></div>}
       </div> : <Card className="p-8 text-center"><BellRing size={22} className="mx-auto text-muted" /><h2 className="mt-3 font-mono text-xs font-bold">{filter === "all" ? "No incidents yet" : `No ${filter} incidents`}</h2><p className="mt-2 text-xs text-muted">Detected outages and recoveries will appear here.</p></Card>}
-    </>}
   </PageShell>;
 }

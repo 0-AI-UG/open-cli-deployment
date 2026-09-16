@@ -49,7 +49,7 @@ export function IncidentPage({ id }: { id: string }) {
     finally { setBusy(false); }
   };
   const run = data?.run;
-  return <PageShell width="md">
+  return <PageShell>
     <PageHeader title="Incident response" eyebrow="Outage" description={data?.incident.title || "Loading incident…"} backHref="#/incidents" backLabel="Back to incidents" actions={<Btn onClick={() => void load()}><RefreshCw size={13} /> Refresh</Btn>} />
     {error && <Card className="p-4 text-sm text-accent-red">{error}</Card>}
     {data && <>
@@ -57,7 +57,7 @@ export function IncidentPage({ id }: { id: string }) {
         <div className="flex items-start gap-3"><AlertTriangle className="shrink-0 text-accent-red" size={20} /><div className="min-w-0"><div className="font-mono text-xs font-bold">{data.incident.title}</div><div className="mt-1 font-mono text-[10px] text-muted break-all">{data.incident.key}</div></div></div>
         <div className="flex flex-wrap gap-2 font-mono text-[10px]"><span className="border border-fg px-2 py-1">{data.incident.resolved_at ? "Condition cleared" : "Active condition"}</span><a className="border border-fg px-2 py-1 underline" href={`#${data.incident.path}`}>Open affected resource</a></div>
       </Card>
-      {!data.configured && <Card className="p-4 text-sm">Set the DeepSeek API key in Incidents → Notifications & agent to enable investigation.</Card>}
+      {!data.configured && <Card className="p-4 text-sm">Set the DeepSeek API key in Admin → Panel → Incident agent to enable investigation.</Card>}
       {!run && <Card className="p-5 space-y-4"><div className="flex items-center gap-2 font-mono text-xs font-bold"><Sparkles size={17} /> Investigate with OCD</div><p className="text-xs text-muted">The agent will inspect status, logs and metrics, then present a repair plan for your approval.</p><Btn variant="primary" size="md" disabled={!data.configured || busy} loading={busy} onClick={() => void investigate()}>Investigate issue <ArrowRight size={14} /></Btn></Card>}
       {run?.status === "running" && <Card className="p-5 space-y-2"><div className="flex items-center gap-2 font-mono text-xs font-bold"><RefreshCw size={16} className="animate-spin" /> {run.phase === "fix" ? "Applying fix" : "Investigating"}</div><p className="text-xs text-muted">You can leave this page and return while the agent works.</p><p className="font-mono text-[10px] text-muted">{run.activity.length} OCD command{run.activity.length === 1 ? "" : "s"} completed</p></Card>}
       {run?.status === "failed" && <Card className="p-5 space-y-3"><div className="font-mono text-xs font-bold text-accent-red">Agent stopped</div><p className="text-xs break-words">{run.error}</p><Btn onClick={() => void investigate()} disabled={busy || !data.configured}>Investigate again</Btn></Card>}
