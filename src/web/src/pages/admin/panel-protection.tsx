@@ -3,7 +3,7 @@ import { get, post, put } from "../../api/client.ts";
 import { Card, Btn, Field, Badge, Table, showToast } from "../../components/ui.tsx";
 
 import { NeoSelect } from "../../components/neo-select.tsx";
-import { Archive, Download, Settings2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Archive, Download, Settings2, ShieldCheck } from "lucide-react";
 
 type Form = { backup_connection: string; backup_enabled: boolean; backup_bucket: string; backup_prefix: string; backup_retention: number };
 type State = Form & {
@@ -65,13 +65,15 @@ export function PanelProtection() {
   };
   return <div className="space-y-4">
     {error && <div role="alert" className="border-2 border-fg p-3 text-sm">{error}</div>}
-    {state.recovery_pending && <Card className="p-5 space-y-3">
-      <h3 className="font-bold">Panel recovery is paused</h3>
-      <p>Verify access to existing servers before automation resumes. {state.pending_operations} saved operations may continue. Keep the original panel stopped.</p>
-      <label className="block"><input type="checkbox" checked={stopped} onChange={e => setStopped(e.target.checked)} /> The original panel is stopped</label>
-      <label className="block"><input type="checkbox" checked={resumeOps} onChange={e => setResumeOps(e.target.checked)} /> Resume saved operations and reconciliation</label>
-      <Btn disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/admin/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn>
-      <p className="text-sm">Backups stay disabled after restore until you enable them again.</p>
+    {state.recovery_pending && <Card className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-fg bg-accent-amber/20 px-5 py-4"><div className="flex items-center gap-2"><AlertTriangle size={16} /><h3 className="font-mono text-[10px] font-bold uppercase tracking-wider">Recovery paused</h3></div><Badge tone="warning">{state.pending_operations} saved operations</Badge></div>
+      <div className="space-y-4 p-5">
+        <div className="border-2 border-fg px-4">
+          <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 border-b border-fg/10 py-2"><span className="font-mono text-[10px] font-bold">Original panel stopped</span><input type="checkbox" checked={stopped} onChange={e => setStopped(e.target.checked)} /></label>
+          <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 py-2"><span className="font-mono text-[10px] font-bold">Resume saved operations</span><input type="checkbox" checked={resumeOps} onChange={e => setResumeOps(e.target.checked)} /></label>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-mono text-[9px] text-muted">Backups stay off until you enable them.</span><Btn variant="primary" disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/admin/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn></div>
+      </div>
     </Card>}
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-fg p-5">

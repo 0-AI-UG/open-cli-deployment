@@ -6,7 +6,7 @@ import { useActiveOperations } from "../hooks/useOperation.ts";
 import { PermissionGate } from "../components/permission-gate.tsx";
 import { NeoSelect } from "../components/neo-select.tsx";
 import { useServerTypes, typeOptions, locationOptions } from "../hooks/use-server-types.ts";
-import { HardDrive, Server, Database, Trash2, RefreshCw, Plus, History, Cloud } from "lucide-react";
+import { ArrowRight, HardDrive, Server, Database, Trash2, RefreshCw, Plus, History, Cloud, Hammer } from "lucide-react";
 import type { ResourcesData } from "../types.ts";
 import { serverProvisioningResourceId } from "../../../shared/server-provisioning.ts";
 import { InfrastructureTools } from "../components/infrastructure-tools.tsx";
@@ -263,30 +263,28 @@ export function ResourcesPage() {
       )}
 
       {section === "overview" && (
-        <Card className="overflow-hidden">
+        <div className="grid gap-3 sm:grid-cols-2">
           {[
-            { key: "servers" as const, label: "Servers", value: `${data?.servers?.length || 0} connected resources` },
-            { key: "volumes" as const, label: "Volumes", value: `${data?.volumes?.length || 0} attached or retained provider volumes` },
+            { key: "servers" as const, label: "Servers", value: data?.servers?.length || 0, unit: "hosts", icon: Server },
+            { key: "volumes" as const, label: "Volumes", value: data?.volumes?.length || 0, unit: "volumes", icon: HardDrive },
             {
               key: "object-storage" as const,
               label: "Object Storage",
-              value: data?.s3_configured
-                ? `${data.buckets?.length || 0} buckets · ${data.s3_region}`
-                : "Not configured",
+              value: data?.s3_configured ? data.buckets?.length || 0 : "—", unit: data?.s3_configured ? "buckets" : "Not configured", icon: Cloud,
             },
-            { key: "tools" as const, label: "Tools", value: "Build workers, server enrollment, and disk cleanup" },
+            { key: "tools" as const, label: "Tools", value: "↗", unit: "Workers · cleanup", icon: Hammer },
           ].map((item) => (
             <button
               key={item.key}
               type="button"
               onClick={() => setSection(item.key)}
-              className="flex w-full items-center justify-between gap-4 border-b border-fg/10 px-4 py-3 text-left last:border-b-0 hover:bg-alt/50"
+              className="group flex min-h-28 w-full flex-col justify-between border-2 border-fg bg-bg-raised p-4 text-left shadow-neo transition-all hover:-translate-x-px hover:-translate-y-px hover:bg-alt hover:shadow-neo-lg"
             >
-              <span className="font-mono text-[10px] font-bold uppercase tracking-wider">{item.label}</span>
-              <span className="font-mono text-[9px] text-muted text-right">{item.value}</span>
+              <span className="flex w-full items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-wider"><item.icon size={14} />{item.label}<ArrowRight size={12} className="ml-auto text-muted group-hover:text-fg" /></span>
+              <span className="flex items-baseline gap-2"><strong className="font-mono text-xl text-fg">{item.value}</strong><span className="font-mono text-[9px] text-muted">{item.unit}</span></span>
             </button>
           ))}
-        </Card>
+        </div>
       )}
 
       {/* Servers */}

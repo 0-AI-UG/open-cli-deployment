@@ -7,7 +7,7 @@ import { TabBar } from "../../components/tab-bar.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { PermissionGate } from "../../components/permission-gate.tsx";
 import { useServerTypes, typeOptions, locationOptions } from "../../hooks/use-server-types.ts";
-import { Users, Plus, Trash2, Shield, ShieldCheck, Key, ShieldAlert, Save, RefreshCw, Server as ServerIcon, Settings, Copy, Check, Hammer } from "lucide-react";
+import { ArrowRight, Bell, Users, Plus, Trash2, Shield, ShieldCheck, Key, ShieldAlert, Save, RefreshCw, Server as ServerIcon, Settings, Copy, Check, Hammer, Cloud } from "lucide-react";
 import type { PanelApp, DeploymentRecord } from "../../types.ts";
 import { DnsInstructionView } from "../../components/dns-instruction.tsx";
 import { runCliAction } from "../../api/cli-actions.ts";
@@ -586,20 +586,20 @@ export function UsersPage() {
       </Card>}
 
       {section === "overview" && (
-        <Card className="overflow-hidden">
+        <div className="grid gap-3 sm:grid-cols-2">
           {[
-            { key: "providers" as const, label: "Providers", value: `${providerData.providers.length} configured · ${providerData.assignments.object_storage ? "object storage assigned" : "object storage optional"}` },
-            { key: "infrastructure" as const, label: "Infrastructure", value: readiness?.provider.configured ? "Managed provisioning available" : "Using connected servers" },
-            { key: "build" as const, label: "Build & Registry", value: `${readiness?.worker.online ?? 0} workers · ${registryConnected ? "registry connected" : "registry not connected"}` },
-            { key: "panel" as const, label: "Panel", value: panel ? panel.status : "Not self-hosted" },
-            { key: "users" as const, label: "Users & Security", value: `${users.length} users · ${require2fa ? "2FA required" : "2FA optional"}` },
+            { key: "providers" as const, label: "Providers", value: providerData.providers.length, unit: "connections", icon: Cloud },
+            { key: "infrastructure" as const, label: "Infrastructure", value: readiness?.provider.configured ? "Ready" : "Hosts", unit: readiness?.provider.configured ? "Managed provisioning" : "Connected servers", icon: ServerIcon },
+            { key: "build" as const, label: "Build & Registry", value: readiness?.worker.online ?? 0, unit: "workers online", icon: Hammer },
+            { key: "panel" as const, label: "Panel", value: panel ? panel.status : "—", unit: panel ? "Self-hosted" : "External", icon: Settings },
+            { key: "users" as const, label: "Users & Security", value: users.length, unit: require2fa ? "users · 2FA required" : "users", icon: Users },
           ].map((item) => (
-            <button key={item.key} type="button" onClick={() => setSection(item.key)} className="flex w-full items-center justify-between gap-4 border-b border-fg/10 px-4 py-3 text-left last:border-b-0 hover:bg-alt/50">
-              <span className="font-mono text-[10px] font-bold uppercase">{item.label}</span>
-              <span className="font-mono text-[9px] text-muted">{item.value}</span>
+            <button key={item.key} type="button" onClick={() => setSection(item.key)} className="group flex min-h-28 w-full flex-col justify-between border-2 border-fg bg-bg-raised p-4 text-left shadow-neo transition-all hover:-translate-x-px hover:-translate-y-px hover:bg-alt hover:shadow-neo-lg">
+              <span className="flex w-full items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-wider"><item.icon size={14} />{item.label}<ArrowRight size={12} className="ml-auto text-muted group-hover:text-fg" /></span>
+              <span className="flex items-baseline gap-2"><strong className="font-mono text-xl text-fg">{item.value}</strong><span className="font-mono text-[9px] text-muted">{item.unit}</span></span>
             </button>
           ))}
-        </Card>
+        </div>
       )}
 
       {section === "providers" && <div className="space-y-4">

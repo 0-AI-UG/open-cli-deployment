@@ -71,9 +71,14 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
         <p className="font-mono text-[10px] text-muted">Storage inventory unavailable</p>
       </Card>}
       {Object.keys(app.notifications ?? {}).length > 0 && <Card className="p-4 space-y-2">
-        <h3 className="font-semibold">Notification bindings</h3>
-        {Object.entries(app.notifications ?? {}).map(([name, binding]) => <p key={name} className="text-sm"><strong>{name}</strong> · {binding.permissions.join(", ")} · Credential generation {binding.generation}</p>)}
-        <p className="text-sm text-muted">Private ntfy topics and credentials are injected into this app. Configure bindings in its deployment manifest.</p>
+        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Notification bindings</h3>
+        <div className="divide-y divide-fg/10 border-t border-fg/10">
+          {Object.entries(app.notifications ?? {}).map(([name, binding]) => <div key={name} className="flex flex-wrap items-center gap-2 py-2 font-mono text-[10px]">
+            <span className="min-w-0 flex-1 break-all font-bold">{name}</span>
+            <div className="flex flex-wrap gap-1">{binding.permissions.map(permission => <span key={permission} className="border border-fg bg-alt px-1.5 py-0.5 text-[8px] font-bold uppercase">{permission}</span>)}</div>
+            <span className="text-[9px] text-muted" title="Credential generation">v{binding.generation}</span>
+          </div>)}
+        </div>
       </Card>}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
