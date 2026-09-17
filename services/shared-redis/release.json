@@ -8,12 +8,18 @@
   "env": {
     "SHARED_REDIS_PASSWORD": {
       "from": "environment.SHARED_REDIS_PASSWORD"
+    },
+    "REDIS_MAXMEMORY_BYTES": {
+      "from": "environment.REDIS_MAXMEMORY_BYTES"
+    },
+    "REDIS_MAXMEMORY_POLICY": {
+      "from": "environment.REDIS_MAXMEMORY_POLICY"
     }
   },
   "command": [
     "sh",
     "-ec",
-    "exec docker-entrypoint.sh redis-server --appendonly yes --requirepass \"$SHARED_REDIS_PASSWORD\""
+    "exec docker-entrypoint.sh redis-server --appendonly yes --requirepass \"$SHARED_REDIS_PASSWORD\" --maxmemory \"$REDIS_MAXMEMORY_BYTES\" --maxmemory-policy \"$REDIS_MAXMEMORY_POLICY\""
   ],
   "cap_add": [
     "CHOWN",
