@@ -1,0 +1,51 @@
+{
+  "$schema": 1,
+  "name": "Shared Redis",
+  "description": "Private Redis 8 shared by OCD applications using the official prebuilt image.",
+  "image": "docker.io/library/redis@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576",
+  "container_port": 6379,
+  "environment": "shared-data",
+  "env": {
+    "SHARED_REDIS_PASSWORD": {
+      "from": "environment.SHARED_REDIS_PASSWORD"
+    }
+  },
+  "command": [
+    "sh",
+    "-ec",
+    "exec docker-entrypoint.sh redis-server --appendonly yes --requirepass \"$SHARED_REDIS_PASSWORD\""
+  ],
+  "cap_add": [
+    "CHOWN",
+    "SETUID",
+    "SETGID"
+  ],
+  "internal_protocol": "tcp",
+  "public": false,
+  "health_check": {
+    "mode": "exec",
+    "command": "redis-cli -a \"$SHARED_REDIS_PASSWORD\" ping"
+  },
+  "volume": {
+    "id": "106478079",
+    "size": 10,
+    "path": "/data"
+  },
+  "suggested_app_name": "sight-redis",
+  "outputs": {
+    "URL": {
+      "template": "redis://:{env.SHARED_REDIS_PASSWORD}@{app.host}:{app.port}",
+      "secret": true
+    },
+    "HOST": {
+      "template": "{app.host}"
+    },
+    "PORT": {
+      "template": "{app.port}"
+    },
+    "PASSWORD": {
+      "template": "{env.SHARED_REDIS_PASSWORD}",
+      "secret": true
+    }
+  }
+}
