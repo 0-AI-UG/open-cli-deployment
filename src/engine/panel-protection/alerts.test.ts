@@ -1,7 +1,15 @@
-import { test, expect } from "bun:test";
-import db, { saveSetting, insertUser } from "../../shared/db.ts";
+import { test, expect, beforeEach } from "bun:test";
+import db, { saveSetting, insertUser, insertServer, insertServerMetricSample } from "../../shared/db.ts";
 import { NtfySettingsSchema } from "../../shared/ntfy-schema.ts";
 import { reconcileIncidents, alertTick, collectConditions } from "./alerts.ts";
+
+beforeEach(() => {
+  db.query("DELETE FROM ntfy_outbox").run();
+  db.query("DELETE FROM panel_incident_history").run();
+  db.query("DELETE FROM panel_alerts").run();
+  db.query("DELETE FROM users WHERE id='recipient'").run();
+  db.query("DELETE FROM panel_backups").run();
+});
 
 function enable() {
   saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, alerts: true, apps: true })));
@@ -55,4 +63,12 @@ test("unknown observations retain incidents without falsely resolving them", () 
   reconcileIncidents([{ key: "disk:1", title: "Disk full", path: "/resources/servers/1" }], 1000);
   reconcileIncidents([{ key: "disk:1", title: "Disk full", path: "/resources/servers/1", hold: true }], 2000);
   expect(count()).toBe(1);
+});
+test("disk alert fires before a small rollout host reaches the pull limit", () => {
+  const server = insertServer({
+    name: "disk-alert-host", provider_id: "disk-alert-host", ipv4: "192.0.2.10",
+    ipv6: "", type: "test", location: "test", status: "ready",
+  });
+  insertServerMetricSample(server.id, 0, 0, 15.5, 20);
+  expect(collectConditions().some((condition) => condition.key === `disk:${server.id}`)).toBe(true);
 });

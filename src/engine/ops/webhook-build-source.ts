@@ -16,6 +16,7 @@ import { withBuildFailover } from "../build-failover.ts";
 import { resolveRegistryCredentialsForImage } from "../registry-config.ts";
 import { resolveOciImage } from "../oci-image.ts";
 import { resolveSourceCredentialsForRepository } from "../source-config.ts";
+import { assertRolloutDiskSpace } from "../hetzner/build.ts";
 import { awaitChildren } from "./_children.ts";
 import { registerOp } from "./registry.ts";
 import { FatalProbeError, type OpContext, type OpKindDefinition, type Step } from "../types.ts";
@@ -138,6 +139,15 @@ const build: Step<WebhookBuildSourceInput, Built> = {
     const source = db.getBuildSource(ctx.input.sourceId)!;
     const prepared = prior.prepare_source as Prepared;
     const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app && app.target_of == null);
+    const rolloutHosts = new Map<number, NonNullable<ReturnType<typeof db.getServer>>>();
+    for (const app of apps) {
+      for (const replica of db.getReplicas(app.id)) {
+        const server = db.getServer(replica.server_id);
+        if (server) rolloutHosts.set(server.id, server);
+      }
+    }
+    await Promise.all([...rolloutHosts.values()].map((server) =>
+      assertRolloutDiskSpace(server.ipv4, server.ssh_host_key || undefined)));
     const roots = apps.flatMap((app) => [app.stack_id == null ? app.manifest_path : null, app.stack_manifest_path])
       .filter((path): path is string => !!path);
     const builds: Record<string, BuildConfig> = {};

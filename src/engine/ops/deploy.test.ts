@@ -23,10 +23,11 @@ const getContainerLogsMock = mock(async () => "");
 const removeContainerMock = mock(async () => {});
 let attestationAppName = "";
 let attestationEnvHash = "";
+let dockerFreeBytes = 20 * 1024 ** 3;
 mock.module("../../shared/remote/index.ts", () => ({
   sshExec: mock(async (_ip: string, command: string) => ({
     exitCode: 0,
-    stdout: command.includes("{{json .}}") ? JSON.stringify({
+    stdout: command.includes("DockerRootDir") ? String(dockerFreeBytes) : command.includes("{{json .}}") ? JSON.stringify({
       Image: "sha256:test-image",
       State: { Running: true },
       Config: { Labels: {
@@ -109,6 +110,7 @@ async function primeAttestation(app: db.AppRow): Promise<void> {
 }
 
 beforeEach(() => {
+  dockerFreeBytes = 20 * 1024 ** 3;
   __replaceInfrastructureProvidersForTest([compute]);
   configureTestInfrastructureProvider(compute.id);
   provisionServer.mockClear();
@@ -188,6 +190,19 @@ describe("deploy step: pick_or_provision_server", () => {
     });
     const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), server_id: notReady.id });
     expect(step.run(ctx, {})).rejects.toThrow(/not found|not ready/i);
+  });
+
+  test("rejects a ready host with insufficient Docker space before creating app state", async () => {
+    const target = db.insertServer({
+      name: `srv-${randomSuffix()}`, provider_id: `h-${randomSuffix()}`,
+      ipv4: "9.9.9.8", ipv6: "", type: "cx22", location: "fsn1", status: "ready",
+    });
+    dockerFreeBytes = 4 * 1024 ** 3;
+    const name = `app-${randomSuffix()}`;
+    const { ctx } = makeCtx({ ...baseReq(name), server_id: target.id });
+    expect(step.run(ctx, {})).rejects.toThrow(/Insufficient Docker disk space/);
+    expect(db.getAppByName(name)).toBeNull();
+    db.deleteServer(target.id);
   });
 
   test("provisions a new server when none exist and settings are valid", async () => {

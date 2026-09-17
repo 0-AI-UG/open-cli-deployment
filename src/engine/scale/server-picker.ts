@@ -1,6 +1,7 @@
 import * as db from "../../shared/db.ts";
 import { provisionServer } from "../provision-server.ts";
 import { type ProgressFn, type App, type Server } from "./types.ts";
+import { metricHasRolloutSpace } from "../disk-capacity.ts";
 
 export async function pickTargetServer(
   app: App,
@@ -61,6 +62,7 @@ export async function pickTargetServer(
 
   // Get recent server metrics for load scoring
   const recentMetrics = db.getRecentServerMetrics(120); // last 2 minutes
+  const diskByServer = new Map(recentMetrics.map((metric) => [metric.server_id, metric] as const));
   const latestByServer = new Map<number, { cpu_percent: number; memory_percent: number }>();
   for (const m of recentMetrics) {
     latestByServer.set(m.server_id, { cpu_percent: m.cpu_percent, memory_percent: m.memory_percent });
@@ -83,6 +85,7 @@ export async function pickTargetServer(
     // Pool filter: an app only schedules onto servers in its placement pool.
     // Default apps and servers both live in 'general', so this is a no-op there.
     if (server.pool !== app.placement_pool) continue;
+    if (!metricHasRolloutSpace(diskByServer.get(server.id))) continue;
 
     const metrics = latestByServer.get(server.id);
     // No metrics yet (new server) → treat as empty (load 0)

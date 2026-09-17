@@ -398,6 +398,17 @@ export function buildServerPruneSteps(opts: PruneServerOptions = {}): string[] {
     );
   }
 
+  if (opts.underPressure) {
+    // The ordinary sweep already removes stale OCD image tags. Cache has no
+    // runtime ownership and can be trimmed when the host crosses 75% usage.
+    steps.push(
+      `docker builder prune -af --keep-storage 1GB >/dev/null 2>&1 || true; ` +
+      `for builder in $(docker buildx ls --format '{{.Name}}' 2>/dev/null | sort -u); do ` +
+      `docker buildx inspect "$builder" >/dev/null 2>&1 || continue; ` +
+      `docker buildx prune --builder "$builder" -af --keep-storage 1GB >/dev/null 2>&1 || true; done`,
+    );
+  }
+
   // Maintenance must not run Docker-wide prune commands. A digest-only image
   // is briefly unreferenced between `docker pull` and `docker run`, so even
   // `docker image prune -f` can race a release and delete its candidate.

@@ -34,8 +34,8 @@ export function collectConditions(now = Date.now()): Condition[] {
   for (const app of db.query(`SELECT id, name FROM apps WHERE status='unhealthy'`).all() as { id: number; name: string }[]) {
     result.push({ key: `app:${app.id}`, title: `${app.name} is unhealthy`, path: `/apps/${app.id}`, grace: 120_000 });
   }
-  for (const metric of db.query(`SELECT s.id, s.name, m.disk_used_gb, m.disk_total_gb FROM servers s JOIN server_metrics_samples m ON m.id=(SELECT id FROM server_metrics_samples WHERE server_id=s.id ORDER BY sampled_at DESC, id DESC LIMIT 1) WHERE m.sampled_at > datetime('now','-5 minutes') AND m.disk_total_gb > 0 AND m.disk_used_gb/m.disk_total_gb >= 0.9`).all() as { id: number; name: string }[]) {
-    result.push({ key: `disk:${metric.id}`, title: `${metric.name} disk usage exceeds 90%`, path: `/resources/servers/${metric.id}`, grace: 120_000 });
+  for (const metric of db.query(`SELECT s.id, s.name, m.disk_used_gb, m.disk_total_gb FROM servers s JOIN server_metrics_samples m ON m.id=(SELECT id FROM server_metrics_samples WHERE server_id=s.id ORDER BY sampled_at DESC, id DESC LIMIT 1) WHERE m.sampled_at > datetime('now','-5 minutes') AND m.disk_total_gb > 0 AND (m.disk_used_gb/m.disk_total_gb >= 0.85 OR m.disk_total_gb-m.disk_used_gb < 5)`).all() as { id: number; name: string }[]) {
+    result.push({ key: `disk:${metric.id}`, title: `${metric.name} has low disk headroom`, path: `/resources/servers/${metric.id}`, grace: 120_000 });
   }
   // A missing/stale scrape is not evidence that disk pressure recovered.
   for (const old of db.query(`SELECT a.key, a.title, a.path FROM panel_alerts a

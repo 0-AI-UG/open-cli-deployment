@@ -1,0 +1,12 @@
+.git
+.cate
+.claude
+.codex
+.agents
+.env
+data
+dist
+node_modules
+src/web/dist
+panel.json
+coverage

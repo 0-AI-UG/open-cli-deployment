@@ -10,12 +10,15 @@ For each build OCD:
 
 1. clones the manifest's HTTPS repository into an operation-scoped directory;
 2. checks out the exact requested commit in detached mode;
-3. runs `docker buildx build` for each declared Dockerfile on the pinned
-   `linux/amd64` platform, importing and exporting a per-image registry cache;
+3. runs `docker buildx build` for each distinct Dockerfile, context, platform,
+   and cache setting on the pinned `linux/amd64` platform. Identical targets
+   publish one build to all declared image repositories;
 4. pushes a temporary commit tag to the declared OCI repository;
 5. resolves and verifies the registry digest;
 6. reconciles the committed manifest or stack using that digest;
-7. removes checkout, temporary credentials, local images, and local build cache.
+7. removes checkout, temporary credentials, and unused local images. BuildKit
+   cache stays warm until worker disk free space falls below 16 GiB, when it is
+   trimmed to 4 GiB.
 
 The immutable digest remains the deployment-history, rollback, promotion, and
 runtime-attestation boundary.
@@ -115,6 +118,13 @@ lease plus a host `flock`; a lost lease fences publication. A disconnect or
 timeout before any artifact is recorded is retried once on another worker.
 After an artifact is recorded, recovery instead re-verifies every persisted
 digest before it adopts the checkpoint.
+
+Existing rollout hosts are checked for at least 5 GiB free on Docker's
+filesystem before a build starts. New app placements use recent disk metrics
+and check the selected host again before changing app state. Every image pull
+rechecks the host directly. The panel alerts when host disk usage reaches 85%
+or free space falls below 5 GiB; periodic maintenance trims build cache on
+hosts above 75% usage.
 
 Checkout is bounded to five minutes and each image build to 45 minutes.
 Cancellation terminates the remote process group before cleanup. Newer webhook

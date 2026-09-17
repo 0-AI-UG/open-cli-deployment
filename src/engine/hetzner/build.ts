@@ -9,8 +9,27 @@ import { dockerLoginRegistry, type RegistryAuth } from "./registry.ts";
 import { startAppReplica } from "./docker-run.ts";
 import { ensureOcdNetwork } from "./lifecycle.ts";
 import { resolveRegistryCredentialsForImage } from "../registry-config.ts";
+import { ROLLOUT_MIN_FREE_BYTES } from "../disk-capacity.ts";
 
 const IMMUTABLE_IMAGE = /^[a-z0-9.-]+(?::[0-9]+)?\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/i;
+
+/** Probe the filesystem Docker writes to immediately before downloading an
+ * image. A stale metrics sample must never authorize a rollout. */
+export async function assertRolloutDiskSpace(ip: string, hostKey?: string): Promise<number> {
+  const result = await sshExec(ip,
+    asUser("docker_root=$(docker info --format '{{.DockerRootDir}}') && df -B1 --output=avail \"$docker_root\" | tail -1 | tr -d ' '"),
+    hostKey,
+  );
+  const rawFree = result.stdout.trim();
+  const free = Number(rawFree);
+  if (result.exitCode !== 0 || !/^\d+$/.test(rawFree) || !Number.isSafeInteger(free)) {
+    throw new Error(`Could not determine Docker free space on ${ip}: ${result.stderr.trim() || "invalid df response"}`);
+  }
+  if (free < ROLLOUT_MIN_FREE_BYTES) {
+    throw new Error(`Insufficient Docker disk space on ${ip}: ${(free / 1024 ** 3).toFixed(1)} GiB free; at least 5 GiB is required before pulling an image`);
+  }
+  return free;
+}
 
 /** Local ownership tag for immutable artifacts pulled by OCD. Runtime identity
  * remains the original registry digest; this tag exists only so maintenance
@@ -97,6 +116,7 @@ export async function pullImmutableImage(
   if (!IMMUTABLE_IMAGE.test(opts.imageRef)) {
     throw new Error("Immutable image reference must end in @sha256:<64 hex digest>");
   }
+  await assertRolloutDiskSpace(ip, opts.hostKey);
   let auth: RegistryAuth | null = null;
   const registryCredentials = await resolveRegistryCredentialsForImage(opts.imageRef);
   if (registryCredentials.username && registryCredentials.password) {
@@ -109,6 +129,7 @@ export async function pullImmutableImage(
     );
   }
   try {
+    const pullStarted = Date.now();
     onLog?.(`Pulling immutable image ${opts.imageRef}`);
     const managedTag = managedRuntimeImageTag(opts.name, opts.imageRef);
     const pullMarker = managedRuntimeImageMarker(opts.imageRef);
@@ -122,6 +143,7 @@ export async function pullImmutableImage(
       { hostKey: opts.hostKey, onLine: (line) => line.trim() && onLog?.(line) },
     );
     if (pull.exitCode !== 0) throw new Error(describeFailure("Docker image pull failed", pull));
+    onLog?.(`Immutable image pull completed in ${Math.round((Date.now() - pullStarted) / 1000)}s`);
   } finally {
     if (auth) await auth.cleanup();
   }

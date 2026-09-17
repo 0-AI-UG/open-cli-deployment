@@ -86,6 +86,16 @@ beforeEach(() => {
 });
 
 describe("pickTargetServer", () => {
+  test("automatic placement skips a host with insufficient disk headroom", async () => {
+    const full = makeServer("disk-full");
+    const healthy = makeServer("disk-healthy");
+    const app = makeApp("disk-space");
+    db.insertServerMetricSample(full.id, 0, 0, 17, 20);
+    db.insertServerMetricSample(healthy.id, 20, 20, 10, 20);
+    const picked = await pickTargetServer(app, {}, noopEmit);
+    expect(picked.id).toBe(healthy.id);
+  });
+
   test("preferredServerId wins when ready", async () => {
     const s = makeServer("pref-1");
     const app = makeApp("pref-1");

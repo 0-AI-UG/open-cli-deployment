@@ -27,6 +27,7 @@ export function buildxBuildCommand(input: {
   dockerfile: string;
   context: string;
   tag: string;
+  additionalTags?: string[];
   metadataFile: string;
   platform?: string;
   cache?: boolean;
@@ -42,6 +43,7 @@ export function buildxBuildCommand(input: {
     `--progress plain --push ${cacheFlags}` +
     `--label org.opencontainers.image.revision=${shellQuote(input.commit)} ` +
     `--metadata-file ${shellQuote(input.metadataFile)} -t ${shellQuote(input.tag)} ` +
+    (input.additionalTags ?? []).map((tag) => `-t ${shellQuote(tag)} `).join("") +
     `-f ${shellQuote(input.dockerfile)} ${shellQuote(input.context)}`;
 }
 
@@ -55,7 +57,7 @@ export function buildWorkerCleanupScript(root: string): string {
     `pid=$(cat ${shellQuote(activePid)}); ` +
     `case "$pid" in ''|*[!0-9]*) ;; *) [ "$pid" -le 1 ] || { kill -TERM -- "-$pid" 2>/dev/null || true; sleep 2; kill -KILL -- "-$pid" 2>/dev/null || true; } ;; esac; ` +
     `fi; rm -rf ${shellQuote(root)}; ` +
-    `su - deploy -c ${shellQuote(`flock -w 30 ${BUILD_LOCK} sh -c 'docker image prune -af >/dev/null 2>&1 || true; docker buildx prune --builder ${BUILDX_BUILDER} -af --keep-storage 4GB >/dev/null 2>&1 || true'`)}`;
+    `su - deploy -c ${shellQuote(`flock -w 30 ${BUILD_LOCK} sh -c 'docker image prune -af >/dev/null 2>&1 || true; free=$(df -B1 --output=avail / | tail -1); if [ "$free" -lt 17179869184 ]; then docker buildx prune --builder ${BUILDX_BUILDER} -af --keep-storage 4GB >/dev/null 2>&1 || true; fi'`)}`;
 }
 
 export function normalizeBuildWorkerName(value: string): string {
@@ -127,6 +129,19 @@ export type BuildTarget = {
   platform?: "linux/amd64";
   cache?: boolean;
 };
+
+/** Targets with identical build inputs can publish one image to several
+ * repositories. The commit is shared by the enclosing build operation. */
+export function groupBuildTargets(targets: BuildTarget[]): BuildTarget[][] {
+  const groups = new Map<string, BuildTarget[]>();
+  for (const target of targets) {
+    const key = JSON.stringify([target.dockerfile, target.context, target.platform || BUILD_PLATFORM, target.cache !== false]);
+    const group = groups.get(key) ?? [];
+    group.push(target);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
 
 export class BuildWorkerUnavailableError extends Error {
   override readonly name = "BuildWorkerUnavailableError";
@@ -225,6 +240,7 @@ export async function buildCommitOnWorker(input: {
       );
       if (written.exitCode !== 0) throw new Error("Could not stage private Git credentials on build worker");
     }
+    const checkoutStarted = Date.now();
     input.onLog?.(`Checking out ${input.repository} at ${input.commit.slice(0, 12)}`);
     const innerClone =
       `echo $$ > ${shellQuote(activePid)}; trap 'rm -f ${activePid}' EXIT; ` +
@@ -256,6 +272,7 @@ export async function buildCommitOnWorker(input: {
     if (clone.exitCode === 75) throw new BuildWorkerUnavailableError("Build worker host slot is already active");
     if (clone.exitCode === 255) throw new BuildWorkerUnavailableError("Build worker disconnected during Git checkout");
     if (clone.exitCode !== 0) throw new Error(`Git checkout failed: ${(clone.stderr || clone.stdout).trim().split("\n").slice(-3).join(" | ")}`);
+    input.onLog?.(`Git checkout completed in ${Math.round((Date.now() - checkoutStarted) / 1000)}s`);
 
     const files: Record<string, string> = {};
     const readFile = async (file: string): Promise<string> => {
@@ -300,10 +317,13 @@ export async function buildCommitOnWorker(input: {
     }
 
     const refs = new Map<string, string>();
-    for (const target of targets) {
+    for (const group of groupBuildTargets(targets)) {
+      const buildStarted = Date.now();
+      const target = group[0];
       const tag = operationImageTag(target.imageRepository, input.operationId, input.commit);
+      const additionalTags = group.slice(1).map((member) => operationImageTag(member.imageRepository, input.operationId, input.commit));
       const metadata = `${root}/${target.name}.metadata.json`;
-      input.onLog?.(`Building ${target.name} → ${target.imageRepository}`);
+      input.onLog?.(`Building ${group.map((member) => member.name).join(", ")} → ${group.map((member) => member.imageRepository).join(", ")}`);
       const innerBuild =
         `echo $$ > ${shellQuote(activePid)}; trap 'rm -f ${activePid}' EXIT; ` +
         `cd ${shellQuote(checkout)} && ` + buildxBuildCommand({
@@ -311,6 +331,7 @@ export async function buildCommitOnWorker(input: {
           dockerfile: target.dockerfile,
           context: target.context,
           tag,
+          additionalTags,
           metadataFile: metadata,
           platform: target.platform,
           cache: target.cache,
@@ -341,6 +362,7 @@ export async function buildCommitOnWorker(input: {
       if (build.exitCode === 75) throw new BuildWorkerUnavailableError("Build worker host slot is already active");
       if (build.exitCode === 255) throw new BuildWorkerUnavailableError(`Build worker disconnected while building ${target.name}`);
       if (build.exitCode !== 0) throw new Error(`Build failed for ${target.name}: ${(build.stderr || build.stdout).trim().split("\n").slice(-3).join(" | ")}`);
+      input.onLog?.(`Built ${group.map((member) => member.name).join(", ")} in ${Math.round((Date.now() - buildStarted) / 1000)}s`);
       const digestResult = await sshExec(
         server.ipv4,
         asUser(`jq -r '."containerimage.digest" // empty' ${shellQuote(metadata)}`),
@@ -348,12 +370,14 @@ export async function buildCommitOnWorker(input: {
       );
       const digest = digestResult.stdout.trim();
       if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error(`Registry did not return an immutable digest for ${target.name}`);
-      const ref = `${target.imageRepository}@${digest}`;
-      const verify = await sshExec(server.ipv4, asUser(`${registryAuth?.envPrefix ?? ""}docker buildx imagetools inspect ${shellQuote(ref)} >/dev/null`), hostKey);
-      if (verify.exitCode !== 0) throw new Error(`Could not verify pushed digest for ${target.name}`);
-      refs.set(target.name, ref);
-      await input.onArtifact?.(target.name, ref);
-      input.onLog?.(`Published ${ref}`);
+      for (const member of group) {
+        const ref = `${member.imageRepository}@${digest}`;
+        const verify = await sshExec(server.ipv4, asUser(`${registryAuth?.envPrefix ?? ""}docker buildx imagetools inspect ${shellQuote(ref)} >/dev/null`), hostKey);
+        if (verify.exitCode !== 0) throw new Error(`Could not verify pushed digest for ${member.name}`);
+        refs.set(member.name, ref);
+        await input.onArtifact?.(member.name, ref);
+        input.onLog?.(`Published ${ref}`);
+      }
     }
     if (input.expectedBranch) {
       let verified = false;

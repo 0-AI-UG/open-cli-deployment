@@ -34,6 +34,7 @@ import {
   type RemoteRevisionSnapshot,
 } from "./_revision-snapshot.ts";
 import { commitManifestDeliverySource } from "../manifest-delivery-source.ts";
+import { assertRolloutDiskSpace } from "../hetzner/build.ts";
 
 type RedeployInput = {
   appId: number;
@@ -136,6 +137,13 @@ const setDeploying: Step<RedeployInput, SetDeployingOut> = {
   async run(ctx) {
     const app = db.getApp(ctx.input.appId);
     if (!app) throw new Error("App not found");
+    const servers = new Map<number, NonNullable<ReturnType<typeof db.getServer>>>();
+    for (const replica of db.getReplicas(app.id)) {
+      const server = db.getServer(replica.server_id);
+      if (server) servers.set(server.id, server);
+    }
+    await Promise.all([...servers.values()].map((server) =>
+      assertRolloutDiskSpace(server.ipv4, server.ssh_host_key || undefined)));
     const previousStatus = app.status;
     if (ctx.input.userId) db.updateAppDeployedBy(ctx.input.appId, ctx.input.userId);
     db.updateAppStatus(ctx.input.appId, "deploying");

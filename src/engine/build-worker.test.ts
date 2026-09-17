@@ -7,6 +7,7 @@ import {
   buildInstallWorkerScript,
   buildWorkerCleanupScript,
   guardedBuildCommand,
+  groupBuildTargets,
   operationImageTag,
   remoteBranchHead,
   registryBuildCacheRef,
@@ -31,6 +32,7 @@ describe("build worker command safety", () => {
     expect(script).toContain("flock -w 30 /opt/ocd-build-worker/build.lock");
     expect(script).toContain(`docker buildx prune --builder ${BUILDX_BUILDER}`);
     expect(script).toContain("--keep-storage 4GB");
+    expect(script).toContain("17179869184");
   });
 
   test("installs the host-lock utilities", () => {
@@ -69,6 +71,27 @@ describe("build worker command safety", () => {
     };
     expect(buildxBuildCommand({ ...input, cache: false })).not.toContain("--cache-");
     expect(() => buildxBuildCommand({ ...input, platform: "linux/arm64" })).toThrow("Unsupported build platform");
+  });
+
+  test("publishes identical build inputs to multiple repositories in one build", () => {
+    const groups = groupBuildTargets([
+      { name: "scan", dockerfile: "Dockerfile.worker", context: ".", imageRepository: "registry.example.com/acme/scan" },
+      { name: "ops", dockerfile: "Dockerfile.worker", context: ".", imageRepository: "registry.example.com/acme/ops" },
+      { name: "web", dockerfile: "Dockerfile.web", context: ".", imageRepository: "registry.example.com/acme/web" },
+    ]);
+    expect(groups.map((group) => group.map((target) => target.name))).toEqual([["scan", "ops"], ["web"]]);
+    const command = buildxBuildCommand({
+      commit: "a".repeat(40), dockerfile: "Dockerfile.worker", context: ".",
+      tag: "registry.example.com/acme/scan:ocd-op-1-aaaaaaaaaaaa",
+      additionalTags: ["registry.example.com/acme/ops:ocd-op-1-aaaaaaaaaaaa"],
+      metadataFile: "/tmp/worker.json",
+    });
+    expect(command).toContain("-t 'registry.example.com/acme/scan:ocd-op-1-aaaaaaaaaaaa'");
+    expect(command).toContain("-t 'registry.example.com/acme/ops:ocd-op-1-aaaaaaaaaaaa'");
+    expect(groupBuildTargets([
+      { name: "a", dockerfile: "Dockerfile", context: ".", imageRepository: "example.com/a", cache: false },
+      { name: "b", dockerfile: "Dockerfile", context: ".", imageRepository: "example.com/b" },
+    ])).toHaveLength(2);
   });
 
   test("checks the remote branch from the authenticated checkout", () => {

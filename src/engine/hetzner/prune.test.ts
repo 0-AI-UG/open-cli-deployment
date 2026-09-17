@@ -113,4 +113,11 @@ describe("buildServerPruneSteps", () => {
     expect(steps[1]).toContain("ocd-managed");
     expect(steps[2]).toContain("docker image rm");
   });
+
+  test("trims cache only during disk pressure", () => {
+    expect(buildServerPruneSteps({ underPressure: false }).join("; ")).not.toContain("docker builder prune");
+    const script = buildServerPruneSteps({ underPressure: true }).join("; ");
+    expect(script).toContain("docker builder prune -af --keep-storage 1GB");
+    expect(script).toContain("docker buildx prune --builder");
+  });
 });

@@ -33,6 +33,8 @@ import { registerOp } from "./registry.ts";
 import { FatalProbeError, type OpContext, type OpKindDefinition, type Step } from "../types.ts";
 import { attestReplica, hashEnvironment, latestDesiredImage } from "../revision.ts";
 import { scaleUp } from "../scale/scale-up.ts";
+import { metricHasRolloutSpace } from "../disk-capacity.ts";
+import { assertRolloutDiskSpace } from "../hetzner/build.ts";
 import { commitManifestDeliverySource } from "../manifest-delivery-source.ts";
 import {
   defaultStorageDriverForServer,
@@ -169,6 +171,7 @@ const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
       if (!target || target.status !== "ready") {
         throw new Error("Target server not found or not ready");
       }
+      await assertRolloutDiskSpace(target.ipv4, target.ssh_host_key || undefined);
       const ingressIp = panelServerRow?.ipv4 || target.ipv4;
       return {
         serverId: target.id,
@@ -179,12 +182,15 @@ const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
       };
     }
     const desiredPool = req.placement_pool || "general";
+    const recentDisk = new Map(db.getRecentServerMetrics(120).map((metric) => [metric.server_id, metric] as const));
     const existingReady = db.getServers().find((s) =>
       s.status === "ready" &&
       s.id !== panel?.server_id &&
-      s.pool === desiredPool
+      s.pool === desiredPool &&
+      metricHasRolloutSpace(recentDisk.get(s.id))
     );
     if (existingReady) {
+      await assertRolloutDiskSpace(existingReady.ipv4, existingReady.ssh_host_key || undefined);
       const ingressIp = panelServerRow?.ipv4 || existingReady.ipv4;
       return {
         serverId: existingReady.id,
@@ -207,6 +213,13 @@ const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
       approved: req.server_provisioning_approved === true,
       emit: (step, detail) => ctx.log(`[${step}] ${detail}`),
     });
+    try {
+      await assertRolloutDiskSpace(newServer.ipv4, newServer.ssh_host_key || undefined);
+    } catch (error) {
+      await db.gcServerIfEmpty(newServer.id).catch((cleanupError) =>
+        ctx.log(`Could not release insufficient-capacity server ${newServer.id}: ${cleanupError}`));
+      throw error;
+    }
     const ingressIp = panelServerRow?.ipv4 || newServer.ipv4;
     return {
       serverId: newServer.id,
