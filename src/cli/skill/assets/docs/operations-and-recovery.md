@@ -94,12 +94,12 @@ first.
 ## Retry
 
 ```bash
-ocd ops retry <id>
+ocd ops retry <id> [--wait]
 ```
 
 Retry either resumes recoverable cleanup/work or enqueues a fresh attempt,
 depending on operation state. The command returns the operation ID and whether
-it resumed. Follow the returned ID.
+it resumed. Follow the returned ID, or use `--wait` to wait and fail on an unsuccessful result.
 
 For a failed stack deployment, retry is a checkpointed continuation: successful
 members are retained and convergence skips them, while failed/unreconciled

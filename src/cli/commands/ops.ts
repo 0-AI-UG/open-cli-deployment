@@ -1,5 +1,5 @@
 import { get, post, ApiError } from "../api.ts";
-import { newFollowRetryState, resetFollowRetryState, handleTransientFollowError, summarizeOperationError } from "../ops.ts";
+import { followOp, newFollowRetryState, resetFollowRetryState, handleTransientFollowError, summarizeOperationError } from "../ops.ts";
 import { webConfirm } from "../confirm.ts";
 import { BOLD, CYAN, DIM, GREEN, RED, RESET, YELLOW, colorStatus, table } from "../format.ts";
 import { parseCliArgs, positiveIntegerFlag } from "../args.ts";
@@ -312,6 +312,11 @@ async function opsCancel(args: string[]): Promise<void> {
 async function opsRetry(args: string[]): Promise<void> {
   const id = parseOpId(args, "Usage: ocd ops retry <id>");
   const result = await post<{ op_id: number; resumed: boolean }>(`/api/operations/${id}/retry`);
+  if (args.includes("--wait")) {
+    const operation = await followOp(result.op_id);
+    if (!operation.ok) throw new Error(operation.error || `Operation #${result.op_id} failed`);
+    return;
+  }
   console.log(
     `${GREEN}${result.resumed ? "Resumed" : "Retried"} operation as #${result.op_id}.${RESET} ` +
       `${DIM}Follow: ocd ops logs ${result.op_id} --follow${RESET}`,
@@ -345,7 +350,7 @@ ${BOLD}Subcommands:${RESET}
   <id>                       Show an operation's steps and children
   logs <id> [--tail N] [--since TIME] [--child X] [--phase X] [--follow]
   cancel <id>                Confirm in the web UI, then stop and compensate safely
-  retry <id>                 Resume cleanup or create a fresh retry
+  retry <id> [--wait]        Resume cleanup or create a fresh retry
   finalize <id>              Reconcile resources and close a stale operation`);
 }
 
