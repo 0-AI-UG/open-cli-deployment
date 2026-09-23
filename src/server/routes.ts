@@ -1,3 +1,4 @@
+import { handleDeployBuildSource } from "./routes/build-workers.ts";
 import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
 import { handleListIncidents, handleGetIncident, handleInvestigateIncident, handleFixIncident } from "./routes/incidents.ts";
 import { handleGetProtection, handleSaveProtection, handleRecoveryKey, handleBackupNow, handleResumeRecovery } from "./routes/panel-protection.ts";
@@ -293,6 +294,7 @@ export const apiRoutes = {
     POST: (req: Request) => handleInstallBuildWorker(req),
   },
   "/api/runners/:id": { DELETE: (req: Request) => handleRemoveBuildWorker(req, runnerIdFrom(req)) },
+  "/api/build-sources/:id/deploy": { POST: (req: Request) => handleDeployBuildSource(req, buildSourceIdFrom(req)) },
   "/api/build-sources": { GET: (req: Request) => handleGetBuildSources(req) },
   "/api/build-sources/:id/webhook-secret": { POST: (req: Request) => handleRotateBuildSourceWebhook(req, buildSourceIdFrom(req)) },
   "/api/gc": {

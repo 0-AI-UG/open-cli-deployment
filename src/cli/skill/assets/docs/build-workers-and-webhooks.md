@@ -134,3 +134,13 @@ running, and the configured branch head is checked again before reconciliation.
 Treat build workers as trusted production infrastructure: repository
 Dockerfiles execute code there and OCI push credentials are available only
 during the operation. Do not point production webhooks at untrusted forks.
+
+## One repository release
+
+`ocd runners deploy <source-id|repository-url> --commit=<full-sha>` builds and
+reconciles all attached stacks as one durable operation, using the exact current
+branch head. It follows an active release for the same commit and refuses to
+compete with another active revision. `ocd ops retry <id>` resumes a failed release;
+successful members remain checkpoints. Each built/reused digest is persisted in the
+operation. Stacks use `release_order`; members use `needs` and output references.
+Local BuildKit cache is retained up to 12 GB when disk pressure requires pruning.

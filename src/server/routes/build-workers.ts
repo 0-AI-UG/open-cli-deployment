@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireCliPermission, requirePermission } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import { enqueue } from "../ipc/enqueue.ts";
 import * as db from "../../shared/db.ts";
@@ -150,4 +150,35 @@ export async function handleRotateBuildSourceWebhook(request: Request, sourceId:
   } catch (error) {
     return handleError(error);
   }
+}
+
+/** One durable release for every stack attached to a repository source. */
+export async function handleDeployBuildSource(request: Request, sourceId: number): Promise<Response> {
+  try {
+    // Repository releases may add members; require the unscoped deployment grant.
+    const actor = await requireCliPermission(request, "apps.deploy");
+    const source = db.getBuildSource(sourceId);
+    if (!source) return Response.json({ error: "Build source not found" }, { status: 404, headers: corsHeaders });
+    const body = await request.json() as { commit?: unknown };
+    const commit = String(body.commit ?? "").toLowerCase();
+    if (!/^[a-f0-9]{40,64}$/.test(commit) || /^0+$/.test(commit)) {
+      return Response.json({ error: "A full immutable Git commit is required" }, { status: 400, headers: corsHeaders });
+    }
+    const active = db.listActiveBuildSourceDeliveries(sourceId).find((delivery) => delivery.operation_id != null);
+    if (active) {
+      if (active.commit_sha === commit) return Response.json({ op_id: active.operation_id, reused: true }, { status: 202, headers: corsHeaders });
+      return Response.json({ error: `Repository release #${active.operation_id} is still active` }, { status: 409, headers: corsHeaders });
+    }
+    const deliveryId = `release:${crypto.randomUUID()}`;
+    db.recordBuildSourceDelivery({ sourceId, deliveryId, commitSha: commit, eventAt: new Date().toISOString() });
+    const { opId } = enqueue({
+      kind: "webhook_build_source", resourceKeys: [`build-source:${sourceId}`],
+      input: { sourceId, commit, deliveryId }, trigger: actor.client === "cli" ? "cli" : "ui",
+      triggeredBy: actor.userId, idempotencyKey: deliveryId,
+    });
+    db.attachBuildSourceDeliveryOperation({ sourceId, deliveryId, operationId: opId });
+    db.updateBuildSourceDelivery(sourceId, { last_delivery_id: deliveryId, last_commit: commit,
+      last_status: "queued", last_error: "", last_received_at: new Date().toISOString() });
+    return Response.json({ op_id: opId }, { status: 202, headers: corsHeaders });
+  } catch (error) { return handleError(error); }
 }

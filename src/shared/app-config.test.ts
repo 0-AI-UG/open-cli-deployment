@@ -120,6 +120,18 @@ describe("desired app configuration", () => {
     expect(db.getEnvironment(env.id)).not.toBeNull();
   });
 
+  test("an explicit identical candidate rollout commits the revision used by its replicas", async () => {
+    const { app } = seedApp();
+    const request = { app_name: app.name, image_ref: app.image_ref, container_port: 3000, env: {} };
+    await applyAppConfig(app.id, request);
+    const before = db.getApp(app.id)!;
+    expect(diffAppConfig(before, request)).toEqual([]);
+    await applyAppConfig(app.id, request, { forceRevision: true });
+    expect(db.getApp(app.id)!.config_revision).toBe(before.config_revision + 1);
+    await applyAppConfig(app.id, request);
+    expect(db.getApp(app.id)!.config_revision).toBe(before.config_revision + 1);
+  });
+
   test("runtime config remains app-local and literal values are redacted from diffs", async () => {
     const {app,env} = seedApp();
     const request = {app_name:app.name,image_ref:app.image_ref,container_port:3000,environment_id:env.id,env:{TOKEN:"private-literal"}};

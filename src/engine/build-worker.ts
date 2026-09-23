@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { posix } from "node:path";
 import type { ServerRow } from "../shared/db/servers.ts";
 import { sshExec, sshExecStreaming, sshExecWithStdin, dockerLoginRegistry, asUser } from "../shared/remote/index.ts";
 
@@ -57,7 +59,7 @@ export function buildWorkerCleanupScript(root: string): string {
     `pid=$(cat ${shellQuote(activePid)}); ` +
     `case "$pid" in ''|*[!0-9]*) ;; *) [ "$pid" -le 1 ] || { kill -TERM -- "-$pid" 2>/dev/null || true; sleep 2; kill -KILL -- "-$pid" 2>/dev/null || true; } ;; esac; ` +
     `fi; rm -rf ${shellQuote(root)}; ` +
-    `su - deploy -c ${shellQuote(`flock -w 30 ${BUILD_LOCK} sh -c 'docker image prune -af >/dev/null 2>&1 || true; free=$(df -B1 --output=avail / | tail -1); if [ "$free" -lt 17179869184 ]; then docker buildx prune --builder ${BUILDX_BUILDER} -af --keep-storage 4GB >/dev/null 2>&1 || true; fi'`)}`;
+    `su - deploy -c ${shellQuote(`flock -w 30 ${BUILD_LOCK} sh -c 'docker image prune -af >/dev/null 2>&1 || true; free=$(df -B1 --output=avail / | tail -1); if [ "$free" -lt 12884901888 ]; then docker buildx prune --builder ${BUILDX_BUILDER} -af --keep-storage 12GB >/dev/null 2>&1 || true; fi'`)}`;
 }
 
 export function normalizeBuildWorkerName(value: string): string {
@@ -128,6 +130,7 @@ export type BuildTarget = {
   imageRepository: string;
   platform?: "linux/amd64";
   cache?: boolean;
+  inputs?: string[];
 };
 
 /** Targets with identical build inputs can publish one image to several
@@ -135,12 +138,34 @@ export type BuildTarget = {
 export function groupBuildTargets(targets: BuildTarget[]): BuildTarget[][] {
   const groups = new Map<string, BuildTarget[]>();
   for (const target of targets) {
-    const key = JSON.stringify([target.dockerfile, target.context, target.platform || BUILD_PLATFORM, target.cache !== false]);
+    const key = JSON.stringify([target.dockerfile, target.context, target.platform || BUILD_PLATFORM, target.cache !== false, target.inputs ? [...target.inputs].sort() : null]);
     const group = groups.get(key) ?? [];
     group.push(target);
     groups.set(key, group);
   }
   return [...groups.values()];
+}
+
+export function buildInputPaths(target: BuildTarget): string[] {
+  const paths = [...(target.inputs ?? [target.context]), target.dockerfile,
+    posix.join(target.context, ".dockerignore"), `${target.dockerfile}.dockerignore`];
+  for (const path of paths) {
+    if (!path || path.startsWith("/") || path.includes("\\") || path.split("/").includes("..") || /[\x00-\x1f*?\[\]:]/.test(path)) {
+      throw new Error(`Unsafe build input path: ${path}`);
+    }
+  }
+  return [...new Set(paths.map((path) => posix.normalize(path)))].sort();
+}
+
+export function buildInputFingerprint(repository: string, target: BuildTarget, tree: string): string {
+  return createHash("sha256").update(JSON.stringify([
+    "ocd-build-inputs-v1", repository, target.dockerfile, target.context,
+    target.platform || BUILD_PLATFORM, buildInputPaths(target), tree,
+  ])).digest("hex");
+}
+
+export function inspectedDigest(output: string): string | null {
+  return output.match(/^Digest:\s+(sha256:[a-f0-9]{64})\s*$/m)?.[1] ?? null;
 }
 
 export class BuildWorkerUnavailableError extends Error {
@@ -321,7 +346,37 @@ export async function buildCommitOnWorker(input: {
       const buildStarted = Date.now();
       const target = group[0];
       const tag = operationImageTag(target.imageRepository, input.operationId, input.commit);
-      const additionalTags = group.slice(1).map((member) => operationImageTag(member.imageRepository, input.operationId, input.commit));
+      const additionalTags = [...new Set(group.slice(1).map((member) => operationImageTag(member.imageRepository, input.operationId, input.commit)))].filter((value) => value !== tag);
+      // Opt-in input manifests are a contract that every COPY/bind input is listed.
+      // Existing manifests continue building normally until they declare that contract.
+      if (target.inputs && target.cache !== false) {
+        const paths = buildInputPaths(target);
+        const tree = await sshExec(server.ipv4, asUser(
+          `cd ${shellQuote(checkout)} && git --literal-pathspecs ls-tree -r -z HEAD -- ${paths.map(shellQuote).join(" ")} > .ocd-input-tree && base64 -w0 .ocd-input-tree`
+        ), hostKey);
+        if (tree.exitCode !== 0) throw new Error(`Could not fingerprint ${target.name}`);
+        const fingerprint = buildInputFingerprint(input.repository, target, tree.stdout.trim());
+        const reusable = new Map<string, string>();
+        for (const repository of new Set(group.map((member) => member.imageRepository))) {
+          const inputTag = `${repository}:ocd-input-${fingerprint}`;
+          const inspection = await sshExec(server.ipv4, asUser(
+            `${registryAuth?.envPrefix ?? ""}docker buildx imagetools inspect ${shellQuote(inputTag)}`
+          ), hostKey);
+          const digest = inspection.exitCode === 0 ? inspectedDigest(inspection.stdout) : null;
+          if (digest) reusable.set(repository, `${repository}@${digest}`);
+          additionalTags.push(inputTag);
+        }
+        if (reusable.size === new Set(group.map((member) => member.imageRepository)).size) {
+          for (const member of group) {
+            const ref = reusable.get(member.imageRepository)!;
+            refs.set(member.name, ref);
+            await input.onArtifact?.(member.name, ref);
+            input.onLog?.(`Reused ${member.name}: inputs ${fingerprint.slice(0, 12)} unchanged → ${ref}`);
+          }
+          continue;
+        }
+        input.onLog?.(`Build inputs ${fingerprint.slice(0, 12)}: ${group.map((member) => member.name).join(", ")}`);
+      }
       const metadata = `${root}/${target.name}.metadata.json`;
       input.onLog?.(`Building ${group.map((member) => member.name).join(", ")} → ${group.map((member) => member.imageRepository).join(", ")}`);
       const innerBuild =

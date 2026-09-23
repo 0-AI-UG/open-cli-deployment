@@ -694,9 +694,9 @@ export function updateAppStackManifestPath(id: number, path: string | null): voi
 
 /** Collapse the many column-level trigger bumps produced by one manifest
  * transaction into one externally-visible configuration revision. */
-export function normalizeAppConfigRevision(id: number, baseRevision: number): void {
+export function normalizeAppConfigRevision(id: number, baseRevision: number, force = false): void {
   const current = getApp(id);
-  if (!current || current.config_revision <= baseRevision) return;
+  if (!current || (!force && current.config_revision <= baseRevision)) return;
   db.query(
     `UPDATE apps SET config_revision = ?,
        rollout_requested_revision = CASE WHEN rollout_requested_revision > 0 THEN ? ELSE 0 END

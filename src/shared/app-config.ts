@@ -426,6 +426,7 @@ export async function applyAppConfig(
     userId?: string;
     log?: (line: string) => void;
     allowUnchangedLegacyVolumeIntent?: boolean;
+    forceRevision?: boolean;
   } = {},
 ): Promise<AppConfigChange[]> {
   const app = db.getApp(appId);
@@ -539,7 +540,7 @@ export async function applyAppConfig(
     });
   }
   if (opts.userId) db.updateAppDeployedBy(app.id, opts.userId);
-  db.normalizeAppConfigRevision(app.id, app.config_revision);
+  db.normalizeAppConfigRevision(app.id, app.config_revision, opts.forceRevision);
   if (effective.manifest_path && effective.manifest_hash) {
     db.recordAppManifestApplied(app.id, effective.manifest_path, effective.manifest_hash);
   }

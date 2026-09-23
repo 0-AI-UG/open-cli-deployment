@@ -190,6 +190,7 @@ const appBuild: Step<BuildAppDeliveryInput, BuiltOut> = {
       imageRepository: build.image_repository,
       platform: build.platform,
       cache: build.cache,
+      inputs: build.inputs,
     }]);
   },
   async probe(ctx) {
@@ -202,6 +203,7 @@ const appBuild: Step<BuildAppDeliveryInput, BuiltOut> = {
       imageRepository: build.image_repository,
       platform: build.platform,
       cache: build.cache,
+      inputs: build.inputs,
     }]);
   },
 };
@@ -270,6 +272,7 @@ const stackBuild: Step<BuildStackDeliveryInput, BuiltOut> = {
         imageRepository: app.build!.image_repository,
         platform: app.build!.platform,
         cache: app.build!.cache,
+        inputs: app.build!.inputs,
       })),
     );
   },
@@ -297,6 +300,7 @@ const stackBuild: Step<BuildStackDeliveryInput, BuiltOut> = {
         imageRepository: app.build!.image_repository,
         platform: app.build!.platform,
         cache: app.build!.cache,
+        inputs: app.build!.inputs,
       })),
     );
   },

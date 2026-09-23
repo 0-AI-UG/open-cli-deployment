@@ -2,11 +2,11 @@ import { useTempDataDir, randomSuffix } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { describe, expect, mock, test } from "bun:test";
-mock.module("../lib/permissions.ts", () => ({ requirePermission: async () => ({ userId: "admin", client: "cli" }) }));
+mock.module("../lib/permissions.ts", () => ({ requirePermission: async () => ({ userId: "admin", client: "cli" }), requireCliPermission: async () => ({ userId: "admin", client: "cli" }) }));
 
 import * as db from "../../shared/db.ts";
 import { getOperation } from "../../shared/db/operations.ts";
-import { handleInstallBuildWorker, handleRemoveBuildWorker } from "./build-workers.ts";
+import { handleDeployBuildSource, handleInstallBuildWorker, handleRemoveBuildWorker } from "./build-workers.ts";
 
 function request(body: unknown): Request {
   return new Request("http://localhost/api/runners", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -42,4 +42,22 @@ describe("OCD build worker route", () => {
     expect(response.status).toBe(202);
     expect(getOperation((await response.json() as any).op_id)?.kind).toBe("remove_build_worker");
   });
+});
+
+
+test("repository release validates commits, joins the same delivery, and rejects overlaps", async () => {
+  const suffix = randomSuffix();
+  const server = db.insertServer({ name: `release-${suffix}`, provider_id: `release-${suffix}`, ipv4: "203.0.113.23", ipv6: "", type: "cx23", location: "nbg1", status: "ready" });
+  const worker = db.insertBuildWorker({ serverId: server.id, name: `release-${suffix}`, previousPool: "general" });
+  const source = db.upsertBuildSource({ repository: `https://github.com/test/${suffix}.git`, branch: "main", workerId: worker.id });
+  expect((await handleDeployBuildSource(request({ commit: "main" }), source.id)).status).toBe(400);
+  expect((await handleDeployBuildSource(request({ commit: "0".repeat(40) }), source.id)).status).toBe(400);
+  const first = await handleDeployBuildSource(request({ commit: "a".repeat(40) }), source.id);
+  expect(first.status).toBe(202);
+  const { op_id } = await first.json() as any;
+  expect(getOperation(op_id)?.kind).toBe("webhook_build_source");
+  expect(JSON.parse(getOperation(op_id)!.input_json).commit).toBe("a".repeat(40));
+  const joined = await handleDeployBuildSource(request({ commit: "a".repeat(40) }), source.id);
+  expect(await joined.json()).toEqual({ op_id, reused: true });
+  expect((await handleDeployBuildSource(request({ commit: "b".repeat(40) }), source.id)).status).toBe(409);
 });

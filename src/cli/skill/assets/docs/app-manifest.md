@@ -134,3 +134,11 @@ Each app has isolated topics, including staging targets. Increment `generation`
 to rotate credentials; old credentials retire after rollout attestation.
 Removing `notifications` removes the bindings. Admin → Panel → Shared notifications configures
 personal platform alerts independently of application messages.
+
+`build.inputs` optionally declares the complete literal repository-relative files
+and directories consumed by a Dockerfile. OCD fingerprints their Git tree entries,
+the Dockerfile and Docker ignore rules, recipe, platform and repository. An
+unchanged fingerprint reuses a registry-verified immutable digest across commits;
+missing cached artifacts build normally. Include every COPY/bind source and update
+this list when adding inputs. Omit it to always invoke BuildKit; `cache: false`
+disables reuse too. Input tags are transport only, never runtime image identity.

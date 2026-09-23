@@ -191,6 +191,7 @@ const build: Step<WebhookBuildSourceInput, Built> = {
               imageRepository: manifest.build.image_repository,
               platform: manifest.build.platform,
               cache: manifest.build.cache,
+              inputs: manifest.build.inputs,
             });
           }
           const stackIds = [...new Set(apps.map((app) => app.stack_id).filter((id): id is number => id != null))];
@@ -217,6 +218,7 @@ const build: Step<WebhookBuildSourceInput, Built> = {
                 imageRepository: manifest.build.image_repository,
                 platform: manifest.build.platform,
                 cache: manifest.build.cache,
+                inputs: manifest.build.inputs,
               });
             }
           }
@@ -338,7 +340,14 @@ const reconcile: Step<WebhookBuildSourceInput, { childIds: number[] }> = {
       });
     }
 
-    for (const [stackId, members] of stacks) {
+    const orderedStacks = [...stacks].sort(([, left], [, right]) => {
+      const order = (members: AppRow[]) => {
+        const path = members[0].stack_manifest_path;
+        return path && built.files[path] ? parseJson<StackManifest>(built.files[path], path).release_order ?? 0 : 0;
+      };
+      return order(left) - order(right);
+    });
+    for (const [stackId, members] of orderedStacks) {
       const stack = db.getStack(stackId);
       if (!stack) throw new Error(`Stack ${stackId} disappeared`);
       const stackPath = members[0].stack_manifest_path;

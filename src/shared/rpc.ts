@@ -120,6 +120,7 @@ export type DeployRequest = {
     image_repository: string;
     platform?: "linux/amd64";
     cache?: boolean;
+    inputs?: string[];
     webhook?: boolean;
   };
   domain?: string;

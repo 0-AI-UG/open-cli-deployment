@@ -127,6 +127,20 @@ async function webhookSecret(args: string[]): Promise<void> {
   console.log(`${DIM}Select only the GitHub push event. Rotating this value invalidates the previous secret immediately.${RESET}`);
 }
 
+async function deploySource(args: string[]): Promise<void> {
+  const ref = args[0];
+  const commit = valueFlag(args, "commit");
+  if (!ref || !commit || !/^[a-f0-9]{40,64}$/i.test(commit)) throw new Error("Usage: ocd runners deploy <source-id|repository-url> --commit=<sha>");
+  const sources = await get<Source[]>("/api/build-sources");
+  const canonical = (value: string) => value.replace(/\.git$/, "").replace(/\/$/, "").toLowerCase();
+  const source = sources.find((item) => String(item.id) === ref || canonical(item.repository) === canonical(ref));
+  if (!source) throw new Error(`Build source not found: ${ref}`);
+  const result = await post<{ op_id: number }>(`/api/build-sources/${source.id}/deploy`, { commit });
+  const operation = await followOp(result.op_id);
+  if (!operation.ok) throw new Error(`${operation.error || "Repository release incomplete"}; resume with: ocd ops retry ${result.op_id}`);
+  console.log(`${GREEN}Repository release #${result.op_id} complete (${commit.slice(0, 12)}).${RESET}`);
+}
+
 function usage(): void {
   console.log(`${BOLD}Usage:${RESET} ocd runners <command>
 
@@ -141,6 +155,9 @@ ${BOLD}Commands:${RESET}
 
   remove <name|id>
       Remove the worker and restore its server's previous capacity pool.
+
+  deploy <source-id|repository-url> --commit=<sha>
+      Build changed inputs and reconcile all repository stacks as one durable release.
 
   sources
       List repository/branch webhook sources created by manifest deploys.
@@ -164,6 +181,7 @@ export async function runners(args: string[] = []): Promise<void> {
     case "install": return installWorker(rest);
     case "remove":
     case "delete": return removeWorker(rest);
+    case "deploy": return deploySource(rest);
     case "sources": return listSources();
     case "webhook-secret": return webhookSecret(rest);
     case "bootstrap": return ensureBuildReadiness();

@@ -415,6 +415,7 @@ const commitCandidateConfig: Step<RedeployInput, { committed: boolean; configRev
       userId: ctx.input.userId,
       log: (line) => ctx.log(`[config] ${line}`),
       allowUnchangedLegacyVolumeIntent: ctx.input.allowUnchangedLegacyVolumeIntent,
+      forceRevision: true,
     });
     await commitManifestDeliverySource(before.id, ctx.input.candidate.delivery_source);
     const after = db.getApp(before.id);

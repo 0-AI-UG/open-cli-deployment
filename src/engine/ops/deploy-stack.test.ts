@@ -146,6 +146,9 @@ describe("stack member convergence checkpoints", () => {
       configRevision: appRow.config_revision,
     });
 
+    const unchanged = { ...app("redis"), image_ref: digest, git_commit: "c".repeat(40) };
+    const preflight = await preflightAppsStep.run(makeCtx(req(`stable-${randomSuffix()}`, [unchanged])), {}) as { sourceRevisionByKey: Record<string, string> };
+    expect(preflight.sourceRevisionByKey.redis).toBe(`artifact:${digest}`);
     expect(await stackAppAlreadyConverged(appRow, `artifact:${digest}`)).toEqual({
       converged: true,
       reason: "source, config, environment, replicas, and links match",

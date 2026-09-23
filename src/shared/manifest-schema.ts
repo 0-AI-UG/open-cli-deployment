@@ -118,6 +118,8 @@ const buildSchema = z.object({
   ),
   /** Builds are reproducible on the fleet's explicitly supported runtime ABI. */
   platform: z.literal("linux/amd64", { error: "expected linux/amd64" }).optional(),
+  /** Complete repository-relative files/directories consumed by this build. */
+  inputs: z.array(z.string().min(1).refine((p) => !p.startsWith("/") && !p.includes("\\") && !p.split("/").includes("..") && !/[\x00-\x1f*?\[\]:]/.test(p), "expected a literal repository-relative path")).min(1).optional(),
   /** Registry-backed BuildKit cache is enabled by default; false disables it. */
   cache: z.boolean({ error: "expected boolean" }).optional(),
   /** Signed GitHub pushes trigger an OCD build and full manifest reconcile. */
@@ -452,6 +454,8 @@ export const StackManifestSchema = z
     $llm: z.unknown().optional(),
     name: nonEmptyString("expected a non-empty string"),
     description: z.string({ error: "expected string" }).optional(),
+    /** Lower numbers reconcile first in repository releases. */
+    release_order: z.number().int().optional(),
     /** Existing shared production environment selected by name. */
     environment: nonEmptyString("expected a non-empty environment name").optional(),
     /** Existing shared staging environment selected by name; null disables it. */

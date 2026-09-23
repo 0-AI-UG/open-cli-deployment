@@ -31,8 +31,8 @@ describe("build worker command safety", () => {
     expect(script).toContain('kill -KILL -- "-$pid"');
     expect(script).toContain("flock -w 30 /opt/ocd-build-worker/build.lock");
     expect(script).toContain(`docker buildx prune --builder ${BUILDX_BUILDER}`);
-    expect(script).toContain("--keep-storage 4GB");
-    expect(script).toContain("17179869184");
+    expect(script).toContain("--keep-storage 12GB");
+    expect(script).toContain("12884901888");
   });
 
   test("installs the host-lock utilities", () => {
@@ -112,5 +112,29 @@ describe("build worker command safety", () => {
     expect(remoteBranchHead(`${commit}\trefs/heads/main\n`)).toBe(commit.toLowerCase());
     expect(remoteBranchHead("fatal: authentication failed\n")).toBe("");
     expect(remoteBranchHead("abc\trefs/heads/main\n")).toBe("");
+  });
+});
+
+describe("build input identity", () => {
+  test("hashes complete inputs independently of commit or application role", async () => {
+    const { buildInputFingerprint, buildInputPaths } = await import("./build-worker.ts");
+    const target = { name: "web", dockerfile: "deploy/Dockerfile", context: ".", imageRepository: "example.com/app", inputs: ["src", "package.json"] };
+    expect(buildInputPaths(target)).toEqual([".dockerignore", "deploy/Dockerfile", "deploy/Dockerfile.dockerignore", "package.json", "src"]);
+    const hash = buildInputFingerprint("https://example.com/repo.git", target, "tree-one");
+    expect(buildInputFingerprint("https://example.com/repo.git", { ...target, name: "scan", inputs: ["package.json", "src"] }, "tree-one")).toBe(hash);
+    expect(buildInputFingerprint("https://example.com/repo.git", target, "changed-file-mode-or-blob")).not.toBe(hash);
+    expect(buildInputFingerprint("https://example.com/another.git", target, "tree-one")).not.toBe(hash);
+    expect(buildInputFingerprint("https://example.com/repo.git", { ...target, inputs: ["src"] }, "tree-one")).not.toBe(hash);
+    for (const path of ["../secrets", "/tmp", ":(exclude)src", "src/*", "src\nother"]) {
+      expect(() => buildInputPaths({ ...target, inputs: [path] })).toThrow("Unsafe build input");
+    }
+  });
+
+  test("only accepts a registry-reported complete immutable digest", async () => {
+    const { inspectedDigest } = await import("./build-worker.ts");
+    const digest = `sha256:${"a".repeat(64)}`;
+    expect(inspectedDigest(`Name: registry.example.com/app:input\nDigest: ${digest}\n`)).toBe(digest);
+    expect(inspectedDigest("Digest: sha256:abc\n")).toBeNull();
+    expect(inspectedDigest(`error ${digest}`)).toBeNull();
   });
 });

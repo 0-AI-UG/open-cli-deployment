@@ -143,6 +143,7 @@ import {
 } from "./scaling.ts";
 import { handleDeleteServer, handleSetServerPool, handleGetServers } from "./servers.ts";
 import {
+  handleDeployBuildSource,
   handleGetBuildWorkers,
   handleInstallBuildWorker,
   handleRemoveBuildWorker,
@@ -369,6 +370,13 @@ type Case = {
 };
 
 const CASES: Case[] = [
+  {
+    name: "runners: handleDeployBuildSource",
+    permission: "apps.deploy",
+    extra: ["cli.access"],
+    cli: true,
+    call: (c) => handleDeployBuildSource(req("/api/build-sources/999999/deploy", { token: c.token, body: { commit: "a".repeat(40) } }), 999999),
+  },
   // --- apps ----------------------------------------------------------------
   {
     name: "environments: handleGetDeletedEnvironments",
