@@ -491,10 +491,23 @@ async function convergeAndTrack(server: ServerAccess, rendered: string): Promise
   }
 }
 
-async function convergeAndTrackLocked(server: ServerAccess, rendered: string): Promise<void> {
+async function convergeAndTrackLocked(
+  server: ServerAccess,
+  rendered: string,
+  waitForLockMs = 0,
+): Promise<void> {
   if (server.id === undefined) return convergeAndTrack(server, rendered);
   const keys = [`server:${server.id}`];
-  const lock = tryAcquire(keys, NON_OP_HOLDER, "reconcile:proxy");
+  const deadline = Date.now() + waitForLockMs;
+  let lock = tryAcquire(keys, NON_OP_HOLDER, "reconcile:proxy");
+  // The network and proxy controllers share a 30-second schedule. If network
+  // reconciliation locks the first server on every tick, skipping a busy lock
+  // can starve that server's proxy forever. Wait briefly for routine locks;
+  // immediate topology pushes still skip locks held by deployments.
+  while (!lock.ok && Date.now() < deadline) {
+    await Bun.sleep(Math.min(250, deadline - Date.now()));
+    lock = tryAcquire(keys, NON_OP_HOLDER, "reconcile:proxy");
+  }
   if (!lock.ok) return;
   try {
     await convergeAndTrack(server, rendered);
@@ -512,7 +525,7 @@ export async function reconcileProxy(): Promise<void> {
   await pruneProxyBuildCache();
   const state = collectDesiredState();
   const rendered = renderProxyConfigJson(state);
-  await Promise.all(getAllServerAccess().map((server) => convergeAndTrackLocked(server, rendered)));
+  await Promise.all(getAllServerAccess().map((server) => convergeAndTrackLocked(server, rendered, 10_000)));
 }
 
 // --- Immediate topology push -------------------------------------------------

@@ -9,6 +9,7 @@ import {
   waitForServer,
   captureHostKey,
   sshExec,
+  ensureOcdNetwork,
 } from "../../shared/remote/index.ts";
 import { ensureNetwork as ensureSharedNetwork } from "../network.ts";
 import { registerOp } from "./registry.ts";
@@ -256,6 +257,7 @@ const runCloudInit: Step<ProvisionInput, { ok: true }> = {
       throw new Error("Server provisioned but Docker was not installed — server setup may have failed.");
     }
     ctx.log(`Docker verified: ${dockerCheck.stdout.trim()}`);
+    await ensureOcdNetwork(cloud.ipv4);
     return { ok: true };
   },
 };

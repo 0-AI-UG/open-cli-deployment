@@ -24,6 +24,7 @@ mock.module("../../shared/remote/index.ts", () => ({
 }));
 
 import * as db from "../../shared/db.ts";
+import { tryAcquire, release } from "../scheduler.ts";
 import {
   probeServerProxy,
   reconcileProxy,
@@ -59,6 +60,33 @@ function access(ipv4: string): ServerAccess {
 beforeEach(() => {
   sshExec.mockClear();
   sshExec.mockImplementation(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
+});
+
+test("scheduled proxy reconciliation waits for a transient server lock", async () => {
+  const target = "198.51.100.75";
+  const server = makeServer(target, "10.0.75.2");
+  const keys = [`server:${server.id}`];
+  expect(tryAcquire(keys, 9001, "test").ok).toBe(true);
+  const version = await desiredProxyVersion();
+  sshExec.mockImplementation(async (_host: string, cmd: string) => ({
+    exitCode: 0,
+    stdout: cmd.includes("--version") && cmd.includes("is-active ocd-proxy")
+      ? `x86_64|${version}|active|x|y|{"ok":true}\n`
+      : "",
+    stderr: "",
+  }));
+
+  const unlock = setTimeout(() => release(keys), 50);
+  try {
+    await reconcileProxy();
+  } finally {
+    clearTimeout(unlock);
+    release(keys);
+  }
+
+  expect((sshExec.mock.calls as unknown as Array<[string, string]>).some(
+    ([host, cmd]) => host === target && cmd.includes("is-active ocd-proxy"),
+  )).toBe(true);
 });
 
 describe("probeServerProxy", () => {

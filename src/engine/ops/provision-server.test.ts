@@ -4,11 +4,13 @@ useTempDataDir();
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const compute = makeFakeComputeProvider();
+const ensureOcdNetwork = mock(async () => {});
 mock.module("../../shared/remote/index.ts", () => ({
   getOrCreateLocalKeyPair: mock(async () => ({ publicKey: "ssh-ed25519 test" })),
   waitForServer: mock(async () => {}),
   captureHostKey: mock(async () => "host-key"),
   sshExec: mock(async () => ({ exitCode: 0, stdout: "Docker version test", stderr: "" })),
+  ensureOcdNetwork,
 }));
 mock.module("../network.ts", () => ({ ensureNetwork: mock(async () => "net-1") }));
 
@@ -44,6 +46,14 @@ beforeEach(() => {
   compute._mocks.createServer.mockClear();
   compute._mocks.getServer.mockClear();
   compute.listServers = async () => [];
+  ensureOcdNetwork.mockClear();
+});
+
+test("provisioning creates the app Docker bridge before marking a host ready", async () => {
+  await step("run_cloud_init").run(ctx({ serverType: "cx22", location: "fsn1" }), {
+    create_cloud_server: { ipv4: "198.51.100.80" },
+  } as any);
+  expect(ensureOcdNetwork).toHaveBeenCalledWith("198.51.100.80");
 });
 
 describe("provision_server crash identity", () => {

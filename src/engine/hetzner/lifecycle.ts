@@ -154,9 +154,12 @@ export async function containerRunning(
 // --- Docker Network ---
 
 export async function ensureOcdNetwork(ip: string, hostKey?: string): Promise<void> {
-  await sshExec(
+  const result = await sshExec(
     ip,
     `su - deploy -c "docker network inspect ocd-net >/dev/null 2>&1 || docker network create ocd-net"`,
     hostKey
   );
+  if (result.exitCode !== 0) {
+    throw new Error(`Could not create ocd-net on ${ip}: ${result.stderr || result.stdout}`);
+  }
 }

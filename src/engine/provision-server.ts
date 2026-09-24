@@ -1,6 +1,6 @@
 import * as db from "../shared/db.ts";
 import { requireDefaultInfrastructureProvider } from "../shared/infrastructure.ts";
-import { getOrCreateLocalKeyPair, waitForServer, captureHostKey, ensureHostLogPolicy } from "../shared/remote/index.ts";
+import { getOrCreateLocalKeyPair, waitForServer, captureHostKey, ensureHostLogPolicy, ensureOcdNetwork } from "../shared/remote/index.ts";
 import { sshExec } from "../shared/remote/index.ts";
 import { ensureNetwork as ensureSharedNetwork } from "./network.ts";
 import type { ProgressFn, Server } from "./scale/types.ts";
@@ -160,6 +160,7 @@ export async function provisionServer(opts: {
     throw new Error("Server provisioned but Docker was not installed — server setup may have failed. Try deleting the server and deploying again.");
   }
   log("provision", `Docker verified: ${dockerCheck.stdout.trim()}`);
+  await ensureOcdNetwork(serverIp);
 
   // Capture SSH host key for future verification
   const hostKey = await captureHostKey(serverIp);
