@@ -9,13 +9,12 @@ import {
   LogOut,
   Menu,
   Server,
-  Settings,
   Terminal,
   TerminalSquare,
   User,
   Users,
 } from "lucide-react";
-import { useAuth, logout, can } from "../stores/auth.ts";
+import { useAuth, logout } from "../stores/auth.ts";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
 import { MobileActionSheet, MobileSheetAction } from "./mobile-action-sheet.tsx";
 import { SkillInstallMenu } from "./skill-install-menu.tsx";
@@ -78,7 +77,7 @@ function DesktopNav({ user, hash }: { user: ReturnType<typeof useAuth>["user"]; 
         </a>
         <div className="h-4 w-px shrink-0 bg-fg/30" />
         <div className="flex items-center">
-          {[...navItems, ...(can("panel.view") ? [{ hash: "#/panel", label: "Panel", icon: Settings, match: /^#\/panel/ }] : [])].map((item) => {
+          {navItems.map((item) => {
             const active = item.match.test(hash);
             const Icon = item.icon;
             return (
@@ -183,7 +182,7 @@ function MobileNav({ hash }: { hash: string }) {
               </a>
             );
           })}
-          <button onClick={() => setMoreOpen(true)} className={`flex flex-col items-center justify-center gap-1 font-mono text-[9px] font-bold uppercase ${moreOpen || hash.startsWith("#/environments") || hash.startsWith("#/engine") || hash.startsWith("#/panel") || hash.startsWith("#/admin") || hash.startsWith("#/account") ? "bg-accent text-fg" : "text-muted"}`}>
+          <button onClick={() => setMoreOpen(true)} className={`flex flex-col items-center justify-center gap-1 font-mono text-[9px] font-bold uppercase ${moreOpen || hash.startsWith("#/environments") || hash.startsWith("#/engine") || hash.startsWith("#/admin") || hash.startsWith("#/account") ? "bg-accent text-fg" : "text-muted"}`}>
             <Menu size={20} /><span>More</span>
           </button>
         </div>
@@ -192,7 +191,6 @@ function MobileNav({ hash }: { hash: string }) {
       <MobileActionSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="OCD Menu" subtitle={user?.username}>
         <MobileSheetAction icon={<Layers size={19} />} label="Environments" detail="Variables, secrets, and rollout behavior" onClick={() => { window.location.hash = "#/environments"; }} />
         <MobileSheetAction icon={<Cpu size={19} />} label="Operations" detail="Progress, logs, and recovery actions" onClick={() => { window.location.hash = "#/engine"; }} />
-        {can("panel.view") && <MobileSheetAction icon={<Settings size={19} />} label="Panel" detail="Status and releases" onClick={() => { window.location.hash = "#/panel"; }} />}
         {user?.isAdmin && <MobileSheetAction icon={<Users size={19} />} label="Admin" detail="Setup, integrations, and users" onClick={() => { window.location.hash = "#/admin"; }} />}
         <MobileSheetAction icon={<User size={19} />} label="Account" detail="Security and profile" onClick={() => { window.location.hash = "#/account"; }} />
         <MobileCliCopyButton />

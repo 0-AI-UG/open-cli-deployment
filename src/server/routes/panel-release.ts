@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAdmin } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
@@ -112,7 +112,7 @@ export async function handlePanelReleaseWebhook(request: Request): Promise<Respo
 
 export async function handleGetPanelReleaseWebhook(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.manage");
+    await requireAdmin(request);
     return Response.json(
       {
         configured: !!(await secretStore.get(PANEL_RELEASE_SECRET_KEY)),
@@ -127,7 +127,7 @@ export async function handleGetPanelReleaseWebhook(request: Request): Promise<Re
 
 export async function handleRotatePanelReleaseWebhook(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.manage");
+    await requireAdmin(request);
     const secret = randomBytes(32).toString("hex");
     await secretStore.set(PANEL_RELEASE_SECRET_KEY, secret);
     return Response.json(

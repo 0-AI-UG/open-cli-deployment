@@ -5,7 +5,6 @@ import { get, post, del, put } from "../../api/client.ts";
 import { Card, Btn, Table, Spinner, Field, Divider, InfoTip, showToast, confirm, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
 import { TabBar } from "../../components/tab-bar.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
-import { PermissionGate } from "../../components/permission-gate.tsx";
 import { useServerTypes, typeOptions, locationOptions } from "../../hooks/use-server-types.ts";
 import { ArrowRight, Bell, Users, Plus, Trash2, Shield, ShieldCheck, Key, ShieldAlert, Save, RefreshCw, Server as ServerIcon, Settings, Copy, Check, Hammer, Cloud } from "lucide-react";
 import type { PanelApp, DeploymentRecord } from "../../types.ts";
@@ -988,7 +987,7 @@ export function UsersPage() {
 
           {panel.dns_instruction && <DnsInstructionView value={panel.dns_instruction} />}
 
-          <PermissionGate permission="panel.manage">
+          <div>
             <div className="pt-2 space-y-4">
               <div className="border-2 border-fg bg-alt/30 p-4 space-y-3">
                 <div className="font-mono text-[10px] font-bold uppercase">Manual panel redeploy</div>
@@ -1017,7 +1016,7 @@ export function UsersPage() {
               </Btn>
               </div>}
             </div>
-          </PermissionGate>
+          </div>
 
           {panelDeployments.length > 0 && (
             <div className="pt-1">

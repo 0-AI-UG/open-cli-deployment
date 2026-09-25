@@ -102,13 +102,6 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
     ],
   },
   {
-    label: "Control Plane",
-    permissions: [
-      { key: "panel.view", label: "View panel status, logs and deployments" },
-      { key: "panel.manage", label: "Release immutable panel images" },
-    ],
-  },
-  {
     label: "Terminal",
     permissions: [
       { key: "terminal.container", label: "Shell into a container" },

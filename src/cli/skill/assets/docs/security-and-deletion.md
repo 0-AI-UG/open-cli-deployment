@@ -45,7 +45,7 @@ Scaling/infrastructure:
 - `servers.create`, `servers.manage`, `servers.delete`;
 - `volumes.delete`, `volumes.files.read`;
 - `resources.view`, `resources.delete`;
-- `operations.cancel`, `operations.manage`, `panel.view`, `panel.manage`;
+- `operations.cancel`, `operations.manage`;
 - `terminal.container`, `terminal.host`.
 
 Scopes:

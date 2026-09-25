@@ -161,7 +161,7 @@ import {
   handleCreateConfirmation,
 } from "./confirmations.ts";
 import { handleListOperations, handleCancelOperation, handleRetryOperation, handleFinalizeOperation } from "./operations.ts";
-import { handleGetPanel, handleRedeployPanel, handleGetLatestPanelRelease, handleRedeployLatestPanel } from "./panel.ts";
+import { handleGetPanel, handleRedeployPanel, handleGetLatestPanelRelease, handleRedeployLatestPanel, handleGetPanelLogs, handleGetPanelDeployments } from "./panel.ts";
 import { handleGetServerTypes, handleGetSettings } from "./settings.ts";
 import {
   handleGetPanelReleaseWebhook,
@@ -835,38 +835,6 @@ const CASES: Case[] = [
     },
   },
 
-  // --- panel ----------------------------------------------------------------
-  {
-    name: "panel: handleGetPanel",
-    permission: "panel.view",
-    call: (c) => handleGetPanel(req("/api/panel", { token: c.token })),
-  },
-  {
-    name: "panel: handleRedeployPanel",
-    permission: "panel.manage",
-    call: (c) => handleRedeployPanel(req("/api/panel/redeploy", { body: {}, token: c.token })),
-  },
-  {
-    name: "panel: handleGetLatestPanelRelease",
-    permission: "panel.manage",
-    call: (c) => handleGetLatestPanelRelease(req("/api/admin/panel/latest-release", { token: c.token })),
-  },
-  {
-    name: "panel: handleRedeployLatestPanel",
-    permission: "panel.manage",
-    call: (c) => handleRedeployLatestPanel(req("/api/admin/panel/latest-release", { body: {}, token: c.token })),
-  },
-  {
-    name: "panel: handleGetPanelReleaseWebhook",
-    permission: "panel.manage",
-    call: (c) => handleGetPanelReleaseWebhook(req("/api/admin/panel/release-webhook", { token: c.token })),
-  },
-  {
-    name: "panel: handleRotatePanelReleaseWebhook",
-    permission: "panel.manage",
-    call: (c) => handleRotatePanelReleaseWebhook(req("/api/admin/panel/release-webhook", { body: {}, token: c.token })),
-  },
-
   // --- terminal -------------------------------------------------------------
   {
     name: "terminal-exec: host shell",
@@ -940,6 +908,25 @@ describe.each(CASES.map((c) => [c.name, c] as const))("%s", (_name, c) => {
   } else {
     test.skip(`allow path not exercised: ${c.denyOnly} [${c.name}]`, () => {});
   }
+});
+
+test("panel maintenance stays admin-only even with every OCD permission and legacy panel grants", async () => {
+  const fullyPermitted = await userWith([...ALL_PERMISSIONS, "panel.view", "panel.manage"]);
+  const routes = [
+    handleGetPanel(req("/api/admin/panel", { token: fullyPermitted.token })),
+    handleRedeployPanel(req("/api/admin/panel/redeploy", { body: {}, token: fullyPermitted.token })),
+    handleGetLatestPanelRelease(req("/api/admin/panel/latest-release", { token: fullyPermitted.token })),
+    handleRedeployLatestPanel(req("/api/admin/panel/latest-release", { body: {}, token: fullyPermitted.token })),
+    handleGetPanelLogs(req("/api/admin/panel/logs", { token: fullyPermitted.token })),
+    handleGetPanelDeployments(req("/api/admin/panel/deployments", { token: fullyPermitted.token })),
+    handleGetPanelReleaseWebhook(req("/api/admin/panel/release-webhook", { token: fullyPermitted.token })),
+    handleRotatePanelReleaseWebhook(req("/api/admin/panel/release-webhook", { body: {}, token: fullyPermitted.token })),
+  ];
+  for (const result of await Promise.all(routes)) expect(result.status).toBe(403);
+
+  const admin = await userWith([], { admin: true });
+  expect((await handleGetPanel(req("/api/admin/panel", { token: admin.token }))).status).not.toBe(403);
+  expect((await handleRedeployPanel(req("/api/admin/panel/redeploy", { body: {}, token: admin.token }))).status).not.toBe(403);
 });
 
 // ---------------------------------------------------------------------------
@@ -1143,7 +1130,7 @@ describe("permission splits are enforced (the old coarse grant is not enough)", 
     expect(res.status).toBe(403);
   });
 
-  test("apps.redeploy does NOT allow redeploying the control plane (needs panel.manage)", async () => {
+  test("apps.redeploy does NOT allow redeploying the control plane (admin only)", async () => {
     const ctx = await userWith(["apps.redeploy"]);
     const res = await handleRedeployPanel(
       req("/api/panel/redeploy", { body: {}, token: ctx.token }),

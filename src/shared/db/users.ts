@@ -93,10 +93,6 @@ export const ALL_PERMISSIONS = [
   /** Cancel, retry, or finalize operations started by another user. */
   "operations.manage",
 
-  // --- Control plane ---------------------------------------------------
-  "panel.view",
-  "panel.manage",
-
   // --- Terminal --------------------------------------------------------
   "terminal.container",
   /** Shell on a fleet host. Root-equivalent; effectively an admin grant. */
@@ -119,7 +115,7 @@ export type Permission = typeof ALL_PERMISSIONS[number];
  *     (there is no app yet at deploy time), so a scoped grant is unsatisfiable.
  *
  *  Anything not listed here governs infrastructure no environment owns (servers,
- *  volumes, the panel, host terminal) and is global-only. `setUserPermissions`
+ *  volumes, host terminal) and is global-only. `setUserPermissions`
  *  drops scoped grants for anything absent.
  */
 export const PERMISSION_SCOPES: Readonly<Record<string, readonly ScopeType[]>> = {

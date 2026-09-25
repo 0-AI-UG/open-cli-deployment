@@ -1,7 +1,7 @@
 // Panel (hosted self) routes. Deliberately minimal: view state, redeploy,
 // view logs, view deployment history. No scale, no env editing, no delete.
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAdmin } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { redeployPanel, getPanelContainerLogs } from "../../engine/deploy/panel.ts";
@@ -10,7 +10,7 @@ import { latestMainPanelRelease } from "../lib/panel-main-release.ts";
 
 export async function handleGetPanel(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.view");
+    await requireAdmin(request);
     const panel = db.getPanel();
     if (!panel) {
       return Response.json({ panel: null }, { headers: corsHeaders });
@@ -36,9 +36,7 @@ export async function handleGetPanel(request: Request): Promise<Response> {
 
 export async function handleRedeployPanel(request: Request): Promise<Response> {
   try {
-    // Redeploying the control plane itself — governed by its own grant, not by
-    // any app-level permission.
-    await requirePermission(request, "panel.manage");
+    await requireAdmin(request);
     const body = await request.json() as { image?: string; commit?: string };
     if (!body.image) {
       return Response.json({ ok: false, error: "image is required" }, { status: 400, headers: corsHeaders });
@@ -54,7 +52,7 @@ export async function handleRedeployPanel(request: Request): Promise<Response> {
 
 export async function handleGetLatestPanelRelease(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.manage");
+    await requireAdmin(request);
     const panel = db.getPanel();
     if (!panel) return Response.json({ error: "Panel is not configured" }, { status: 409, headers: corsHeaders });
     const release = await latestMainPanelRelease();
@@ -68,7 +66,7 @@ export async function handleGetLatestPanelRelease(request: Request): Promise<Res
 
 export async function handleRedeployLatestPanel(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.manage");
+    await requireAdmin(request);
     const panel = db.getPanel();
     if (!panel) return Response.json({ error: "Panel is not configured" }, { status: 409, headers: corsHeaders });
     const body = await request.json() as { commit?: unknown; image?: unknown };
@@ -85,7 +83,7 @@ export async function handleRedeployLatestPanel(request: Request): Promise<Respo
 
 export async function handleGetPanelLogs(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.view");
+    await requireAdmin(request);
     const url = new URL(request.url);
     const tail = parseInt(url.searchParams.get("tail") || "200", 10);
     const logs = await getPanelContainerLogs(tail);
@@ -97,7 +95,7 @@ export async function handleGetPanelLogs(request: Request): Promise<Response> {
 
 export async function handleGetPanelDeployments(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "panel.view");
+    await requireAdmin(request);
     const deployments = db.getPanelDeployments();
     return Response.json(deployments, { headers: corsHeaders });
   } catch (error) {

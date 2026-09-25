@@ -1,8 +1,7 @@
 # Panel backups and notifications
 
-Open **Admin → Panel** for backups, recovery, and shared notification settings.
-The operational **Panel** page shows status, releases, deployments, and logs to
-users with `panel.view`. Redeployment requires `panel.manage`.
+Open **Admin → Panel** for panel releases, backups, recovery, and shared
+notification settings. Only administrators can manage the panel itself.
 
 The **Manual panel redeploy** card resolves the current `main` commit to its
 published, immutable GHCR image and lets an operator redeploy it with one

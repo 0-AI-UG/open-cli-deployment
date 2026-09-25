@@ -17,7 +17,6 @@ import { VolumeDetailPage } from "./pages/volume-detail.tsx";
 import { BucketDetailPage } from "./pages/bucket-detail.tsx";
 import { ServerDetailPage } from "./pages/server-detail.tsx";
 import { AccountPage } from "./pages/account.tsx";
-import { PanelPage } from "./pages/panel.tsx";
 import { UsersPage } from "./pages/admin/users.tsx";
 import { UserDetailPage } from "./pages/admin/user-detail.tsx";
 import { TerminalPage } from "./pages/terminal.tsx";
@@ -175,8 +174,6 @@ export function App() {
     content = <ResourcesPage />;
   } else if (hash === "#/account") {
     content = <AccountPage />;
-  } else if (hash === "#/panel") {
-    content = <PanelPage />;
   } else if (hash === "#/admin") {
     content = <UsersPage />;
   } else if (hash.startsWith("#/admin/")) {
