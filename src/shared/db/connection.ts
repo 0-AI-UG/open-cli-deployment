@@ -10,6 +10,7 @@ function log(context: string, ...args: unknown[]) {
 }
 
 export function createDatabase(dbPathOrMemory: string): Database {
+  assertMigrationCatalogCurrent();
   const instance = new Database(dbPathOrMemory);
   instance.run("PRAGMA journal_mode = WAL");
   instance.run("PRAGMA foreign_keys = ON");
@@ -28,6 +29,16 @@ export function createDatabase(dbPathOrMemory: string): Database {
     assertCurrentSchema(instance);
   }
   return instance;
+}
+
+/** Reject a release with a stale schema declaration before touching the DB. */
+export function assertMigrationCatalogCurrent(latestVersion = migrations.at(-1)?.version): void {
+  if (latestVersion !== CURRENT_SCHEMA_VERSION) {
+    throw new Error(
+      `Migration catalog ends at ${latestVersion ?? "none"}, but current schema declares ${CURRENT_SCHEMA_VERSION}. ` +
+      "Update the current schema before releasing the panel.",
+    );
+  }
 }
 
 function isUninitialized(instance: Database): boolean {

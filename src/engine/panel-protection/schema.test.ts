@@ -4,11 +4,21 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { initializeCurrentSchema, CURRENT_SCHEMA_VERSION } from "../../shared/db/current-schema.ts";
-import { createDatabase } from "../../shared/db/connection.ts";
+import { assertMigrationCatalogCurrent, createDatabase } from "../../shared/db/connection.ts";
 import { runMigrations, migrations } from "../../shared/migrations.ts";
 
 test("current schema version matches the latest migration", () => {
   expect(migrations.at(-1)?.version).toBe(CURRENT_SCHEMA_VERSION);
+});
+
+test("a stale schema declaration is rejected by the startup preflight", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ocd-schema-guard-"));
+  const filename = path.join(dir, "deploy.db");
+  try {
+    expect(() => assertMigrationCatalogCurrent(CURRENT_SCHEMA_VERSION + 1)).toThrow("Migration catalog ends");
+    const opened = createDatabase(filename);
+    opened.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("old layouts require an explicit offline cutover; current schema opens without changing settings", () => {

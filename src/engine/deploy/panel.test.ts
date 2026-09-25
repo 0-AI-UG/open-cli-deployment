@@ -136,6 +136,22 @@ describe("buildPanelReleaseScript", () => {
     expect(removePreflip).toBeGreaterThan(healthy);
   });
 
+  test("snapshots the stopped database and restores it before starting the previous image", () => {
+    const script = buildPanelReleaseScript({ ...base, volumeHostPath: "/mnt/ocd-ocd-panel-data" });
+    const stop = script.indexOf('! docker stop ocd-panel');
+    const copy = script.indexOf('cp -p "$DB_DIR/$file" "$DB_SNAPSHOT/$file"');
+    const swap = script.indexOf('docker rm -f ocd-panel');
+    const restore = script.indexOf('cp -p "$DB_SNAPSHOT/$file" "$DB_DIR/$file"');
+    const rollback = script.lastIndexOf(' $PREV_IMAGE"');
+    expect(stop).toBeGreaterThan(-1);
+    expect(copy).toBeGreaterThan(stop);
+    expect(swap).toBeGreaterThan(copy);
+    expect(restore).toBeGreaterThan(swap);
+    expect(rollback).toBeGreaterThan(restore);
+    expect(script).toContain('deploy.db deploy.db-wal deploy.db-shm');
+    expect(script).toContain('database restore failed; snapshot retained');
+  });
+
   test("caps panel container logs on both forward and rollback runs", () => {
     const script = buildPanelReleaseScript(base);
     expect(script.match(/--log-opt max-size=20m/g)?.length).toBe(2);
