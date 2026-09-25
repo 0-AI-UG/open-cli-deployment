@@ -291,3 +291,9 @@ Inspect server disk metrics and app image storage, then preview safe cleanup
 with `ocd gc --server=<id>`. Use `--execute` within authorized cleanup scope.
 This removes eligible unused images, not database volumes. Check operation
 errors before retrying deployments after freeing space.
+
+Build deliveries run this protected cleanup on their runtime hosts after a
+successful rollout. If a host is below the rollout disk minimum before a build,
+OCD cleans it once and checks free space again before continuing. Running and
+stopped container images, the current and rollback references, panel images,
+and in-flight pulls remain protected.

@@ -415,7 +415,8 @@ export function buildServerPruneSteps(opts: PruneServerOptions = {}): string[] {
   // Likewise, `label!=ocd.managed=true` includes operator-owned stopped
   // containers (and removed the pre-upgrade panel rollback container in
   // production). The targeted loops above own only known OCD resources;
-  // broader cleanup remains an explicit, inventoried `ocd gc --execute`.
+  // Broader, inventoried cleanup runs after successful build deliveries and
+  // once before a low-space rollout fails. Operators can also run `ocd gc`.
   return steps;
 }
 

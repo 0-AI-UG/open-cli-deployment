@@ -2,31 +2,8 @@ import { corsHeaders } from "../lib/cors.ts";
 import { requirePermission } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
-import { listPendingOperations, listRunningOperations } from "../../shared/db/operations.ts";
+import { serverGcProtections } from "../../shared/gc-protection.ts";
 import { garbageCollectServer, inspectServerGc } from "../../shared/remote/index.ts";
-
-function protectedAppNames(serverId: number): string[] {
-  const placed = db.getApps(serverId).map((app) => app.name);
-  const sleeping = db.getApps()
-    .filter((app) => app.sleeping_server_id === serverId)
-    .map((app) => app.name);
-  return [...new Set([...placed, ...sleeping])];
-}
-
-function protectedPanelImages(serverId: number): string[] {
-  if (db.getPanel()?.server_id !== serverId) return [];
-  return db.getPanelDeployments()
-    .filter((deployment) => deployment.status === "deployed")
-    .slice(0, 2)
-    .map((deployment) => deployment.image_tag);
-}
-
-function activeOperationIds(): number[] {
-  return [...new Set([
-    ...listPendingOperations(10_000),
-    ...listRunningOperations(),
-  ].map((operation) => operation.id))];
-}
 
 function selectedServers(request: Request) {
   const raw = new URL(request.url).searchParams.get("server");
@@ -45,13 +22,10 @@ export async function handleGcInventory(request: Request): Promise<Response> {
     await requirePermission(request, "fleet.view");
     const inventories = [];
     for (const server of selectedServers(request)) {
-      const activeAppNames = protectedAppNames(server.id);
       inventories.push({
         server: { id: server.id, name: server.name, ipv4: server.ipv4 },
         ...(await inspectServerGc(server.ipv4, server.ssh_host_key || undefined, {
-          activeAppNames,
-          protectedImageRefs: protectedPanelImages(server.id),
-          activeOperationIds: activeOperationIds(),
+          ...serverGcProtections(server.id),
         })),
         size_caveat: "Image sizes include shared layers and are not additive; reclaimable bytes is an upper bound.",
       });
@@ -69,13 +43,10 @@ export async function handleGcExecute(request: Request): Promise<Response> {
     await requirePermission(request, "servers.manage");
     const inventories = [];
     for (const server of selectedServers(request)) {
-      const activeAppNames = protectedAppNames(server.id);
       inventories.push({
         server: { id: server.id, name: server.name, ipv4: server.ipv4 },
         ...(await garbageCollectServer(server.ipv4, server.ssh_host_key || undefined, {
-          activeAppNames,
-          protectedImageRefs: protectedPanelImages(server.id),
-          activeOperationIds: activeOperationIds(),
+          ...serverGcProtections(server.id),
           buildCacheKeepStorage: server.pool === "build-workers" ? "4GB" : "1GB",
         })),
         size_caveat: "Image sizes include shared layers. reclaimed_bytes is the observed root-filesystem free-space increase.",

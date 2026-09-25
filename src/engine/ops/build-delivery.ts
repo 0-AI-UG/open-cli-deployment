@@ -10,7 +10,7 @@ import { operationAbort } from "../operation-abort.ts";
 import { withBuildFailover } from "../build-failover.ts";
 import { resolveRegistryCredentialsForImage } from "../registry-config.ts";
 import { resolveSourceCredentialsForRepository } from "../source-config.ts";
-import { assertRolloutDiskSpace } from "../hetzner/build.ts";
+import { cleanAfterBuild, preflightRolloutSpace } from "../rollout-gc.ts";
 import { awaitChildren } from "./_children.ts";
 import { registerOp } from "./registry.ts";
 import type { OpContext, OpKindDefinition, Step } from "../types.ts";
@@ -26,18 +26,8 @@ function sourceKey(build: BuildConfig): string {
   return `${build.repository}#${build.branch || "main"}`;
 }
 
-async function preflightExistingRolloutHosts(names: string[]): Promise<void> {
-  const servers = new Map<number, NonNullable<ReturnType<typeof db.getServer>>>();
-  for (const name of names) {
-    const app = db.getAppByName(name);
-    if (!app) continue;
-    for (const replica of db.getReplicas(app.id)) {
-      const server = db.getServer(replica.server_id);
-      if (server) servers.set(server.id, server);
-    }
-  }
-  await Promise.all([...servers.values()].map((server) =>
-    assertRolloutDiskSpace(server.ipv4, server.ssh_host_key || undefined)));
+async function preflightExistingRolloutHosts(names: string[], log: (message: string) => void): Promise<void> {
+  await preflightRolloutSpace(names, log);
 }
 
 async function runBuild(
@@ -181,7 +171,7 @@ const appBuild: Step<BuildAppDeliveryInput, BuiltOut> = {
   async run(ctx, prior) {
     const build = ctx.input.spec.build;
     if (!build) throw new Error("Build configuration missing");
-    await preflightExistingRolloutHosts([ctx.input.spec.app_name]);
+    await preflightExistingRolloutHosts([ctx.input.spec.app_name], (message) => ctx.log(message));
     const commit = ctx.input.spec.git_commit || "";
     return runBuild(transport, coordinator, ctx, build.repository, build.branch || "main", commit, [{
       name: ctx.input.spec.app_name,
@@ -231,6 +221,7 @@ const appDeploy: Step<BuildAppDeliveryInput, { childId: number; appId: number }>
     const workerId = built.workerId ?? (prior.select_build_worker as WorkerOut | undefined)?.workerId;
     if (workerId == null) throw new Error("Build completed without recording its worker");
     await persistBuildConfig(app.id, build, workerId);
+    await cleanAfterBuild([app.name], (message) => ctx.log(message));
     return { childId, appId: app.id };
   },
 };
@@ -252,7 +243,7 @@ const stackBuild: Step<BuildStackDeliveryInput, BuiltOut> = {
     if (!selected.length) return { refs: {}, workerId: null };
     const buildApps = selected.filter((app) => !!app.build);
     if (!buildApps.length) return { refs: {}, workerId: null };
-    await preflightExistingRolloutHosts(selected.map((app) => `${ctx.input.spec.name}-${app.key}`));
+    await preflightExistingRolloutHosts(selected.map((app) => `${ctx.input.spec.name}-${app.key}`), (message) => ctx.log(message));
     const builds = buildApps.map((app) => app.build!);
     const keys = new Set(builds.map(sourceKey));
     if (keys.size !== 1) throw new Error("One stack build must use one repository and branch");
@@ -328,6 +319,7 @@ const stackDeploy: Step<BuildStackDeliveryInput, { childId: number }> = {
       const app = db.getAppByName(`${ctx.input.spec.name}-${appSpec.key}`);
       if (app) await persistBuildConfig(app.id, appSpec.build, workerId);
     }
+    await cleanAfterBuild(ctx.input.spec.apps.map((appSpec) => `${ctx.input.spec.name}-${appSpec.key}`), (message) => ctx.log(message));
     return { childId };
   },
 };
