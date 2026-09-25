@@ -429,11 +429,8 @@ export function buildPanelReleaseScript(opts: {
   envFilePath: string;
   /** "-v src:dst" or "". */
   volumeFlag: string;
-  /** Friendly host bind path and attached storage mount used to migrate
-   * historical root-disk panel data during the stopped swap. Both empty means
-   * no persistent volume migration is needed. */
-  volumeHostPath?: string;
-  volumeDevicePath?: string;
+  /** Persistent panel data path used for the release snapshot. */
+  volumeHostPath: string;
   /** "DOCKER_CONFIG=<dir> " (trailing space) or "" for anonymous pulls. */
   registryEnvPrefix: string;
   /** Ephemeral DOCKER_CONFIG dir to remove when done, or "". */
@@ -459,14 +456,7 @@ export function buildPanelReleaseScript(opts: {
     ? `su - deploy -c "rm -rf ${registryConfigDir}" 2>/dev/null || true`
     : `true`;
   const logFlags = `--log-opt max-size=${DEFAULT_LOG_MAX_SIZE} --log-opt max-file=${DEFAULT_LOG_MAX_FILES}`;
-  const migrationLines = opts.volumeHostPath && opts.volumeDevicePath
-    ? buildPanelVolumeMigrationLines({
-        containerName,
-        hostPath: opts.volumeHostPath,
-        devicePath: opts.volumeDevicePath,
-      })
-    : [];
-  const snapshotLines = opts.volumeHostPath ? [
+  const snapshotLines = [
     // Stop the sole writer before copying SQLite and its WAL. The snapshot is
     // on the same persistent volume and is only removed after a healthy swap.
     `if [ -n "$PREV_IMAGE" ] && ! docker stop ${containerName} >/dev/null 2>&1; then`,
@@ -491,7 +481,7 @@ export function buildPanelReleaseScript(opts: {
     `  fi`,
     `done`,
     `sync`,
-  ] : [`DB_SNAPSHOT=""`];
+  ];
   // NB: no `set -e` — a failed pull attempt must not abort the retry loop.
   return [
     `#!/usr/bin/env bash`,
@@ -513,8 +503,6 @@ export function buildPanelReleaseScript(opts: {
     // `--restart unless-stopped` would otherwise crash-loop the panel forever.
     `PREV_IMAGE=$(docker inspect --format '{{.Config.Image}}' ${containerName} 2>/dev/null || echo "")`,
     `echo "[panel-redeploy] current image: ${"$"}{PREV_IMAGE:-none}"`,
-    `MIGRATED_PREFLIP=""`,
-    ...migrationLines,
     ...snapshotLines,
     // Swap on the SAME loopback port that Traefik's panel.yml already targets.
     `docker rm -f ${containerName} 2>/dev/null || true`,
@@ -529,10 +517,6 @@ export function buildPanelReleaseScript(opts: {
     `if [ "$healthy" = "1" ]; then`,
     `  echo "[panel-redeploy] new image healthy"`,
     `  if [ -n "$DB_SNAPSHOT" ]; then rm -rf -- "$DB_SNAPSHOT"; fi`,
-    `  if [ -n "$MIGRATED_PREFLIP" ]; then`,
-    `    echo "[panel-redeploy] verified volume migration; removing root-disk preflip $MIGRATED_PREFLIP"`,
-    `    rm -rf -- "$MIGRATED_PREFLIP"`,
-    `  fi`,
     `  ${cleanup}`,
     `  exit 0`,
     `fi`,
@@ -569,98 +553,6 @@ export function buildPanelReleaseScript(opts: {
 }
 
 /**
- * A stopped, fail-closed migration for panels created before OCD installed a
- * bind from /mnt/HC_Volume_* onto /mnt/ocd-*-data. The old container is kept
- * (stopped) until rsync verification and fstab installation finish, so every
- * failure path can expose the legacy directory again and docker-start it.
- */
-function buildPanelVolumeMigrationLines(opts: {
-  containerName: string;
-  hostPath: string;
-  devicePath: string;
-}): string[] {
-  const { containerName, hostPath, devicePath } = opts;
-  const begin = "# BEGIN ocd-bind panel";
-  const end = "# END ocd-bind panel";
-  const fstabLine = `${devicePath}  ${hostPath}  none  bind,nofail,x-systemd.requires=${devicePath}  0 0`;
-  return [
-    `HC_SOURCE=$(findmnt -no SOURCE ${devicePath} 2>/dev/null || true)`,
-    `TARGET_SOURCE=$(findmnt -no SOURCE ${hostPath} 2>/dev/null || true)`,
-    `if [ -z "$HC_SOURCE" ]; then`,
-    `  echo "[panel-redeploy] attached panel volume is not mounted at ${devicePath}; leaving current container running"`,
-    `  exit 1`,
-    `fi`,
-    `if [ "$TARGET_SOURCE" != "$HC_SOURCE" ]; then`,
-    `  echo "[panel-redeploy] migrating legacy panel data ${hostPath} -> ${devicePath}"`,
-    `  docker stop ${containerName} >/dev/null 2>&1 || true`,
-    `  if [ -n "$TARGET_SOURCE" ]; then`,
-    `    echo "[panel-redeploy] refusing migration: ${hostPath} is mounted from unexpected $TARGET_SOURCE"`,
-    `    docker start ${containerName} >/dev/null 2>&1 || true`,
-    `    exit 1`,
-    `  fi`,
-    `  LEGACY_ENTRY=$(find ${hostPath} -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null || true)`,
-    `  VOLUME_ENTRY=$(find ${devicePath} -mindepth 1 -maxdepth 1 ! -name lost+found -print -quit 2>/dev/null || true)`,
-    `  if [ -n "$LEGACY_ENTRY" ] && [ -n "$VOLUME_ENTRY" ]; then`,
-    `    if rsync -aHAXn --delete --exclude=/lost+found --itemize-changes ${hostPath}/ ${devicePath}/ | grep -q .; then`,
-    `      echo "[panel-redeploy] refusing migration: legacy path and attached volume both contain different data"`,
-    `      docker start ${containerName} >/dev/null 2>&1 || true`,
-    `      exit 1`,
-    `    fi`,
-    `  elif [ -n "$LEGACY_ENTRY" ]; then`,
-    `    if ! rsync -aHAX --numeric-ids --exclude=/lost+found ${hostPath}/ ${devicePath}/; then`,
-    `      echo "[panel-redeploy] rsync failed; restarting previous container on legacy data"`,
-    `      docker start ${containerName} >/dev/null 2>&1 || true`,
-    `      exit 1`,
-    `    fi`,
-    `    VERIFY_DIFF=$(rsync -aHAXn --delete --exclude=/lost+found --itemize-changes ${hostPath}/ ${devicePath}/)`,
-    `    if [ -n "$VERIFY_DIFF" ]; then`,
-    `      echo "[panel-redeploy] rsync verification failed; restarting previous container on legacy data"`,
-    `      docker start ${containerName} >/dev/null 2>&1 || true`,
-    `      exit 1`,
-    `    fi`,
-    `  fi`,
-    `  sync`,
-    `  PREFLIP=${hostPath}.preflip.$(date -u +%Y%m%d-%H%M%S)`,
-    `  if ! mv ${hostPath} "$PREFLIP" || ! mkdir -p ${hostPath} || ! mount --bind ${devicePath} ${hostPath}; then`,
-    `    echo "[panel-redeploy] bind setup failed; restoring legacy path"`,
-    `    umount ${hostPath} >/dev/null 2>&1 || true`,
-    `    rmdir ${hostPath} >/dev/null 2>&1 || true`,
-    `    [ -d "$PREFLIP" ] && mv "$PREFLIP" ${hostPath}`,
-    `    docker start ${containerName} >/dev/null 2>&1 || true`,
-    `    exit 1`,
-    `  fi`,
-    `  FSTAB_TMP=$(mktemp)`,
-    `  FSTAB_BACKUP=$(mktemp)`,
-    `  if ! cp -p /etc/fstab "$FSTAB_BACKUP"; then`,
-    `    echo "[panel-redeploy] could not back up fstab; restoring legacy path"`,
-    `    rm -f "$FSTAB_TMP" "$FSTAB_BACKUP"`,
-    `    umount ${hostPath} >/dev/null 2>&1 || true`,
-    `    rmdir ${hostPath} >/dev/null 2>&1 || true`,
-    `    mv "$PREFLIP" ${hostPath}`,
-    `    docker start ${containerName} >/dev/null 2>&1 || true`,
-    `    exit 1`,
-    `  fi`,
-    `  awk '$0=="${begin}" {skip=1; next} $0=="${end}" && skip {skip=0; next} !skip {print}' /etc/fstab > "$FSTAB_TMP"`,
-    `  printf '%s\n%s\n%s\n' '${begin}' '${fstabLine}' '${end}' >> "$FSTAB_TMP"`,
-    `  if ! install -m 0644 "$FSTAB_TMP" /etc/fstab || ! systemctl daemon-reload; then`,
-    `    echo "[panel-redeploy] fstab update failed; restoring legacy path"`,
-    `    install -m 0644 "$FSTAB_BACKUP" /etc/fstab >/dev/null 2>&1 || true`,
-    `    systemctl daemon-reload >/dev/null 2>&1 || true`,
-    `    rm -f "$FSTAB_TMP" "$FSTAB_BACKUP"`,
-    `    umount ${hostPath} >/dev/null 2>&1 || true`,
-    `    rmdir ${hostPath} >/dev/null 2>&1 || true`,
-    `    mv "$PREFLIP" ${hostPath}`,
-    `    docker start ${containerName} >/dev/null 2>&1 || true`,
-    `    exit 1`,
-    `  fi`,
-    `  rm -f "$FSTAB_TMP" "$FSTAB_BACKUP"`,
-    `  MIGRATED_PREFLIP="$PREFLIP"`,
-    `  echo "[panel-redeploy] panel data copied, verified, and bind-mounted"`,
-    `fi`,
-  ];
-}
-
-/**
  * Redeploy the hosted panel. This is called by the panel on itself, so
  * doing the replacement inline would `docker rm -f` our own container
  * and the new container would never start. Instead we dispatch the replacement
@@ -684,6 +576,10 @@ export async function redeployPanel(
   const panel = db.getPanel();
   if (!panel) {
     return { ok: false, error: "Panel is not configured in this DB" };
+  }
+  const volumeHostPath = panel.volume_mount?.split(":")[0] || "";
+  if (!volumeHostPath) {
+    return { ok: false, error: "Panel release requires a persistent data mount" };
   }
   const server = db.getServer(panel.server_id);
   if (!server) {
@@ -736,8 +632,6 @@ export async function redeployPanel(
     const appDir = `/home/deploy/apps/${panel.name}`;
     const envFilePath = `${appDir}/.env.deploy`;
     const volumeFlag = panel.volume_mount ? `-v ${panel.volume_mount}` : "";
-    const volumeHostPath = panel.volume_mount?.split(":")[0] || "";
-    const volumeDevicePath = panel.volume_id ? `/mnt/HC_Volume_${panel.volume_id}` : "";
     const pullRetries = 3;
     const pullSleepSeconds = 10;
     const releaseScript = buildPanelReleaseScript({
@@ -749,7 +643,6 @@ export async function redeployPanel(
       envFilePath,
       volumeFlag,
       volumeHostPath,
-      volumeDevicePath,
       registryEnvPrefix,
       registryConfigDir,
       pullRetries,

@@ -1765,8 +1765,8 @@ export const migrations: Migration[] = [
         ["servers.delete", ["servers.delete", "servers.manage"]],
         ["resources.create", ["servers.create"]],
         ["apps.deploy", ["apps.deploy", "apps.promote"]],
-        ["apps.redeploy", ["apps.deploy", "panel.manage"]],
-        ["apps.logs", ["apps.logs", "deployments.view", "panel.view"]],
+        ["apps.redeploy", ["apps.deploy"]],
+        ["apps.logs", ["apps.logs", "deployments.view"]],
         ["stacks.deploy", ["stacks.deploy", "stacks.promote"]],
         ["scaling.manage", ["apps.deploy", "scaling.migrate"]],
         ["volumes.manage", ["volumes.attach", "volumes.detach", "volumes.resize"]],
@@ -2668,8 +2668,8 @@ export const migrations: Migration[] = [
         "environments.manage", "environments.secrets", "scaling.migrate",
         "servers.create", "servers.manage", "servers.delete", "volumes.delete",
         "volumes.files.read", "buckets.create", "buckets.delete", "buckets.objects.read",
-        "resources.view", "resources.delete", "operations.cancel", "panel.view",
-        "panel.manage", "terminal.container", "terminal.host",
+        "resources.view", "resources.delete", "operations.cancel",
+        "terminal.container", "terminal.host",
       ];
       const holders = db.query(`SELECT user_id FROM user_permissions
         WHERE scope_type = 'global' AND permission IN (${previousPermissions.map(() => "?").join(",")})

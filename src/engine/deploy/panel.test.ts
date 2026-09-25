@@ -16,6 +16,7 @@ describe("buildPanelReleaseScript", () => {
     routingAddress: "10.0.0.2",
     envFilePath: "/home/deploy/apps/ocd-panel/.env.deploy",
     volumeFlag: "-v /mnt/data:/app/data",
+    volumeHostPath: "/mnt/data",
     registryEnvPrefix: "DOCKER_CONFIG=/home/deploy/.docker-ocd-xyz ",
     registryConfigDir: "/home/deploy/.docker-ocd-xyz",
     pullRetries: 90,
@@ -105,37 +106,6 @@ describe("buildPanelReleaseScript", () => {
     expect(script).not.toContain("21200-21399");
   });
 
-  test("migrates historical panel data before swapping containers", () => {
-    const script = buildPanelReleaseScript({
-      ...base,
-      volumeHostPath: "/mnt/ocd-ocd-panel-data",
-      volumeDevicePath: "/mnt/HC_Volume_105361466",
-    });
-
-    const stop = script.indexOf("docker stop ocd-panel");
-    const copy = script.indexOf("rsync -aHAX --numeric-ids");
-    const bind = script.indexOf("mount --bind /mnt/HC_Volume_105361466 /mnt/ocd-ocd-panel-data");
-    const run = script.indexOf("docker run -d --name ocd-panel");
-    expect(stop).toBeGreaterThan(-1);
-    expect(copy).toBeGreaterThan(stop);
-    expect(bind).toBeGreaterThan(copy);
-    expect(run).toBeGreaterThan(bind);
-    expect(script).toContain("rsync verification failed");
-    expect(script).toContain("# BEGIN ocd-bind panel");
-    expect(script).toContain("docker start ocd-panel");
-  });
-
-  test("removes the legacy root-disk copy only after the replacement is healthy", () => {
-    const script = buildPanelReleaseScript({
-      ...base,
-      volumeHostPath: "/mnt/ocd-ocd-panel-data",
-      volumeDevicePath: "/mnt/HC_Volume_105361466",
-    });
-    const healthy = script.indexOf('if [ "$healthy" = "1" ]');
-    const removePreflip = script.indexOf('rm -rf -- "$MIGRATED_PREFLIP"');
-    expect(removePreflip).toBeGreaterThan(healthy);
-  });
-
   test("snapshots the stopped database and restores it before starting the previous image", () => {
     const script = buildPanelReleaseScript({ ...base, volumeHostPath: "/mnt/ocd-ocd-panel-data" });
     const stop = script.indexOf('! docker stop ocd-panel');
@@ -158,11 +128,10 @@ describe("buildPanelReleaseScript", () => {
     expect(script.match(/--log-opt max-file=3/g)?.length).toBe(2);
   });
 
-  test("emits syntactically valid bash with the migration path enabled", async () => {
+  test("emits syntactically valid bash with a database snapshot", async () => {
     const script = buildPanelReleaseScript({
       ...base,
       volumeHostPath: "/mnt/ocd-ocd-panel-data",
-      volumeDevicePath: "/mnt/HC_Volume_105361466",
     });
     const proc = Bun.spawn(["bash", "-n"], { stdin: "pipe", stderr: "pipe" });
     proc.stdin.write(script);

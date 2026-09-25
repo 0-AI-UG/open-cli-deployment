@@ -910,8 +910,8 @@ describe.each(CASES.map((c) => [c.name, c] as const))("%s", (_name, c) => {
   }
 });
 
-test("panel maintenance stays admin-only even with every OCD permission and legacy panel grants", async () => {
-  const fullyPermitted = await userWith([...ALL_PERMISSIONS, "panel.view", "panel.manage"]);
+test("panel maintenance stays admin-only even with every OCD permission", async () => {
+  const fullyPermitted = await userWith(ALL_PERMISSIONS);
   const routes = [
     handleGetPanel(req("/api/admin/panel", { token: fullyPermitted.token })),
     handleRedeployPanel(req("/api/admin/panel/redeploy", { body: {}, token: fullyPermitted.token })),
