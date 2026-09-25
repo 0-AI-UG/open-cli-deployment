@@ -160,8 +160,9 @@ import {
   handleConfirmConfirmation,
   handleCreateConfirmation,
 } from "./confirmations.ts";
-import { handleListOperations, handleCancelOperation } from "./operations.ts";
+import { handleListOperations, handleCancelOperation, handleRetryOperation, handleFinalizeOperation } from "./operations.ts";
 import { handleGetPanel, handleRedeployPanel, handleGetLatestPanelRelease, handleRedeployLatestPanel } from "./panel.ts";
+import { handleGetServerTypes, handleGetSettings } from "./settings.ts";
 import {
   handleGetPanelReleaseWebhook,
   handleRotatePanelReleaseWebhook,
@@ -1036,6 +1037,57 @@ describe("scope semantics through the real routes", () => {
 // ---------------------------------------------------------------------------
 // Previously-conflated permissions must stay split
 // ---------------------------------------------------------------------------
+
+describe("operational permissions beyond ordinary deployment", () => {
+  test("server creation grant can load the server-type choices", async () => {
+    const without = await userWith([]);
+    const withGrant = await userWith(["servers.create"]);
+    expect((await handleGetServerTypes(req("/api/admin/settings/server-types", { token: without.token }))).status).toBe(403);
+    expect((await handleGetServerTypes(req("/api/admin/settings/server-types", { token: withGrant.token }))).status).not.toBe(403);
+  });
+
+  test("all operational grants do not open Admin settings", async () => {
+    const full = await userWith(ALL_PERMISSIONS);
+    expect((await handleGetSettings(req("/api/admin/settings", { token: full.token }))).status).toBe(403);
+  });
+
+  for (const [field, permission] of [
+    ["storage", "apps.storage.bind"],
+    ["notifications", "apps.notifications.bind"],
+  ] as const) {
+    test(`${field} bindings require their own grant for app and stack deploys`, async () => {
+      const binding = { primary: { bucket: "example" } };
+      const base = ["cli.access", "apps.deploy", "stacks.deploy"];
+      const without = await userWith(base, { cli: true });
+      const withGrant = await userWith([...base, permission], { cli: true });
+      const appBody = { app_name: "permission-binding-test", apply_mode: "manifest", [field]: binding };
+      const stackBody = { name: "permission-binding-test", apps: [{ key: "web", [field]: binding }] };
+      expect((await handleDeploy(req("/api/apps/deploy", { body: appBody, token: without.token }))).status).toBe(403);
+      expect((await handleDeployStack(req("/api/stacks/deploy", { body: stackBody, token: without.token }))).status).toBe(403);
+      expect((await handleDeploy(req("/api/apps/deploy", { body: appBody, token: withGrant.token }))).status).not.toBe(403);
+      expect((await handleDeployStack(req("/api/stacks/deploy", { body: stackBody, token: withGrant.token }))).status).not.toBe(403);
+    });
+  }
+
+  test("all permissions allow intervening in another user's operations", async () => {
+    const owner = await userWith([]);
+    const limited = await userWith(["operations.cancel"]);
+    const full = await userWith(ALL_PERMISSIONS);
+    const makeOp = () => enqueueOperation({
+      kind: "restart_app", resourceKeys: [`app:${appA}`], input: { appId: appA },
+      trigger: "ui", triggeredBy: owner.userId,
+    });
+    const cancelTarget = makeOp();
+    expect((await handleCancelOperation(req(`/api/operations/${cancelTarget.id}/cancel`, { body: {}, token: limited.token }), cancelTarget.id)).status).toBe(403);
+    expect((await handleCancelOperation(req(`/api/operations/${cancelTarget.id}/cancel`, { body: {}, token: full.token }), cancelTarget.id)).status).not.toBe(403);
+    const retryTarget = makeOp();
+    expect((await handleRetryOperation(req(`/api/operations/${retryTarget.id}/retry`, { body: {}, token: limited.token }), retryTarget.id)).status).toBe(403);
+    expect((await handleRetryOperation(req(`/api/operations/${retryTarget.id}/retry`, { body: {}, token: full.token }), retryTarget.id)).status).not.toBe(403);
+    const finalizeTarget = makeOp();
+    expect((await handleFinalizeOperation(req(`/api/operations/${finalizeTarget.id}/finalize`, { body: {}, token: limited.token }), finalizeTarget.id)).status).toBe(403);
+    expect((await handleFinalizeOperation(req(`/api/operations/${finalizeTarget.id}/finalize`, { body: {}, token: full.token }), finalizeTarget.id)).status).not.toBe(403);
+  });
+});
 
 describe("permission splits are enforced (the old coarse grant is not enough)", () => {
   test("apps.redeploy does NOT allow changing stored configuration", async () => {

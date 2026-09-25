@@ -1,7 +1,7 @@
 import { corsHeaders } from "../lib/cors.ts";
 import { handleError } from "../lib/utils.ts";
 import { requirePermission } from "../lib/permissions.ts";
-import { getUserById } from "../../shared/db.ts";
+import { getUserById, hasPermission } from "../../shared/db.ts";
 import { PermissionError } from "../lib/errors.ts";
 import {
   getOperation,
@@ -314,8 +314,8 @@ export async function handleCancelOperation(request: Request, id: number): Promi
     if (!user) throw new PermissionError("Unauthorized");
     const op = getOperation(id);
     if (!op) return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
-    // Only admins or the user who triggered the op can cancel it.
-    if (!user.is_admin && op.triggered_by !== payload.userId) {
+    // Cross-user intervention has a separate fleet-wide grant.
+    if (!user.is_admin && op.triggered_by !== payload.userId && !hasPermission(payload.userId, "operations.manage")) {
       throw new PermissionError("Cannot cancel another user's operation");
     }
     // Pending operations have not run a side effect and requestCancel performs
@@ -337,7 +337,7 @@ async function requireOperationRecoveryAccess(request: Request, id: number) {
   if (!user) throw new PermissionError("Unauthorized");
   const op = getOperation(id);
   if (!op) return { payload, user, op: null };
-  if (!user.is_admin && op.triggered_by !== payload.userId) {
+  if (!user.is_admin && op.triggered_by !== payload.userId && !hasPermission(payload.userId, "operations.manage")) {
     throw new PermissionError("Cannot recover another user's operation");
   }
   return { payload, user, op };

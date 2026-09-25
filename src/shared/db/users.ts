@@ -42,6 +42,10 @@ export const ALL_PERMISSIONS = [
 
   // --- Apps ------------------------------------------------------------
   "apps.deploy",
+  /** Authorize manifest-owned access to shared object storage. */
+  "apps.storage.bind",
+  /** Authorize manifest-owned access to shared notification topics. */
+  "apps.notifications.bind",
   "apps.rollback",
   "apps.restart",
   "apps.pause",
@@ -86,6 +90,8 @@ export const ALL_PERMISSIONS = [
 
   // --- Operations ------------------------------------------------------
   "operations.cancel",
+  /** Cancel, retry, or finalize operations started by another user. */
+  "operations.manage",
 
   // --- Control plane ---------------------------------------------------
   "panel.view",

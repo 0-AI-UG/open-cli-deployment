@@ -198,6 +198,27 @@ describe("is_admin", () => {
   });
 });
 
+test("migration 121 preserves accounts holding every previous global permission", () => {
+  const d = new Database(":memory:");
+  d.run(`CREATE TABLE user_permissions (
+    user_id TEXT NOT NULL, permission TEXT NOT NULL,
+    scope_type TEXT NOT NULL DEFAULT 'global', scope_id TEXT
+  )`);
+  const oldPermissions = ALL_PERMISSIONS.filter((permission) =>
+    !["apps.storage.bind", "apps.notifications.bind", "operations.manage"].includes(permission));
+  const insert = d.query("INSERT INTO user_permissions (user_id, permission, scope_type) VALUES (?, ?, 'global')");
+  for (const permission of oldPermissions) insert.run("full", permission);
+  for (const permission of oldPermissions.slice(1)) insert.run("partial", permission);
+  const migration = migrations.find((entry) => entry.version === 121)!;
+  migration.up(d);
+  const added = d.query("SELECT permission FROM user_permissions WHERE user_id = ? AND permission IN ('apps.storage.bind','apps.notifications.bind','operations.manage')");
+  expect((added.all("full") as Array<{ permission: string }>).map((row) => row.permission).sort()).toEqual([
+    "apps.notifications.bind", "apps.storage.bind", "operations.manage",
+  ]);
+  expect(added.all("partial")).toEqual([]);
+  d.close();
+});
+
 describe("migration 85", () => {
   /** A DB in the pre-85 shape: flat user_permissions, no scope columns. */
   function legacyDb(): Database {

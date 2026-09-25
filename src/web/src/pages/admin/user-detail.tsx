@@ -32,6 +32,8 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
     label: "Apps",
     permissions: [
       { key: "apps.deploy", label: "Deploy apps with the CLI" },
+      { key: "apps.storage.bind", label: "Deploy apps with object-storage bindings" },
+      { key: "apps.notifications.bind", label: "Deploy apps with notification bindings" },
       { key: "apps.rollback", label: "Rollback deployments" },
       { key: "apps.restart", label: "Restart containers" },
       { key: "apps.pause", label: "Pause/unpause apps" },
@@ -96,6 +98,7 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
     label: "Operations",
     permissions: [
       { key: "operations.cancel", label: "Cancel a running engine operation" },
+      { key: "operations.manage", label: "Act on another user's operation (also needs operations.cancel)" },
     ],
   },
   {

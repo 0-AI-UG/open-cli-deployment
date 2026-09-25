@@ -97,7 +97,7 @@ Declare app-owned access in the manifest:
 }
 ```
 
-Bindings require an existing bucket and administrator authorization for deployment.
+Bindings require an existing bucket and the global `apps.storage.bind` permission for deployment. Administrators have this permission implicitly.
 Each app and named binding receives a different encrypted grant, even when they
 share a bucket or prefix. An omitted connection selects the default only for a
 new binding; reconciliation retains an existing binding's connection ID. A changed

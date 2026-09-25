@@ -65,7 +65,7 @@ never persisted into the shared environment.
 
 Prefer app-owned `storage` bindings in the manifest; see
 [Object storage bindings](app-manifest.md#object-storage-bindings).
-Bindings need an existing bucket and administrator authorization to deploy.
+Bindings need an existing bucket and the global `apps.storage.bind` permission to deploy. Administrators have this permission implicitly.
 OCD injects scoped tokens directly into each app, overriding same-named
 app env values. Keep driver
 selection such as `STORAGE_DRIVER=ocd` in normal configuration. The token is

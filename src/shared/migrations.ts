@@ -2654,6 +2654,36 @@ export const migrations: Migration[] = [
       db.query("DELETE FROM encrypted_secrets WHERE key=?").run("deepseek_api_key");
     },
   },
+  {
+    version: 121,
+    description: "Preserve full operational access when adding binding and cross-user operation grants",
+    up: (db) => {
+      // This is the complete global permission catalog immediately before 121.
+      // Keep it frozen so later catalog additions do not change this migration.
+      const previousPermissions = [
+        "cli.access", "fleet.view", "apps.view", "environments.view", "metrics.view",
+        "operations.view", "deployments.view", "apps.deploy", "apps.rollback",
+        "apps.restart", "apps.pause", "apps.destroy", "apps.logs", "apps.promote",
+        "stacks.view", "stacks.deploy", "stacks.promote", "stacks.destroy",
+        "environments.manage", "environments.secrets", "scaling.migrate",
+        "servers.create", "servers.manage", "servers.delete", "volumes.delete",
+        "volumes.files.read", "buckets.create", "buckets.delete", "buckets.objects.read",
+        "resources.view", "resources.delete", "operations.cancel", "panel.view",
+        "panel.manage", "terminal.container", "terminal.host",
+      ];
+      const holders = db.query(`SELECT user_id FROM user_permissions
+        WHERE scope_type = 'global' AND permission IN (${previousPermissions.map(() => "?").join(",")})
+        GROUP BY user_id HAVING COUNT(DISTINCT permission) = ?`)
+        .all(...previousPermissions, previousPermissions.length) as Array<{ user_id: string }>;
+      const insert = db.query(`INSERT OR IGNORE INTO user_permissions (user_id, permission, scope_type, scope_id)
+        VALUES (?, ?, 'global', NULL)`);
+      for (const { user_id } of holders) {
+        for (const permission of ["apps.storage.bind", "apps.notifications.bind", "operations.manage"]) {
+          insert.run(user_id, permission);
+        }
+      }
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

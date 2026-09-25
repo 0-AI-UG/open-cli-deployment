@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin, requirePermission, requireCliPermission, appScope, stackScope } from "../lib/permissions.ts";
+import { requirePermission, requireCliPermission, appScope, stackScope } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import type { StackDeployRequest } from "../../shared/rpc.ts";
@@ -55,7 +55,8 @@ export async function handleDeployStack(request: Request): Promise<Response> {
     for (const field of ["env_vars", "staging_env_vars", "staging_env_keys"]) {
       if (field in req) return Response.json({ ok: false, error: `${field} is not supported; configure environments separately` }, { status: 400, headers: corsHeaders });
     }
-    if (req.apps?.some(app => (app.storage && Object.keys(app.storage).length) || (app.notifications && Object.keys(app.notifications).length))) await requireAdmin(request);
+    if (req.apps?.some(app => app.storage && Object.keys(app.storage).length)) await requirePermission(request, "apps.storage.bind");
+    if (req.apps?.some(app => app.notifications && Object.keys(app.notifications).length)) await requirePermission(request, "apps.notifications.bind");
     if (!req?.name || typeof req.name !== "string") {
       return Response.json({ ok: false, error: "name is required" }, { status: 400, headers: corsHeaders });
     }

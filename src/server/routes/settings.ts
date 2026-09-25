@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin } from "../lib/permissions.ts";
+import { requireAdmin, requirePermission } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { getInfrastructureToken, secretStore, maskToken } from "../../shared/secret-store.ts";
@@ -53,7 +53,7 @@ export async function handleGetSettings(request: Request): Promise<Response> {
 
 export async function handleGetServerTypes(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requirePermission(request, "servers.create");
     const compute = defaultInfrastructureProvider(db.getSettings());
     if (!compute?.capabilities.compute) return Response.json({ server_types: [] }, { headers: corsHeaders });
     const token = await getInfrastructureToken(compute.id);

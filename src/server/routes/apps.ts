@@ -1,7 +1,7 @@
 import { getAppNtfy } from "../../shared/ntfy.ts";
 import { getAppStorage, appStorageView } from "../../shared/object-storage.ts";
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin, requirePermission, requireCliPermission, requireAuthenticated, appScope } from "../lib/permissions.ts";
+import { requirePermission, requireCliPermission, requireAuthenticated, appScope } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import type { AppRow } from "../../shared/db/apps.ts";
@@ -284,7 +284,8 @@ export async function handleDeploy(request: Request): Promise<Response> {
   try {
     const payload = await requireCliPermission(request, "apps.deploy");
     const req = await request.json() as AppDeployRequest;
-    if ((req.storage && Object.keys(req.storage).length) || (req.notifications && Object.keys(req.notifications).length)) await requireAdmin(request);
+    if (req.storage && Object.keys(req.storage).length) await requirePermission(request, "apps.storage.bind");
+    if (req.notifications && Object.keys(req.notifications).length) await requirePermission(request, "apps.notifications.bind");
     if (!req?.app_name || typeof req.app_name !== "string") {
       return Response.json({ ok: false, error: "app_name is required" }, { status: 400, headers: corsHeaders });
     }

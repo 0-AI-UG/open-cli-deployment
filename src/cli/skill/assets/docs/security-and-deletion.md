@@ -32,7 +32,7 @@ Read permissions:
 App permissions:
 
 - `apps.deploy`, `apps.rollback`, `apps.restart`, `apps.pause`, `apps.destroy`,
-  `apps.logs`, `apps.promote`.
+  `apps.logs`, `apps.promote`, `apps.storage.bind`, `apps.notifications.bind`.
 
 Stack/environment:
 
@@ -45,7 +45,7 @@ Scaling/infrastructure:
 - `servers.create`, `servers.manage`, `servers.delete`;
 - `volumes.delete`, `volumes.files.read`;
 - `resources.view`, `resources.delete`;
-- `operations.cancel`, `panel.view`, `panel.manage`;
+- `operations.cancel`, `operations.manage`, `panel.view`, `panel.manage`;
 - `terminal.container`, `terminal.host`.
 
 Scopes:
@@ -64,6 +64,10 @@ Scopes:
 
 - Desired app settings, ingress, public ports, image releases, and scaling policy all
   use `apps.deploy`, and deployment endpoints additionally require a CLI token.
+- Manifest storage and notification bindings additionally require
+  `apps.storage.bind` and `apps.notifications.bind`, respectively.
+- `operations.manage` permits cross-user cancellation, retry, and finalization
+  when combined with `operations.cancel`.
 - `volumes.files.read` grants application-data access.
 - `terminal.host` is effectively root-equivalent infrastructure access.
 - `resources.delete`, `servers.delete`, and `volumes.delete` can remove
