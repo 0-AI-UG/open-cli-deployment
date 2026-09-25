@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { initializeCurrentSchema, CURRENT_SCHEMA_VERSION } from "../../shared/db/current-schema.ts";
 import { createDatabase } from "../../shared/db/connection.ts";
-import { runMigrations } from "../../shared/migrations.ts";
+import { runMigrations, migrations } from "../../shared/migrations.ts";
+
+test("current schema version matches the latest migration", () => {
+  expect(migrations.at(-1)?.version).toBe(CURRENT_SCHEMA_VERSION);
+});
 
 test("old layouts require an explicit offline cutover; current schema opens without changing settings", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "ocd-protection-schema-"));
