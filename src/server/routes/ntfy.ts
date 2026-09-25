@@ -26,7 +26,6 @@ export async function handleAdminNtfy(request: Request): Promise<Response> {
       if (findActiveOperationByResourceKey("configure_ntfy", "service:ntfy")) return json({ error: "Notification configuration is still applying" }, 409);
       const result = db.default.transaction(() => {
         db.saveSetting("ntfy_settings", JSON.stringify(settings));
-        if (settings.alerts && !old?.alerts) db.saveSetting("ntfy_alert_enabled_at", String(Date.now()));
         const operation = enqueue({ kind: "configure_ntfy", resourceKeys: ["service:ntfy"], input: {}, trigger: "ui", triggeredBy: actor.userId });
         db.saveSetting("ntfy_operation_id", String(operation.opId));
         return operation;
@@ -100,7 +99,6 @@ export async function handleCreateNtfyApp(request: Request): Promise<Response> {
     if (db.getAppByName(input.name) || db.getApps().some(a => a.domain === input.domain) || db.getPanel()?.domain === input.domain) return json({ error: "App name or domain is already in use" }, 409);
     const operation = db.default.transaction(() => {
       db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, app_id: null, alerts: true, apps: true })));
-      db.saveSetting("ntfy_alert_enabled_at", String(Date.now()));
       const op = enqueue({ kind: "configure_ntfy", resourceKeys: ["service:ntfy"], input: { create: input }, trigger: "ui", triggeredBy: actor.userId });
       db.saveSetting("ntfy_operation_id", String(op.opId));
       return op;

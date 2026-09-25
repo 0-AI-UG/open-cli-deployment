@@ -30,7 +30,7 @@ Unhealthy app and disk-pressure incidents have a two-minute grace period.
 Repeated observations generate one opening notification and one recovery. Each
 notification opens the corresponding incident detail page. Incidents are recorded
 and resolved even when ntfy delivery is disabled; the Incidents page retains the
-history and offers read-only investigation followed by a selected repair option.
+history and offers read-only investigation guidance.
 App events respect the recipient's current app permissions. Deployment,
 disk, and panel-backup incidents are currently admin-only. Preferences and
 permissions are checked again before delivery. Enabling alerts subscribes to
@@ -131,3 +131,13 @@ separate server if desired; external monitoring covers total panel outages.
 
 This is a hard cut to app-based hosting. There is no conversion of the former
 special-purpose ntfy container or configuration.
+
+The Incidents page opens on active conditions and includes filters for all or
+resolved occurrences. Details show when the condition was first detected, when
+it opened after any grace period, its duration, and when it cleared. Active
+detail pages refresh every 15 seconds. Each category includes investigation
+steps and a link to its app, server, deployment operation, or panel settings.
+Status is managed by monitoring; resolving the underlying condition closes the
+incident automatically. Repeated deployment failures update the operation link
+within the existing incident. A recurrence after recovery creates a new record.
+Incident tracking and investigation guidance require no external AI service.

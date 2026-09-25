@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { initializeCurrentSchema, CURRENT_SCHEMA_VERSION } from "../../shared/db/current-schema.ts";
 import { createDatabase } from "../../shared/db/connection.ts";
+import { runMigrations } from "../../shared/migrations.ts";
 
 test("old layouts require an explicit offline cutover; current schema opens without changing settings", () => {
   const dir = mkdtempSync(path.join(tmpdir(), "ocd-protection-schema-"));
@@ -20,4 +21,19 @@ test("old layouts require an explicit offline cutover; current schema opens with
     upgraded.run("UPDATE schema_version SET version=114"); upgraded.close();
     expect(() => createDatabase(filename)).toThrow("offline cutover");
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("upgrading removes retired incident agent records and its stored credential", () => {
+  const db = new Database(":memory:");
+  try {
+    initializeCurrentSchema(db);
+    db.run("UPDATE schema_version SET version=119");
+    db.run("CREATE TABLE incident_agent_runs (id TEXT PRIMARY KEY, incident_id TEXT NOT NULL)");
+    db.run("INSERT INTO incident_agent_runs VALUES ('run-1', 'incident-1')");
+    db.run("INSERT INTO encrypted_secrets (key, encrypted_value, iv) VALUES ('deepseek_api_key', 'old-ciphertext', 'old-iv'), ('other', 'keep', 'iv')");
+    runMigrations(db);
+    expect(db.query("SELECT version FROM schema_version").get()).toEqual({ version: CURRENT_SCHEMA_VERSION });
+    expect(db.query("SELECT name FROM sqlite_master WHERE name='incident_agent_runs'").get()).toBeNull();
+    expect(db.query("SELECT key FROM encrypted_secrets").all()).toEqual([{ key: "other" }]);
+  } finally { db.close(); }
 });

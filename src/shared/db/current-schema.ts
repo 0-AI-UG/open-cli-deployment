@@ -1,10 +1,9 @@
 import { initializeNtfySchema } from "./ntfy-schema.ts";
-import { initializeIncidentAgentSchema } from "./incident-agent-schema.ts";
 import { initializeIncidentHistorySchema } from "./incident-history-schema.ts";
 import type { Database } from "bun:sqlite";
 import { initializeProtectionSchema } from "./protection-schema.ts";
 
-export const CURRENT_SCHEMA_VERSION = 119;
+export const CURRENT_SCHEMA_VERSION = 120;
 
 const CURRENT_SCHEMA_STATEMENTS = [
   "CREATE TABLE action_confirmations (\n        confirm_code TEXT PRIMARY KEY,\n        user_code    TEXT NOT NULL UNIQUE,\n        user_id      TEXT NOT NULL,\n        action       TEXT NOT NULL,\n        summary      TEXT NOT NULL,\n        status       TEXT NOT NULL,\n        expires_at   INTEGER NOT NULL,\n        created_at   INTEGER NOT NULL\n      , resource_type TEXT NOT NULL DEFAULT '', resource_id TEXT NOT NULL DEFAULT '')",
@@ -104,8 +103,7 @@ export function initializeCurrentSchema(db: Database): void {
   db.run("BEGIN TRANSACTION");
   try {
     for (const statement of CURRENT_SCHEMA_STATEMENTS) db.run(statement);
-    initializeProtectionSchema(db, false);
-    initializeIncidentAgentSchema(db);
+    initializeProtectionSchema(db);
     initializeNtfySchema(db);
     initializeIncidentHistorySchema(db);
     db.run("INSERT INTO schema_version (version) VALUES (?)", [CURRENT_SCHEMA_VERSION]);

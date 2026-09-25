@@ -16,7 +16,7 @@ export function initializeIncidentHistorySchema(db: Database): void {
   db.run(`INSERT INTO panel_incident_history (incident_id,key,title,path,first_seen,opened_at,resolved_at)
     SELECT incident_id,key,title,path,first_seen,opened_at,resolved_at FROM panel_alerts WHERE opened_at IS NOT NULL`);
 
-  // Recover older occurrences that notification delivery still knows about.
+  // Notification links may refer to older occurrences replaced in panel_alerts.
   const delivered = db.query("SELECT incident_key,title,path,created_at,recovered FROM ntfy_outbox WHERE path LIKE '/incidents/%' ORDER BY created_at").all() as
     Array<{ incident_key: string; title: string; path: string; created_at: number; recovered: number }>;
   const insert = db.prepare("INSERT OR IGNORE INTO panel_incident_history (incident_id,key,title,path,first_seen,opened_at,resolved_at) VALUES (?,?,?,?,?,?,?)");

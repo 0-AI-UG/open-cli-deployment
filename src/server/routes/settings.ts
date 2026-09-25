@@ -23,7 +23,6 @@ export async function handleGetSettings(request: Request): Promise<Response> {
     const githubOauthClientSecret = await secretStore.get("github_oauth_client_secret");
     const registryPassword = await secretStore.get("oci_registry_password");
     const githubBuildToken = await secretStore.get("github_build_token");
-    const deepseekKey = await secretStore.get("deepseek_api_key");
     return Response.json(
       {
         github_oauth_client_id: s.github_oauth_client_id ?? "",
@@ -44,8 +43,6 @@ export async function handleGetSettings(request: Request): Promise<Response> {
         github_build_host: s.github_build_host ?? (githubBuildToken ? "github.com" : ""),
         github_build_token: maskToken(githubBuildToken ?? ""),
         require_2fa: (s.require_2fa ?? "1") === "1",
-        deepseek_api_key: maskToken(deepseekKey ?? ""),
-        deepseek_api_key_from_env: !!process.env.DEEPSEEK_API_KEY,
       },
       { headers: corsHeaders },
     );
@@ -115,10 +112,6 @@ export async function handleSaveSettings(request: Request): Promise<Response> {
           await secretStore.delete(key);
         }
       } else if (key === "oci_registry_password" || key === "github_build_token") {
-        if (value.includes("...") || value === "****") continue;
-        if (value) await secretStore.set(key, value);
-        else await secretStore.delete(key);
-      } else if (key === "deepseek_api_key") {
         if (value.includes("...") || value === "****") continue;
         if (value) await secretStore.set(key, value);
         else await secretStore.delete(key);

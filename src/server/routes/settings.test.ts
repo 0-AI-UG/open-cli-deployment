@@ -86,14 +86,6 @@ describe("handleGetSettings", () => {
   });
 });
 
-test("DeepSeek API key is encrypted at rest and masked in settings", async () => {
-  const response = await handleSaveSettings(req({ deepseek_api_key: "sk-test-secret-value" }));
-  expect(response.status).toBe(200);
-  expect(await secretStore.get("deepseek_api_key")).toBe("sk-test-secret-value");
-  const shown = await (await handleGetSettings(req())).json() as Record<string, unknown>;
-  expect(shown.deepseek_api_key).not.toBe("sk-test-secret-value");
-});
-
 describe("handleSaveSettings: github_oauth_client_secret", () => {
   test("persists a new secret", async () => {
     await handleSaveSettings(req({ github_oauth_client_secret: "gh-secret-aaa" }));

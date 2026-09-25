@@ -5,9 +5,9 @@ import { expect, test } from "bun:test";
 import db, { saveSetting, insertApp, insertUser } from "../../shared/db.ts";
 import { alertTick, reconcileIncidents } from "../../engine/panel-protection/alerts.ts";
 import { createToken } from "../lib/auth.ts";
-import { handleListIncidents, handleGetIncident, handleFixIncident } from "./incidents.ts";
+import { handleListIncidents, handleGetIncident } from "./incidents.ts";
 
-test("incidents open and resolve without ntfy, remain in history, and reject a late fix", async () => {
+test("incidents open and resolve without ntfy, remain in history", async () => {
   const userId = seedTestAdmin();
   saveSetting("panel_backup_enabled", "1");
   saveSetting("panel_backup_enabled_at", "1");
@@ -27,8 +27,7 @@ test("incidents open and resolve without ntfy, remain in history, and reject a l
 
   const detail = await handleGetIncident(new Request(`http://localhost/api/incidents/${active.incident_id}`, { headers }));
   expect((await detail.json() as { incident: { resolved_at: number | null } }).incident.resolved_at).not.toBeNull();
-  const fix = await handleFixIncident(new Request(`http://localhost/api/incidents/${active.incident_id}/fix`, { method: "POST", headers, body: "{}" }));
-  expect(fix.status).toBe(409);
+
 });
 
 test("app-scoped users see only their incidents", async () => {
@@ -48,4 +47,30 @@ test("app-scoped users see only their incidents", async () => {
   const backup = db.query("SELECT incident_id FROM panel_incident_history WHERE key='backup:failed'").get() as { incident_id: string };
   const denied = await handleGetIncident(new Request(`http://localhost/api/incidents/${backup.incident_id}`, { headers }));
   expect(denied.status).toBe(403);
+});
+
+test("pagination and counts use only visible incidents and filters reject invalid input", async () => {
+  const userId = seedTestAdmin();
+  db.query("DELETE FROM panel_incident_history").run();
+  const insert = db.query("INSERT INTO panel_incident_history VALUES (?, 'backup:failed', 'Backup failed', '/admin', ?, ?, ?)");
+  for (let i = 0; i < 55; i++) insert.run(`page-${i}`, i, i, i < 3 ? i + 1 : null);
+  const token = await createToken({ userId, username: "admin" });
+  const headers = { authorization: `Bearer ${token}` };
+  const list = async (query: string) => handleListIncidents(new Request(`http://localhost/api/incidents?${query}`, { headers }));
+  const first = await (await list("status=active")).json();
+  expect(first.incidents).toHaveLength(50);
+  expect(first.counts).toEqual({ all: 55, active: 52, resolved: 3 });
+  expect(first.nextOffset).toBe(50);
+  const second = await (await list("status=active&offset=50")).json();
+  expect(second.incidents).toHaveLength(2);
+  expect(second.nextOffset).toBeNull();
+  expect(new Set([...first.incidents, ...second.incidents].map(row => row.incident_id)).size).toBe(52);
+  for (const query of ["status=invalid", "offset=-1", "offset=1.5", "offset=NaN"]) expect((await list(query)).status).toBe(400);
+  const missing = await handleGetIncident(new Request("http://localhost/api/incidents/missing", { headers }));
+  expect(missing.status).toBe(404);
+});
+
+test("incident endpoints require authentication", async () => {
+  expect((await handleListIncidents(new Request("http://localhost/api/incidents"))).status).toBe(401);
+  expect((await handleGetIncident(new Request("http://localhost/api/incidents/missing"))).status).toBe(401);
 });

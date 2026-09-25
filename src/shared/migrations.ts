@@ -1,5 +1,4 @@
 import { initializeNtfySchema } from "./db/ntfy-schema.ts";
-import { initializeIncidentAgentSchema } from "./db/incident-agent-schema.ts";
 import { initializeIncidentHistorySchema } from "./db/incident-history-schema.ts";
 import type { Database } from "bun:sqlite";
 import { initializeProtectionSchema } from "./db/protection-schema.ts";
@@ -2644,10 +2643,17 @@ export const migrations: Migration[] = [
           AND last_manifest_path IS NOT NULL`);
     },
   },
-  { version: 115, description: "Panel backups and email incidents", up: initializeProtectionSchema },
+  { version: 115, description: "Panel backups and incident conditions", up: initializeProtectionSchema },
   { version: 117, description: "Shared ntfy credentials and delivery outbox", up: initializeNtfySchema },
-  { version: 118, description: "Incident agent investigations and fixes", up: initializeIncidentAgentSchema },
   { version: 119, description: "Durable incident history", up: initializeIncidentHistorySchema },
+  {
+    version: 120,
+    description: "Remove retired incident agent data and credential",
+    up: (db) => {
+      db.run("DROP TABLE IF EXISTS incident_agent_runs");
+      db.query("DELETE FROM encrypted_secrets WHERE key=?").run("deepseek_api_key");
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

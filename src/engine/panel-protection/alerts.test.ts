@@ -39,13 +39,6 @@ test("transient conditions do not send recovery notifications", () => {
   enable(); reconcileIncidents([{ key: "app:1", title: "Unhealthy", path: "/apps/1", grace: 120000 }], 1000);
   reconcileIncidents([], 3000); expect(count()).toBe(0);
 });
-test("legacy email settings cannot enable alert evaluation", async () => {
-  saveSetting("panel_alert_enabled", "1");
-  saveSetting("panel_alert_recipient", "former@example.com");
-  await alertTick();
-  expect(db.query("SELECT count(*) AS n FROM panel_alerts").get()).toEqual({ n: 0 });
-  expect(count()).toBe(0);
-});
 test("overdue panel backups use last successful backup or initial enable time", () => {
   saveSetting("panel_backup_enabled", "1"); saveSetting("panel_backup_enabled_at", "1000");
   expect(collectConditions(1000 + 27 * 3600000).some(c => c.key === "backup:overdue")).toBe(true);
@@ -71,4 +64,18 @@ test("disk alert fires before a small rollout host reaches the pull limit", () =
   });
   insertServerMetricSample(server.id, 0, 0, 15.5, 20);
   expect(collectConditions().some((condition) => condition.key === `disk:${server.id}`)).toBe(true);
+});
+
+test("repeated delivery failures update evidence without reopening the incident", () => {
+  enable();
+  const key = 'delivery:["app:7"]';
+  reconcileIncidents([{ key, title: "Deployment operation #1 failed", path: "/engine/op/1" }], 1000);
+  const original = db.query("SELECT incident_id FROM panel_incident_history WHERE key=?").get(key) as { incident_id: string };
+  reconcileIncidents([{ key, title: "Deployment operation #2 failed", path: "/engine/op/2" }], 2000);
+  expect(db.query("SELECT incident_id,title,path,opened_at FROM panel_incident_history WHERE key=?").all(key)).toEqual([
+    { incident_id: original.incident_id, title: "Deployment operation #2 failed", path: "/engine/op/2", opened_at: 1000 },
+  ]);
+  expect(count()).toBe(1);
+  reconcileIncidents([], 3000);
+  expect(db.query("SELECT title FROM ntfy_outbox WHERE recovered=1").get()).toEqual({ title: "[OCD] Recovered: Deployment operation #2 failed" });
 });
