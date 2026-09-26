@@ -213,7 +213,7 @@ function OpRow({ op, showProgress }: { op: OperationView; showProgress?: boolean
       )}
       {(op.error?.message || op.error?.compensation_error) && (
         <div className="mt-2 border-l-2 border-accent-red pl-2 font-mono text-[10px] text-fg break-words">
-          <span className="font-bold">Why: </span>{op.error.message || op.error.compensation_error}
+          {op.error.message || op.error.compensation_error}
           {op.last_step ? <span className="text-fg-dim"> · Step: {humanizeStep(op.last_step)}</span> : null}
         </div>
       )}
