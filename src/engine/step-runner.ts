@@ -11,6 +11,7 @@ import {
   markOperationFinished,
   markOperationRunning,
   bumpAttempt,
+  getOperation,
   findSupersedingOperation,
   findSupersedingAncestorOperation,
 } from "../shared/db/operations.ts";
@@ -18,6 +19,7 @@ import { FatalProbeError, type AnyOpKind, type OpContext, type Step } from "./ty
 import type { OperationRow } from "../shared/db/operations.ts";
 import { parkOp, unparkOp } from "./engine.ts";
 import { withOpContext } from "./op-logger.ts";
+import { MAX_COMPENSATION_ATTEMPTS } from "./compensation-policy.ts";
 
 function log(...args: unknown[]) {
   console.log(`[${new Date().toISOString()}] [engine:step-runner]`, ...args);
@@ -85,9 +87,17 @@ async function runOperationInner(op: OperationRow, def: AnyOpKind): Promise<void
 
   // Resume directly into compensation if the op was interrupted there.
   if (op.status === "compensating") {
+    if (op.attempt >= MAX_COMPENSATION_ATTEMPTS) {
+      markOperationFinished(op.id, "compensation_failed", {
+        ...parseOperationError(op.error_json),
+        retries_exhausted: true,
+      });
+      return;
+    }
     bumpAttempt(op.id);
     log(`op#${op.id} resuming compensation (attempt ${op.attempt + 1})`);
-    await runCompensation(op, def, input, /*cancelled=*/ false);
+    const originalError = parseOperationError(op.error_json);
+    await runCompensation(op, def, input, Boolean(originalError.cancelled), originalError);
     return;
   }
 
@@ -262,6 +272,7 @@ async function runCompensation(
   }
 
   let anyFailed = false;
+  let latestCompensationError = "";
   for (let i = def.steps.length - 1; i >= 0; i--) {
     const step = def.steps[i];
     if (!step.compensate) continue;
@@ -318,26 +329,45 @@ async function runCompensation(
       });
       log(`op#${op.id} compensate ${step.name} failed:`, errMsg(err));
       anyFailed = true;
+      latestCompensationError = `${step.name}: ${errMsg(err)}`;
       // Continue compensating earlier steps — best-effort rollback.
     }
   }
 
   if (anyFailed) {
-    // Leave status as 'compensating' but flag the op finished for the
-    // reconciler. Actually: mark as compensation_failed terminal — reconciler
-    // will only retry while still in 'compensating'. We stay in compensating
-    // so the reconciler keeps retrying; if attempts exceed budget the
-    // reconciler escalates to compensation_failed.
+    const failure = {
+      ...(error && typeof error === "object" ? error as Record<string, unknown> : {}),
+      compensation_error: latestCompensationError,
+    };
+    const attempt = getOperation(op.id)?.attempt ?? op.attempt + 1;
+    if (attempt >= MAX_COMPENSATION_ATTEMPTS) {
+      markOperationFinished(op.id, "compensation_failed", {
+        ...failure,
+        retries_exhausted: true,
+      });
+      log(`op#${op.id} compensation retries exhausted after ${attempt} attempts`);
+      return;
+    }
+    markOperationCompensating(op.id, failure);
     log(`op#${op.id} compensation incomplete — left in 'compensating' for retry`);
-    // No finishStep on the operation; leave status='compensating'.
     return;
   }
 
   markOperationFinished(
     op.id,
-    cancelled ? "cancelled" : "compensated",
+    cancelled ? "cancelled" : def.kind.startsWith("destroy_") ? "failed" : "compensated",
     error,
   );
+}
+
+function parseOperationError(raw: string | null): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function errMsg(err: unknown): string {

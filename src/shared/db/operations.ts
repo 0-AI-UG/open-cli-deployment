@@ -129,21 +129,51 @@ export function listRunningOperations(): OperationRow[] {
     .all() as OperationRow[];
 }
 
-export function listRecentOperations(limit = 50): OperationRow[] {
+const TERMINAL_STATUSES: OperationStatus[] = ["done", "failed", "cancelled", "compensated", "compensation_failed"];
+
+export function listRecentOperations(
+  limit = 50,
+  offset = 0,
+  statuses: OperationStatus[] = TERMINAL_STATUSES,
+): OperationRow[] {
+  if (statuses.length === 0) return [];
+  const placeholders = statuses.map(() => "?").join(",");
   return db
     .query(
       `SELECT * FROM operations
-        WHERE status IN ('done','failed','cancelled','compensated','compensation_failed')
-        ORDER BY COALESCE(finished_at, enqueued_at) DESC
-        LIMIT ?`,
+        WHERE status IN (${placeholders})
+        ORDER BY COALESCE(finished_at, enqueued_at) DESC, id DESC
+        LIMIT ? OFFSET ?`,
     )
-    .all(limit) as OperationRow[];
+    .all(...statuses, limit, offset) as OperationRow[];
+}
+
+export function countRecentOperations(statuses: OperationStatus[] = TERMINAL_STATUSES): number {
+  if (statuses.length === 0) return 0;
+  const placeholders = statuses.map(() => "?").join(",");
+  const row = db.query(`SELECT COUNT(*) AS count FROM operations WHERE status IN (${placeholders})`)
+    .get(...statuses) as { count: number };
+  return row.count;
+}
+
+export function listCompensationFailedOperationIds(): number[] {
+  return (db.query("SELECT id FROM operations WHERE status = 'compensation_failed'").all() as Array<{ id: number }>).map((row) => row.id);
 }
 
 export function listChildOperations(parentId: number): OperationRow[] {
   return db
     .query("SELECT * FROM operations WHERE parent_id = ? ORDER BY id ASC")
     .all(parentId) as OperationRow[];
+}
+
+/** Latest terminal deletion attempts for the same app, newest first. */
+export function recentDestroyAppAttempts(appId: number, limit = 6): OperationRow[] {
+  return db.query(
+    `SELECT * FROM operations
+     WHERE kind = 'destroy_app' AND json_extract(input_json, '$.appId') = ?
+       AND status IN ('done','failed','cancelled','compensated','compensation_failed')
+     ORDER BY id DESC LIMIT ?`,
+  ).all(appId, limit) as OperationRow[];
 }
 
 /** Return the newest later operation that may have adopted one of `op`'s
@@ -362,6 +392,26 @@ export function isCancelRequested(id: number): boolean {
 
 export function updateLastStep(id: number, step: string): void {
   db.run("UPDATE operations SET last_step = ? WHERE id = ?", [step, id]);
+}
+
+export function updateExecutingStepDetail(opId: number, detail: string): void {
+  db.run(
+    `UPDATE operation_steps SET detail = ?
+     WHERE op_id = ? AND seq = (
+       SELECT MAX(seq) FROM operation_steps WHERE op_id = ? AND phase = 'forward' AND status = 'executing'
+     )`,
+    [detail, opId, opId],
+  );
+}
+
+export function countBuildWaitersAhead(opId: number): number {
+  const row = db.query(
+    `SELECT COUNT(DISTINCT s.op_id) AS count
+     FROM operation_steps s JOIN operations o ON o.id = s.op_id
+     WHERE s.op_id < ? AND o.status = 'running' AND s.status = 'executing'
+       AND s.detail LIKE 'Waiting for build worker%'`,
+  ).get(opId) as { count: number };
+  return row.count;
 }
 
 export function nextStepSeq(opId: number): number {

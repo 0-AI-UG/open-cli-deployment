@@ -10,6 +10,7 @@ import { getOperation, markOperationFinished } from "../shared/db/operations.ts"
 import { requeueForCompensation } from "./engine.ts";
 import { currentHolder } from "./scheduler.ts";
 import { reconcileStaleAppStates, reconcileStaleStackStates } from "./resource-state.ts";
+import { MAX_COMPENSATION_ATTEMPTS } from "./compensation-policy.ts";
 
 function log(context: string, ...args: unknown[]) {
   console.log(`[${new Date().toISOString()}] [reconciler:${context}]`, ...args);
@@ -17,7 +18,6 @@ function log(context: string, ...args: unknown[]) {
 
 const STUCK_COMPENSATING_MIN = 5;
 const STUCK_PENDING_RUNNING_MIN = 10;
-const MAX_COMPENSATION_ATTEMPTS = 5;
 
 export function sweepStuckStates(): void {
   try {
@@ -48,8 +48,14 @@ export function sweepStuckStates(): void {
     for (const op of stuckComp) {
       if (op.attempt >= MAX_COMPENSATION_ATTEMPTS) {
         log("sweep", `op#${op.id} (${op.kind}) exhausted compensation retries (attempt=${op.attempt}) — marking compensation_failed`);
+        let originalError: Record<string, unknown> = {};
+        try {
+          const parsed = JSON.parse(getOperation(op.id)?.error_json || "{}");
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) originalError = parsed;
+        } catch { /* preserve the terminal transition even with malformed old error JSON */ }
         markOperationFinished(op.id, "compensation_failed", {
-          message: "compensation retries exhausted; affected resources may be stranded",
+          ...originalError,
+          retries_exhausted: true,
         });
         continue;
       }

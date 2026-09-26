@@ -181,21 +181,32 @@ export async function reloadAppEnvironment(appId: number): Promise<{ ok: boolean
     };
     let allHealthy = true;
 
+    // Resolve registry access on every host before draining or replacing any
+    // replica. A credential failure must leave the serving set untouched.
+    const servers = new Map<number, NonNullable<ReturnType<typeof db.getServer>>>();
     for (const replica of replicas) {
       const server = db.getServer(replica.server_id);
-      if (!server) {
-        allHealthy = false;
-        continue;
+      if (!server) throw new Error(`Server ${replica.server_id} not found for replica ${replica.id}`);
+      servers.set(server.id, server);
+    }
+    for (const server of servers.values()) {
+      try {
+        await pullImmutableImage(server.ipv4, {
+          name: app.name,
+          imageRef: desiredImage,
+          hostKey: server.ssh_host_key || undefined,
+        });
+      } catch (error) {
+        throw new Error(`Cannot pull ${desiredImage} on ${server.name} before environment reload: ${error instanceof Error ? error.message : String(error)}`);
       }
+    }
+
+    for (const replica of replicas) {
+      const server = servers.get(replica.server_id)!;
       if (replicas.length > 1) {
         db.updateReplicaStatus(replica.id, "draining");
         await syncAppIngress(appId).catch(() => {});
       }
-      await pullImmutableImage(server.ipv4, {
-        name: app.name,
-        imageRef: desiredImage,
-        hostKey: server.ssh_host_key || undefined,
-      });
       await startAppReplica(
         server.ipv4,
         appReplicaRunOpts(app, server, {

@@ -6,7 +6,7 @@ export type OperationStep = {
   seq: number;
   step: string;
   phase: "forward" | "compensate";
-  status: "started" | "ok" | "skipped" | "failed";
+  status: "started" | "executing" | "ok" | "skipped" | "failed";
   detail: string;
   output: unknown;
   started_at: string;
@@ -36,7 +36,7 @@ export type OperationView = {
   enqueued_at: string;
   started_at: string | null;
   finished_at: string | null;
-  error: { message?: string; cancelled?: boolean } | null;
+  error: { message?: string; compensation_error?: string; retries_exhausted?: boolean; cancelled?: boolean; finalized?: boolean; compensation_skipped?: boolean; superseded_by?: number } | null;
   total_steps: number;
   attempt: number;
   steps?: OperationStep[];
@@ -44,8 +44,11 @@ export type OperationView = {
     id: number;
     kind: string;
     status: OperationStatus;
+    label?: string;
     resource_keys: string[];
     resource_labels?: string[];
+    error?: OperationView["error"];
+    last_step?: string | null;
   }>;
 };
 
@@ -118,8 +121,10 @@ export async function pollOperation(
   onEvent: (ev: PollEvent) => void,
   signal: { aborted: boolean },
   initialSince = 0,
+  initialDetail = "",
 ): Promise<OperationStatus | null> {
   let since = initialSince;
+  let detail = initialDetail;
   while (!signal.aborted) {
     let data: {
       status: OperationStatus;
@@ -128,14 +133,17 @@ export async function pollOperation(
       steps?: OperationStep[];
     };
     try {
-      data = await get(`/api/operations/${opId}/events?since=${since}&wait=15000`);
+      data = await get(`/api/operations/${opId}/events?since=${since}&detail=${encodeURIComponent(detail)}&wait=15000`);
     } catch {
       await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
     if (signal.aborted) return null;
     const newSteps = Array.isArray(data.steps) ? data.steps : [];
-    if (newSteps.length > 0) since = newSteps[newSteps.length - 1].seq;
+    if (newSteps.length > 0) {
+      since = newSteps[newSteps.length - 1].seq;
+      detail = newSteps[newSteps.length - 1].detail;
+    }
     onEvent({
       status: data.status,
       last_step: data.last_step,
@@ -163,12 +171,16 @@ export function useOperation(opId: number | null): OperationView | null {
 
     (async () => {
       let initialSince = 0;
+      let initialDetail = "";
       try {
         const initial = await get(`/api/operations/${opId}`);
         if (signal.aborted) return;
         const steps: OperationStep[] = initial.steps || [];
         accumulated.push(...steps);
-        if (steps.length > 0) initialSince = steps[steps.length - 1].seq;
+        if (steps.length > 0) {
+          initialSince = steps[steps.length - 1].seq;
+          initialDetail = steps[steps.length - 1].detail;
+        }
         setView({ ...initial, steps: [...accumulated] });
       } catch {
         /* poll loop will populate */
@@ -185,6 +197,7 @@ export function useOperation(opId: number | null): OperationView | null {
         },
         signal,
         initialSince,
+        initialDetail,
       );
     })();
 
@@ -272,12 +285,16 @@ function useOperationTracker(
 
     (async () => {
       let initialSince = 0;
+      let initialDetail = "";
       try {
         const initial: OperationView = await get(`/api/operations/${opId}`);
         if (!mounted.current || signal.aborted) return;
         const steps = initial.steps || [];
         accum.current.get(opId)!.push(...steps);
-        if (steps.length > 0) initialSince = steps[steps.length - 1].seq;
+        if (steps.length > 0) {
+          initialSince = steps[steps.length - 1].seq;
+          initialDetail = steps[steps.length - 1].detail;
+        }
         setViews((prev) => ({ ...prev, [opId]: { ...initial, steps: [...accum.current.get(opId)!] } }));
       } catch {
         /* poll will populate */
@@ -305,6 +322,7 @@ function useOperationTracker(
         },
         signal,
         initialSince,
+        initialDetail,
       );
       if (!mounted.current) return;
       setTimeout(() => {

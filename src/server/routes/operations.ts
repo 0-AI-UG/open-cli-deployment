@@ -6,9 +6,11 @@ import { PermissionError } from "../lib/errors.ts";
 import {
   getOperation,
   getSteps,
+  getLatestStep,
   listPendingOperations,
   listRunningOperations,
   listRecentOperations,
+  countRecentOperations,
   listChildOperations,
   requestCancel,
   requeueOperation,
@@ -28,6 +30,7 @@ import {
 } from "../../engine/resource-state.ts";
 import { previewCompensation } from "../../engine/compensation-safety.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
+import type { OperationStatus } from "../../shared/db/operations.ts";
 
 // Keys whose values may contain secrets (connection strings, passwords,
 // tokens, credentials, and env-var values). Redacted in any op input/output
@@ -120,19 +123,32 @@ function mapStep(s: ReturnType<typeof getSteps>[number]) {
 export async function handleListOperations(request: Request): Promise<Response> {
   try {
     await requirePermission(request, "operations.view");
-    const requestedLimit = Number(new URL(request.url).searchParams.get("limit"));
+    const url = new URL(request.url);
+    const requestedLimit = Number(url.searchParams.get("limit"));
     const recentLimit = Number.isInteger(requestedLimit) && requestedLimit > 0
       ? Math.min(requestedLimit, 1000)
       : 50;
+    const requestedOffset = Number(url.searchParams.get("offset"));
+    const offset = Number.isSafeInteger(requestedOffset) && requestedOffset > 0 ? requestedOffset : 0;
+    const filter = url.searchParams.get("filter") || "all";
+    const statuses: OperationStatus[] = filter === "failures"
+      ? ["failed", "compensation_failed", "compensated"]
+      : filter === "needs_attention"
+        ? ["failed", "compensation_failed"]
+        : filter === "cancelled"
+          ? ["cancelled"]
+          : ["done", "failed", "cancelled", "compensated", "compensation_failed"];
     const running = listRunningOperations().map(toJsonRow);
     const pending = listPendingOperations(100).map(toJsonRow);
-    const recent = listRecentOperations(recentLimit).map(toJsonRow);
+    const recent = listRecentOperations(recentLimit, offset, statuses).map(toJsonRow);
+    const recentTotal = countRecentOperations(statuses);
     const heartbeatRaw = getSettings().engine_heartbeat || null;
     return Response.json(
       {
         running,
         pending,
         recent,
+        recent_total: recentTotal,
         engine: {
           heartbeat: heartbeatRaw,
           concurrency: parseInt(process.env.ENGINE_CONCURRENCY || "4", 10),
@@ -179,6 +195,7 @@ export async function handleOperationEvents(request: Request, id: number): Promi
     await requirePermission(request, "operations.view");
     const url = new URL(request.url);
     const since = parseInt(url.searchParams.get("since") || "0", 10);
+    const knownDetail = url.searchParams.get("detail");
     const timeoutMs = Math.min(parseInt(url.searchParams.get("wait") || "15000", 10), 25000);
     const deadline = Date.now() + timeoutMs;
 
@@ -190,7 +207,13 @@ export async function handleOperationEvents(request: Request, id: number): Promi
       // exclusive `since` cursor misses the final transition of the last
       // step(s). On terminal, re-send the full list so the client lands on
       // every step's final state instead of a frozen "started".
-      const steps = terminal ? getSteps(id, 0) : getSteps(id, since);
+      let steps = terminal ? getSteps(id, 0) : getSteps(id, since);
+      if (!terminal && steps.length === 0 && knownDetail !== null) {
+        const latest = getLatestStep(id);
+        if (latest?.seq === since && latest.status === "executing" && latest.detail !== knownDetail) {
+          steps = [latest];
+        }
+      }
       if (steps.length > 0 || terminal) {
         const nextCursor = steps.reduce((max, step) => Math.max(max, step.seq), since);
         const children = listChildOperations(id).map(toJsonRow);

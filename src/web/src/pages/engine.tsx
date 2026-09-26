@@ -8,12 +8,22 @@ type Snapshot = {
   running: OperationView[];
   pending: OperationView[];
   recent: OperationView[];
+  recent_total: number;
   engine: {
     heartbeat: string | null;
     concurrency: number;
     known_kinds: Array<{ kind: string; label: string; steps: number }>;
   };
 };
+
+type RecentFilter = "all" | "failures" | "needs_attention" | "cancelled";
+const PAGE_SIZE = 50;
+const FILTERS: Array<{ value: RecentFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "failures", label: "Failures" },
+  { value: "needs_attention", label: "Needs review" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 function statusColor(status: string): string {
   if (status === "done") return "bg-accent text-fg";
@@ -36,12 +46,14 @@ function heartbeatLabel(raw: string | null): { text: string; healthy: boolean } 
 
 export function EnginePage() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [filter, setFilter] = useState<RecentFilter>("all");
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     async function tick() {
       try {
-        const data = await get("/api/operations");
+        const data = await get(`/api/operations?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&filter=${filter}`);
         if (!cancelled) setSnap(data);
       } catch {
         /* ignore */
@@ -53,7 +65,7 @@ export function EnginePage() {
       cancelled = true;
       clearInterval(iv);
     };
-  }, []);
+  }, [filter, page]);
 
   if (!snap) return <PageState title="Loading operations" />;
 
@@ -85,11 +97,37 @@ export function EnginePage() {
         )}
       </Section>
 
-      <Section title="Recent" count={snap.recent.length}>
+      <Section title="History" count={snap.recent_total ?? snap.recent.length}>
+        <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Filter operation history">
+          {FILTERS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={filter === option.value}
+              onClick={() => { setSnap(null); setFilter(option.value); setPage(0); }}
+              className={`border-2 border-fg px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider ${
+                filter === option.value ? "bg-fg text-bg" : "bg-bg-raised text-fg hover:bg-alt"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         {snap.recent.length === 0 ? (
-          <EmptyState label="No operations yet" />
+          <EmptyState label="No operations in this view" />
         ) : (
           <OpList ops={snap.recent} />
+        )}
+        {(snap.recent_total ?? snap.recent.length) > PAGE_SIZE && (
+          <div className="mt-3 flex items-center justify-between gap-3 font-mono text-[10px]">
+            <span className="text-fg-dim">
+              {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, snap.recent_total)} of {snap.recent_total}
+            </span>
+            <div className="flex gap-2">
+              <button type="button" disabled={page === 0} onClick={() => { setSnap(null); setPage((p) => p - 1); }} className="border-2 border-fg px-2 py-1 disabled:opacity-40">Newer</button>
+              <button type="button" disabled={(page + 1) * PAGE_SIZE >= snap.recent_total} onClick={() => { setSnap(null); setPage((p) => p + 1); }} className="border-2 border-fg px-2 py-1 disabled:opacity-40">Older</button>
+            </div>
+          </div>
         )}
       </Section>
     </PageShell>
@@ -146,7 +184,7 @@ function OpRow({ op, showProgress }: { op: OperationView; showProgress?: boolean
         >
           {op.status}
         </span>
-        <span className="font-mono text-xs font-bold">{op.kind}</span>
+        <span className="font-mono text-xs font-bold">{op.label || op.kind}</span>
         <span className="font-mono text-[10px] text-fg-dim">#{op.id}</span>
         <span className="font-mono text-[10px] text-fg-dim">{resource}</span>
         <span className="font-mono text-[10px] text-fg-dim ml-auto">
@@ -157,6 +195,12 @@ function OpRow({ op, showProgress }: { op: OperationView; showProgress?: boolean
       {progress && (
         <div className="mt-1 font-mono text-[10px] text-fg-dim">
           {humanizeStep(progress)}
+        </div>
+      )}
+      {(op.error?.message || op.error?.compensation_error) && (
+        <div className="mt-2 border-l-2 border-accent-red pl-2 font-mono text-[10px] text-fg break-words">
+          <span className="font-bold">Why: </span>{op.error.message || op.error.compensation_error}
+          {op.last_step ? <span className="text-fg-dim"> · Step: {humanizeStep(op.last_step)}</span> : null}
         </div>
       )}
     </a>

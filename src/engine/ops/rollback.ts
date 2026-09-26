@@ -257,6 +257,10 @@ const swapContainer: Step<{ appId: number }, SwapOut> = {
   async run(ctx, prior) {
     const target = prior["load_target_deployment"] as TargetOut;
     const prepared = prior["prepare_environment"] as EnvironmentOut;
+    if (prior.snapshot_current_revision &&
+      !await probeRemoteRevisionSnapshot(rollbackSnapshotTarget(ctx, prior).remote)) {
+      throw new Error("Recovery snapshot disappeared before rollback swap; serving revision was not replaced");
+    }
     const app = db.getApp(target.appId);
     if (!app) throw new Error("App not found");
     const server = db.getServer(target.serverId);

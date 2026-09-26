@@ -4,7 +4,7 @@ useTempDataDir();
 import { beforeEach, describe, expect, test } from "bun:test";
 import * as db from "../shared/db.ts";
 import connection from "../shared/db/connection.ts";
-import { enqueueOperation } from "../shared/db/operations.ts";
+import { enqueueOperation, getSteps, insertStep, markOperationRunning } from "../shared/db/operations.ts";
 import type { ServerRow } from "../shared/db/servers.ts";
 import { createBuildCoordinator } from "./build-coordinator.ts";
 import { withBuildFailover } from "./build-failover.ts";
@@ -166,6 +166,64 @@ describe("build coordinator", () => {
 
     expect(result.workerId).toBe(fallback.row.id);
     expect(db.getBuildWorkerLeaseForOperation(occupyingOp.id)?.lease_token).toBe(occupied?.lease_token);
+  });
+
+  test("waits for a busy worker and reports the wait before building", async () => {
+    const candidate = worker("queued");
+    const first = operation();
+    const second = operation();
+    markOperationRunning(second.id);
+    insertStep({ opId: second.id, seq: 1, step: "build_and_push", phase: "forward", status: "executing" });
+    const coordinator = createBuildCoordinator(transport(new Map()));
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const firstReady = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const firstHeld = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const firstBuild = coordinator.withWorker({
+      operationId: first.id,
+      run: async () => { firstStarted(); await firstHeld; return "first"; },
+    });
+    await firstReady;
+
+    let parked = 0;
+    let unparked = 0;
+    const queuedBuild = withBuildFailover({
+      ctx: {
+        opId: second.id,
+        isCancelRequested: () => false,
+        log: () => {},
+        park: () => { parked++; },
+        unpark: () => { unparked++; },
+      },
+      coordinator,
+      capacityWaitMs: 1_000,
+      capacityPollMs: 5,
+      run: async ({ workerId }) => workerId,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getSteps(second.id)[0].detail).toStartWith("Waiting for build worker");
+    expect(parked).toBe(1);
+    releaseFirst();
+    await firstBuild;
+    expect((await queuedBuild).workerId).toBe(candidate.row.id);
+    expect(unparked).toBe(1);
+  });
+
+  test("bounds the wait for worker capacity", async () => {
+    const candidate = worker("timeout");
+    const occupying = operation();
+    const waiting = operation();
+    const lease = db.tryAcquireBuildWorkerLease({ operationId: occupying.id, candidateWorkerIds: [candidate.row.id] });
+    expect(lease).not.toBeNull();
+    const coordinator = createBuildCoordinator(transport(new Map()));
+    await expect(withBuildFailover({
+      ctx: { opId: waiting.id, isCancelRequested: () => false, log: () => {} },
+      coordinator,
+      capacityWaitMs: 5,
+      capacityPollMs: 5,
+      run: async () => "never",
+    })).rejects.toThrow("Timed out waiting");
+    expect(db.getBuildWorkerLeaseForOperation(occupying.id)).not.toBeNull();
   });
 
   test.each([

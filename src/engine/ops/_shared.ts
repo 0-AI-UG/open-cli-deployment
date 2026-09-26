@@ -50,7 +50,20 @@ export function assertCleanupComplete(
 ): void {
   const failures = runDbCleanupGate(prior).filter((name) => !stepNames || stepNames.includes(name));
   if (failures.length > 0) {
-    throw new Error(`Cleanup incomplete (failed: ${failures.join(", ")})`);
+    const causes = failures.flatMap((name) => {
+      const out = prior[name] as { failedSteps?: unknown; error?: unknown } | undefined;
+      if (Array.isArray(out?.failedSteps) && out.failedSteps.length > 0) {
+        return out.failedSteps.map((cause) => {
+          const causeName = String(cause);
+          const source = prior[causeName] as { error?: unknown } | undefined;
+          return typeof source?.error === "string" && source.error
+            ? `${causeName}: ${source.error}`
+            : causeName;
+        });
+      }
+      return [typeof out?.error === "string" && out.error ? `${name}: ${out.error}` : name];
+    });
+    throw new Error(`Cleanup incomplete (failed: ${[...new Set(causes)].join(", ")})`);
   }
 }
 

@@ -1,10 +1,11 @@
 import { retireAppNtfyCredentials } from "../shared/ntfy.ts";
 import { retireAppStorageGrants } from "../shared/object-storage.ts";
 import * as db from "../shared/db.ts";
-import { enqueueOperation, findActiveOperationByResourceKey } from "../shared/db/operations.ts";
+import { enqueueOperation, findActiveOperationByResourceKey, recentDestroyAppAttempts } from "../shared/db/operations.ts";
 import { resolveAppEnvVars } from "../shared/env-crypto.ts";
 import { attestReplica, hashEnvironment } from "./revision.ts";
 import { tryAcquire, release, NON_OP_HOLDER } from "./scheduler.ts";
+import { destroyRetryDelayMs } from "./destroy-retry.ts";
 
 function log(...args: unknown[]): void {
   console.log(`[${new Date().toISOString()}] [app-runtime-reconciler]`, ...args);
@@ -23,6 +24,7 @@ export async function reconcileAppRuntime(): Promise<void> {
       if (!app) continue;
       if (app.deletion_requested_at) {
         if (!findActiveOperationByResourceKey("destroy_app", key)) {
+          if (destroyRetryDelayMs(recentDestroyAppAttempts(app.id)) > 0) continue;
           const volumeKeys = app.volume_id ? [`volume:${app.volume_id}`] : [];
           enqueueOperation({
             kind: "destroy_app",

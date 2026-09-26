@@ -5,6 +5,7 @@ import { appStorageEnv, prepareStorageBindings, resolveStorageBindings, getAppSt
 import * as db from "../../shared/db.ts";
 import {
   pullImmutableImageAndRun,
+  pullImmutableImage,
   probeAppHealth,
   startAppReplica,
   runAppPostStartCommand,
@@ -275,7 +276,7 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
 const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
   name: "pull_and_run_candidate",
   label: "Pull immutable image",
-  async run(ctx) {
+  async run(ctx, prior) {
     const { appId } = ctx.input;
     const storedApp = db.getApp(appId);
     if (!storedApp) throw new Error("App not found");
@@ -286,6 +287,10 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
     const first = replicas[0];
     const server = db.getServer(first.server_id);
     if (!server) throw new Error("Server not found");
+    if (prior.snapshot_current_revision) {
+      const verified = await probeRemoteRevisionSnapshot(redeploySnapshotTarget(ctx).remote);
+      if (!verified) throw new Error(`Recovery snapshot for ${storedApp.name} disappeared before rollout; serving revision was not replaced`);
+    }
 
     const containerPort = app.container_port;
     const envVars = await candidateEnvVars(storedApp, candidate, ctx);
@@ -325,6 +330,31 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
       imageDigest: "imageDigest" in r ? r.imageDigest : undefined,
       imageBytes: "imageBytes" in r ? r.imageBytes : undefined,
     };
+  },
+};
+
+const preflightRegistryPull: Step<RedeployInput, { checkedServerIds: number[] }> = {
+  name: "preflight_registry_pull",
+  label: "Check image access on rollout hosts",
+  async run(ctx) {
+    const stored = db.getApp(ctx.input.appId);
+    if (!stored) throw new Error("App not found");
+    const candidate = candidateApp(stored, effectiveCandidate(stored, ctx.input));
+    const serverIds = [...new Set(db.getReplicas(stored.id).map((replica) => replica.server_id))];
+    for (const serverId of serverIds) {
+      const server = db.getServer(serverId);
+      if (!server) throw new Error(`Rollout server #${serverId} not found`);
+      try {
+        await pullImmutableImage(server.ipv4, {
+          name: stored.name,
+          imageRef: candidate.image_ref,
+          hostKey: server.ssh_host_key || undefined,
+        }, (line) => ctx.log(`[image preflight ${server.name}] ${line}`));
+      } catch (error) {
+        throw new Error(`Cannot pull ${candidate.image_ref} on ${server.name} before rollout: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    return { checkedServerIds: serverIds };
   },
 };
 
@@ -552,6 +582,7 @@ const redeployOp: OpKindDefinition<RedeployInput> = {
       },
     },
     wakeIfSleeping,
+    preflightRegistryPull,
     snapshotCurrentRevision,
     setDeploying,
     pullAndRunCandidate,

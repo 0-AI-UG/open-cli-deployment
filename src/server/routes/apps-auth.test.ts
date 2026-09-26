@@ -30,10 +30,10 @@ mock.module("../../engine/scale/traefik-manager.ts", () => ({
 }));
 
 import * as db from "../../shared/db.ts";
-import { enqueueOperation, getOperation, markOperationFinished } from "../../shared/db/operations.ts";
+import { enqueueOperation, getOperation, insertStep, markOperationFinished, markOperationRunning, updateExecutingStepDetail } from "../../shared/db/operations.ts";
 import { handleDeploy, handleGetApps, handleGetDashboard, handleReleaseApp } from "./apps.ts";
 import { handleDeployStack } from "./stacks.ts";
-import { handleListOperations } from "./operations.ts";
+import { handleListOperations, handleOperationEvents } from "./operations.ts";
 
 const DIGEST_A = `ghcr.io/acme/app@sha256:${"a".repeat(64)}`;
 const DIGEST_B = `ghcr.io/acme/app@sha256:${"b".repeat(64)}`;
@@ -139,6 +139,38 @@ test("operations list can request more than the default 50 recent operations", a
   const expandedResponse = await handleListOperations(new Request("http://x/api/operations?limit=100"));
   const expandedBody = await expandedResponse.json() as { recent: Array<{ id: number }> };
   expect(expandedBody.recent.map((op) => op.id)).toContain(ids[0]);
+});
+
+test("operations history filters failures and pages through them", async () => {
+  const failedIds: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const op = enqueueOperation({ kind: "test-list", resourceKeys: [], input: {}, trigger: "test" });
+    markOperationFinished(op.id, i === 0 ? "done" : "compensated");
+    if (i > 0) failedIds.push(op.id);
+  }
+  const first = await handleListOperations(new Request("http://x/api/operations?filter=failures&limit=1"));
+  const firstBody = await first.json() as { recent: Array<{ id: number; status: string }>; recent_total: number };
+  expect(firstBody.recent).toHaveLength(1);
+  expect(firstBody.recent[0].id).toBe(failedIds[1]);
+  expect(firstBody.recent_total).toBeGreaterThanOrEqual(2);
+
+  const second = await handleListOperations(new Request("http://x/api/operations?filter=failures&limit=1&offset=1"));
+  const secondBody = await second.json() as { recent: Array<{ id: number; status: string }> };
+  expect(secondBody.recent[0].id).toBe(failedIds[0]);
+  expect(secondBody.recent[0].status).toBe("compensated");
+});
+
+test("operation events report an updated wait reason on the same step", async () => {
+  const op = enqueueOperation({ kind: "test-list", resourceKeys: [], input: {}, trigger: "test" });
+  markOperationRunning(op.id);
+  insertStep({ opId: op.id, seq: 1, step: "build_and_push", phase: "forward", status: "executing" });
+  updateExecutingStepDetail(op.id, "Waiting for build worker (1 ahead)");
+  const response = await handleOperationEvents(new Request(
+    `http://x/api/operations/${op.id}/events?since=1&detail=&wait=1000`,
+  ), op.id);
+  const body = await response.json() as { steps: Array<{ seq: number; detail: string }> };
+  expect(body.steps).toMatchObject([{ seq: 1, detail: "Waiting for build worker (1 ahead)" }]);
+  markOperationFinished(op.id, "done");
 });
 
 describe("external artifact release endpoint", () => {
@@ -282,6 +314,36 @@ describe("CLI-only manifest endpoint", () => {
     }));
     expect(response.status).toBe(400);
     expect(((await response.json()) as { error: string }).error).toMatch(/non-empty array/i);
+  });
+
+  test("rejects an invalid stack member before enqueueing an operation", async () => {
+    const { default: connection } = await import("../../shared/db/connection.ts");
+    const before = (connection.query("SELECT COUNT(*) AS count FROM operations").get() as { count: number }).count;
+    const response = await handleDeployStack(new Request("http://x/api/stacks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: `stack-${Math.random().toString(36).slice(2, 8)}`,
+        apps: [{ key: "api", app_name: "api", container_port: 0, image_ref: DIGEST_A }],
+      }),
+    }));
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toMatch(/App "api".*Port:/);
+    const after = (connection.query("SELECT COUNT(*) AS count FROM operations").get() as { count: number }).count;
+    expect(after).toBe(before);
+  });
+
+  test("reports a broken stack dependency as a request error", async () => {
+    const response = await handleDeployStack(new Request("http://x/api/stacks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: `stack-${Math.random().toString(36).slice(2, 8)}`,
+        apps: [{ key: "api", app_name: "api", container_port: 3000, image_ref: DIGEST_A, needs: ["db"] }],
+      }),
+    }));
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toMatch(/unknown dependency db/);
   });
 
   test("partial stack deploy retains the immutable image of an unselected member", async () => {

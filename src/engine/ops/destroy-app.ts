@@ -114,15 +114,21 @@ const stopAndRemoveContainers: Step<DestroyInput, { affectedServerIds: number[];
     for (const replica of replicas) {
       affected.add(replica.server_id);
       const server = db.getServer(replica.server_id);
-      if (!server) continue;
+      if (!server) {
+        failed = true;
+        ctx.log(`Cannot remove replica ${replica.container_name}: server #${replica.server_id} is missing`);
+        continue;
+      }
       const hostKey = server.ssh_host_key || undefined;
       const r = await softStep(ctx, `rm ${replica.container_name}`, async () => {
         await removeContainer(server.ipv4, replica.container_name, hostKey);
       });
       if (!r.ok) failed = true;
-      await softStep(ctx, `rmdir ${app.name}`, async () => {
-        await sshExec(server.ipv4, `rm -rf /home/deploy/apps/${app.name}`, hostKey);
+      const directory = await softStep(ctx, `rmdir ${app.name}`, async () => {
+        const result = await sshExec(server.ipv4, `rm -rf /home/deploy/apps/${app.name}`, hostKey);
+        if (result.exitCode !== 0) throw new Error(result.stderr.trim() || `exit ${result.exitCode}`);
       });
+      if (!directory.ok) failed = true;
     }
     return { affectedServerIds: Array.from(affected), failed };
   },

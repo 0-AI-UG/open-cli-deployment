@@ -13,6 +13,8 @@ import { validatePublicEndpoint } from "../../engine/dns-reconciler.ts";
 import { approveAutomaticServerProvisioning } from "../lib/server-provisioning.ts";
 import { enrichAppForResponse } from "./apps.ts";
 import { resolveOciImage } from "../../engine/oci-image.ts";
+import { validateBuildDeployRequest, validateDeployRequest } from "../../shared/validate.ts";
+import { validateStackReferences } from "../../shared/stack-spec.ts";
 
 const TERMINAL_OPERATION_STATUSES = new Set([
   "done",
@@ -84,12 +86,6 @@ export async function handleDeployStack(request: Request): Promise<Response> {
     const selectedApps = req.selected_app_keys
       ? req.apps.filter((app) => req.selected_app_keys!.includes(app.key))
       : req.apps;
-    const newApps = selectedApps.filter((app) => !db.getAppByName(`${req.name}-${app.key}`));
-    if (newApps.length > 0) {
-      const pools = newApps.map((app) => app.placement_pool || "general");
-      await approveAutomaticServerProvisioning(request, payload, `deploying stack ${req.name}`, pools);
-      req.server_provisioning_approved = true;
-    }
     // The engine validates the complete stack, including retained members.
     // Preserve their deployed digest instead of passing an unselected manifest
     // tag into validate_plan, which would fail an otherwise valid partial deploy.
@@ -108,6 +104,39 @@ export async function handleDeployStack(request: Request): Promise<Response> {
       }
       if (app.build || !app.image_ref) continue;
       app.image_ref = await resolveOciImage(app.image_ref);
+    }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(req.name)) {
+      return Response.json({ ok: false, error: "Stack name must contain only lowercase letters, digits, and hyphens" }, { status: 400, headers: corsHeaders });
+    }
+    const appKeys = new Set(req.apps.map((app) => app.key));
+    if (appKeys.size !== req.apps.length) {
+      return Response.json({ ok: false, error: "Stack app keys must be unique" }, { status: 400, headers: corsHeaders });
+    }
+    try {
+      validateStackReferences(req.apps);
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: error instanceof Error ? error.message : String(error) },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    for (const key of req.selected_app_keys ?? []) {
+      if (!appKeys.has(key)) return Response.json({ ok: false, error: `Selected app key "${key}" is not declared in the stack` }, { status: 400, headers: corsHeaders });
+    }
+    for (const app of req.apps) {
+      const spec = { ...app, app_name: `${req.name}-${app.key}` };
+      const validation = app.build && !app.image_ref
+        ? validateBuildDeployRequest(spec)
+        : validateDeployRequest(spec);
+      if (!validation.valid) {
+        return Response.json({ ok: false, error: `App "${app.key}": ${validation.error}` }, { status: 400, headers: corsHeaders });
+      }
+    }
+    const newApps = selectedApps.filter((app) => !db.getAppByName(`${req.name}-${app.key}`));
+    if (newApps.length > 0) {
+      const pools = newApps.map((app) => app.placement_pool || "general");
+      await approveAutomaticServerProvisioning(request, payload, `deploying stack ${req.name}`, pools);
+      req.server_provisioning_approved = true;
     }
     const selectedBuildApps = selectedApps.filter((app) => !!app.build && !app.image_ref);
     if (!req.config_only && selectedBuildApps.length > 0) {

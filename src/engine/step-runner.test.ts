@@ -110,6 +110,16 @@ describe("step-runner: skip already-completed steps", () => {
 // ---- compensation order ------------------------------------------------------
 
 describe("step-runner: compensation on failure", () => {
+  test("an incomplete destroy remains failed instead of appearing compensated", async () => {
+    const def = { ...makeDef([
+      { name: "cleanup", run: async () => { throw new Error("volume detach unavailable"); } },
+    ]), kind: "destroy_app" };
+    const op = makeOp("destroy_app");
+    await runOperation(op, def);
+    expect(getOperation(op.id)!.status).toBe("failed");
+    expect(JSON.parse(getOperation(op.id)!.error_json!).message).toBe("volume detach unavailable");
+  });
+
   test("a newer operation adopting the same resource fences every old compensation", async () => {
     const compensate = mock(async () => {});
     const old = enqueueOperation({
@@ -474,6 +484,31 @@ describe("step-runner: probe adopts existing side effect", () => {
 // ---- resumable compensation -------------------------------------------------
 
 describe("step-runner: resumable compensation", () => {
+  test("stops compensation after five passes and preserves the forward failure", async () => {
+    let compensationCalls = 0;
+    const def = makeDef([
+      {
+        name: "create",
+        run: async () => ({ created: true }),
+        compensate: async () => { compensationCalls++; throw new Error("rollback image missing"); },
+      },
+      { name: "publish", run: async () => { throw new Error("candidate unhealthy"); } },
+    ]);
+    const op = makeOp("test-op");
+    await runOperation(op, def);
+    for (let i = 1; i < 5; i++) await runOperation(getOperation(op.id)!, def);
+
+    const finished = getOperation(op.id)!;
+    expect(finished.status).toBe("compensation_failed");
+    expect(finished.attempt).toBe(5);
+    expect(compensationCalls).toBe(5);
+    expect(JSON.parse(finished.error_json!)).toMatchObject({
+      message: "candidate unhealthy",
+      compensation_error: "create: rollback image missing",
+      retries_exhausted: true,
+    });
+  });
+
   test("re-running a 'compensating' op resumes from where it left off", async () => {
     const compensated: string[] = [];
     const def = makeDef([

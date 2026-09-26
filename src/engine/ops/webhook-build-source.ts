@@ -151,6 +151,7 @@ const build: Step<WebhookBuildSourceInput, Built> = {
       coordinator,
       preferredWorkerId: source.worker_id,
       run: async ({ server, workerId }) => {
+        assertFreshDelivery(ctx);
         const recordArtifact = (targetName: string, imageRef: string): void => {
           db.recordBuildArtifact({
             operationId: ctx.opId,

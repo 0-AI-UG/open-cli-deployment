@@ -10,6 +10,10 @@ export type BuildWorkerSelection = {
   server: ServerRow;
 };
 
+export class BuildWorkerBusyError extends Error {
+  constructor() { super("Compatible OCD build workers are busy"); }
+}
+
 export type BuildCoordinator = {
   withWorker<T>(args: {
     operationId: number;
@@ -78,7 +82,10 @@ export function createBuildCoordinator(transport: BuildTransport): BuildCoordina
         operationId: args.operationId,
         candidateWorkerIds: candidates.map((candidate) => candidate.worker.id),
       });
-      if (!lease) throw new Error("No compatible OCD build worker has available capacity");
+      if (!lease) {
+        if (candidates.length > 0) throw new BuildWorkerBusyError();
+        throw new Error("No compatible OCD build worker is online and ready");
+      }
       const selected = candidates.find((candidate) => candidate.worker.id === lease.worker_id);
       if (!selected) {
         db.releaseBuildWorkerLease({ operationId: args.operationId, leaseToken: lease.lease_token });

@@ -70,10 +70,12 @@ export async function captureRemoteRevisionSnapshot(target: SnapshotTarget): Pro
   );
   if (snapshot.exitCode !== 0) throw commandFailure(`Saving revision configuration for ${target.appName}`, snapshot);
 
-  return {
-    image: target.currentImageRef,
-    envFilePath: (await readSnapshotEnvState(target)) === "present" ? paths.env : null,
-  };
+  const envState = await readSnapshotEnvState(target);
+  const imageRef = await readSnapshotImageRef(target);
+  if (!envState || !imageRef) {
+    throw new Error(`Recovery snapshot for ${target.appName} could not be verified; refusing to replace the serving revision`);
+  }
+  return { image: imageRef, envFilePath: envState === "present" ? paths.env : null };
 }
 
 async function readSnapshotEnvState(target: SnapshotTarget): Promise<"present" | "absent" | null> {
@@ -122,9 +124,10 @@ export async function probeRemoteRevisionSnapshot(target: SnapshotTarget): Promi
  */
 export async function discardRemoteRevisionSnapshot(target: SnapshotTarget): Promise<void> {
   const paths = snapshotPaths(target);
-  await sshExec(
+  const result = await sshExec(
     target.ip,
     asUser(`rm -rf ${paths.dir}`),
     target.hostKey,
   );
+  if (result.exitCode !== 0) throw commandFailure(`Removing revision snapshot for ${target.appName}`, result);
 }
