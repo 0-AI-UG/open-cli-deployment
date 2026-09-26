@@ -48,15 +48,24 @@ export function EnginePage() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [filter, setFilter] = useState<RecentFilter>("all");
   const [page, setPage] = useState(0);
+  const [loadedHistoryKey, setLoadedHistoryKey] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState(false);
+  const historyKey = `${filter}:${page}`;
 
   useEffect(() => {
     let cancelled = false;
+    const requestKey = `${filter}:${page}`;
+    setHistoryError(false);
     async function tick() {
       try {
         const data = await get(`/api/operations?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}&filter=${filter}`);
-        if (!cancelled) setSnap(data);
+        if (!cancelled) {
+          setSnap(data);
+          setLoadedHistoryKey(requestKey);
+          setHistoryError(false);
+        }
       } catch {
-        /* ignore */
+        if (!cancelled) setHistoryError(true);
       }
     }
     tick();
@@ -70,6 +79,7 @@ export function EnginePage() {
   if (!snap) return <PageState title="Loading operations" />;
 
   const hb = heartbeatLabel(snap.engine.heartbeat);
+  const historyLoading = loadedHistoryKey !== historyKey;
 
   return (
     <PageShell>
@@ -97,14 +107,14 @@ export function EnginePage() {
         )}
       </Section>
 
-      <Section title="History" count={snap.recent_total ?? snap.recent.length}>
+      <Section title="History" count={historyLoading ? undefined : snap.recent_total ?? snap.recent.length}>
         <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Filter operation history">
           {FILTERS.map((option) => (
             <button
               key={option.value}
               type="button"
               aria-pressed={filter === option.value}
-              onClick={() => { setSnap(null); setFilter(option.value); setPage(0); }}
+              onClick={() => { setFilter(option.value); setPage(0); }}
               className={`border-2 border-fg px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider ${
                 filter === option.value ? "bg-fg text-bg" : "bg-bg-raised text-fg hover:bg-alt"
               }`}
@@ -113,19 +123,23 @@ export function EnginePage() {
             </button>
           ))}
         </div>
-        {snap.recent.length === 0 ? (
+        {historyLoading ? (
+          <div role="status" className="border-2 border-dashed border-fg/30 py-8 text-center text-xs font-mono text-fg-dim">
+            {historyError ? "Could not load history. Retrying…" : "Loading history…"}
+          </div>
+        ) : snap.recent.length === 0 ? (
           <EmptyState label="No operations in this view" />
         ) : (
           <OpList ops={snap.recent} />
         )}
-        {(snap.recent_total ?? snap.recent.length) > PAGE_SIZE && (
+        {!historyLoading && (snap.recent_total ?? snap.recent.length) > PAGE_SIZE && (
           <div className="mt-3 flex items-center justify-between gap-3 font-mono text-[10px]">
             <span className="text-fg-dim">
               {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, snap.recent_total)} of {snap.recent_total}
             </span>
             <div className="flex gap-2">
-              <button type="button" disabled={page === 0} onClick={() => { setSnap(null); setPage((p) => p - 1); }} className="border-2 border-fg px-2 py-1 disabled:opacity-40">Newer</button>
-              <button type="button" disabled={(page + 1) * PAGE_SIZE >= snap.recent_total} onClick={() => { setSnap(null); setPage((p) => p + 1); }} className="border-2 border-fg px-2 py-1 disabled:opacity-40">Older</button>
+              <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)} className="border-2 border-fg px-2 py-1 disabled:opacity-40">Newer</button>
+              <button type="button" disabled={(page + 1) * PAGE_SIZE >= snap.recent_total} onClick={() => setPage((p) => p + 1)} className="border-2 border-fg px-2 py-1 disabled:opacity-40">Older</button>
             </div>
           </div>
         )}
@@ -134,12 +148,12 @@ export function EnginePage() {
   );
 }
 
-function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
   return (
     <section className="mb-8">
       <div className="flex items-baseline gap-2 mb-3">
         <h2 className="font-mono text-sm font-bold uppercase tracking-wider">{title}</h2>
-        <span className="text-[10px] font-mono text-fg-dim">({count})</span>
+        {count !== undefined && <span className="text-[10px] font-mono text-fg-dim">({count})</span>}
       </div>
       {children}
     </section>
