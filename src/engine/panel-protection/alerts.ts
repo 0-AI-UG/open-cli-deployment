@@ -16,7 +16,7 @@ export function reconcileIncidents(conditions: Condition[], now = Date.now()): v
       // Repeated failures stay one incident, but link to the latest evidence.
       if (row.title !== condition.title || row.path !== condition.path) {
         db.query("UPDATE panel_alerts SET title=?,path=? WHERE key=?").run(condition.title, condition.path, row.key);
-        db.query("UPDATE panel_incident_history SET title=?,path=? WHERE incident_id=?").run(condition.title, condition.path, row.incident_id);
+        db.query("UPDATE panel_incident_history SET title=?,path=? WHERE incident_id=? AND resolved_at IS NULL").run(condition.title, condition.path, row.incident_id);
         row.title = condition.title;
         row.path = condition.path;
       }
@@ -31,7 +31,7 @@ export function reconcileIncidents(conditions: Condition[], now = Date.now()): v
       if (active.has(row.key)) continue;
       if (row.opened_at !== null) enqueueNtfyIncident(row, true, now);
       db.query("UPDATE panel_alerts SET resolved_at=? WHERE key=?").run(now, row.key);
-      db.query("UPDATE panel_incident_history SET resolved_at=? WHERE incident_id=?").run(now, row.incident_id);
+      db.query("UPDATE panel_incident_history SET resolved_at=COALESCE(resolved_at,?) WHERE incident_id=?").run(now, row.incident_id);
     }
   })();
 }

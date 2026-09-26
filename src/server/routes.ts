@@ -1,6 +1,6 @@
 import { handleDeployBuildSource } from "./routes/build-workers.ts";
 import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
-import { handleListIncidents, handleGetIncident } from "./routes/incidents.ts";
+import { handleListIncidents, handleGetIncident, handleResolveIncident } from "./routes/incidents.ts";
 import { handleGetProtection, handleSaveProtection, handleRecoveryKey, handleBackupNow, handleResumeRecovery } from "./routes/panel-protection.ts";
 import { recoveryPending } from "../engine/panel-protection/recovery-state.ts";
 import { handleStorageAuthorize, handleStorageReaders } from "./routes/storage-access.ts";
@@ -204,6 +204,7 @@ function confirmationCodeFrom(req: Request): string {
 export const apiRoutes = {
   "/api/incidents": { GET: handleListIncidents },
   "/api/incidents/:id": { GET: handleGetIncident },
+  "/api/incidents/:id/resolve": { POST: handleResolveIncident },
   "/api/storage/authorize": { POST: handleStorageAuthorize },
   "/api/admin/storage-readers": { GET: handleStorageReaders, POST: handleStorageReaders, DELETE: handleStorageReaders },
   // --- Health probe (public, used by Docker HEALTHCHECK and reverse proxies) ---
