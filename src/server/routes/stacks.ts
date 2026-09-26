@@ -90,8 +90,17 @@ export async function handleDeployStack(request: Request): Promise<Response> {
       await approveAutomaticServerProvisioning(request, payload, `deploying stack ${req.name}`, pools);
       req.server_provisioning_approved = true;
     }
-    for (const app of selectedApps) {
+    // The engine validates the complete stack, including retained members.
+    // Preserve their deployed digest instead of passing an unselected manifest
+    // tag into validate_plan, which would fail an otherwise valid partial deploy.
+    const selectedKeys = new Set(selectedApps.map((app) => app.key));
+    for (const app of req.apps) {
       const existingApp = db.getAppByName(`${req.name}-${app.key}`);
+      if (!selectedKeys.has(app.key) && existingApp?.image_ref) {
+        app.image_ref = existingApp.image_ref;
+        app.build = undefined;
+        continue;
+      }
       if (req.config_only && existingApp) {
         app.image_ref = existingApp.image_ref;
         app.build = undefined;

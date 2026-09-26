@@ -120,9 +120,13 @@ function mapStep(s: ReturnType<typeof getSteps>[number]) {
 export async function handleListOperations(request: Request): Promise<Response> {
   try {
     await requirePermission(request, "operations.view");
+    const requestedLimit = Number(new URL(request.url).searchParams.get("limit"));
+    const recentLimit = Number.isInteger(requestedLimit) && requestedLimit > 0
+      ? Math.min(requestedLimit, 1000)
+      : 50;
     const running = listRunningOperations().map(toJsonRow);
     const pending = listPendingOperations(100).map(toJsonRow);
-    const recent = listRecentOperations(50).map(toJsonRow);
+    const recent = listRecentOperations(recentLimit).map(toJsonRow);
     const heartbeatRaw = getSettings().engine_heartbeat || null;
     return Response.json(
       {

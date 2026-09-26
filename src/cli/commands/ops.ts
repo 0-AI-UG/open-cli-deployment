@@ -122,7 +122,7 @@ async function opsList(args: string[]): Promise<void> {
   const app = (parsed.flags.app as string | undefined) ?? "";
   const limit = positiveIntegerFlag(parsed.flags.limit, "limit", { defaultValue: 20, max: 1000 })!;
 
-  const data = await get<OpsList>("/api/operations");
+  const data = await get<OpsList>(`/api/operations?limit=${limit}`);
   console.log(
     `${DIM}Engine:${RESET} heartbeat ${data.engine?.heartbeat ? fmtTime(data.engine.heartbeat) : "none"}, ` +
     `concurrency ${data.engine?.concurrency ?? "-"}`,
