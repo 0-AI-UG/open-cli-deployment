@@ -10,7 +10,7 @@ import { awaitChildren } from "./_children.ts";
 import { syncAllTraefik } from "../scale/traefik-manager.ts";
 import { requireStorageDriver } from "../storage/index.ts";
 import { registerOp } from "./registry.ts";
-import { assertCleanupComplete, softStep, runDbCleanupGate, makeGcEmptyServersStep } from "./_shared.ts";
+import { assertCleanupComplete, softStep, runDbCleanupGate } from "./_shared.ts";
 import type { OpKindDefinition, Step } from "../types.ts";
 
 type DestroyInput = {
@@ -224,8 +224,6 @@ const assertDbCleanup: Step<DestroyInput, { ok: true }> = {
   },
 };
 
-const gcEmptyServers = makeGcEmptyServersStep<DestroyInput>("stop_and_remove_containers");
-
 const destroyAppOp: OpKindDefinition<DestroyInput> = {
   kind: "destroy_app",
   label: "Destroy app",
@@ -240,7 +238,6 @@ const destroyAppOp: OpKindDefinition<DestroyInput> = {
     deleteVolume,
     deleteDbRows,
     removeIngressRoute,
-    gcEmptyServers,
     assertDbCleanup,
   ],
 };

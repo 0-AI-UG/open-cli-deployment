@@ -1,5 +1,4 @@
 import * as db from "../../shared/db.ts";
-import type { Step } from "../types.ts";
 
 // Shared boilerplate for the destroy_* ops. Destroy steps are best-effort: each
 // logs its failures and continues. There are no compensations — nothing to undo
@@ -65,25 +64,4 @@ export function assertCleanupComplete(
     });
     throw new Error(`Cleanup incomplete (failed: ${[...new Set(causes)].join(", ")})`);
   }
-}
-
-/**
- * GC-empty-servers step, parameterized by the name of the prior step that
- * reported the affected server ids in its `affectedServerIds` field.
- */
-export function makeGcEmptyServersStep<I>(priorKey: string): Step<I, { ok: true }> {
-  return {
-    name: "gc_empty_servers",
-    label: "GC empty servers",
-    async run(ctx, prior) {
-      const containers = prior[priorKey] as { affectedServerIds: number[] } | undefined;
-      const ids = containers?.affectedServerIds || [];
-      for (const sid of ids) {
-        await softStep(ctx, `gc_server ${sid}`, async () => {
-          await db.gcServerIfEmpty(sid);
-        });
-      }
-      return { ok: true };
-    },
-  };
 }

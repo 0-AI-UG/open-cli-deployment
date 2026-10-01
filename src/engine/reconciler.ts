@@ -16,7 +16,6 @@ import { startController, stopControllers } from "./controller-runtime.ts";
 import {
   reconcileActiveVolumes,
   reconcileFirewall,
-  reconcileServerGc,
   reconcileServersAndNetwork,
 } from "./infrastructure-reconciler.ts";
 import { reconcileAppRuntime } from "./app-runtime-reconciler.ts";
@@ -298,7 +297,6 @@ export function startReconciler(): void {
   });
   startController({ name: "ingress", intervalMs: 30_000, timeoutMs: 25_000, run: reconcileTraefik });
   startController({ name: "app-runtime", intervalMs: 60_000, timeoutMs: 50_000, run: reconcileAppRuntime });
-  startController({ name: "server-gc", intervalMs: 30_000, timeoutMs: 25_000, run: reconcileServerGc });
   startController({ name: "volumes", intervalMs: 120_000, timeoutMs: 90_000, run: reconcileActiveVolumes });
   startController({ name: "firewall", intervalMs: 300_000, timeoutMs: 60_000, run: reconcileFirewall });
   startController({ name: "stuck-operations", intervalMs: 30_000, run: sweepStuckStates });

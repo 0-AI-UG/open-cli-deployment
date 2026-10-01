@@ -103,13 +103,6 @@ export async function destroyAppCore(appId: number): Promise<{ ok: boolean; erro
 
     db.deleteApp(appId);
 
-    // GC any servers that became empty as a result.
-    for (const sid of affectedServerIds) {
-      try { await db.gcServerIfEmpty(sid); } catch (err) {
-        log("destroyApp", `gcServerIfEmpty(${sid}) failed: ${err}`);
-      }
-    }
-
     log("destroyApp", `App id=${appId} destroyed successfully`);
     return { ok: true };
   } catch (err) {

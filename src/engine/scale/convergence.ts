@@ -77,7 +77,6 @@ export async function convergeAppReplicas(appId: number): Promise<void> {
         const server = db.getServer(replica.server_id);
         if (server && server.provider_status !== "missing") continue;
         db.deleteReplica(replica.id);
-        await db.gcServerIfEmpty(replica.server_id);
       }
     }
     log("converge", `app ${appId}: converged ${currentCount} -> ${desired}`);

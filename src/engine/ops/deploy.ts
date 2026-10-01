@@ -213,13 +213,7 @@ const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
       approved: req.server_provisioning_approved === true,
       emit: (step, detail) => ctx.log(`[${step}] ${detail}`),
     });
-    try {
-      await assertRolloutDiskSpace(newServer.ipv4, newServer.ssh_host_key || undefined);
-    } catch (error) {
-      await db.gcServerIfEmpty(newServer.id).catch((cleanupError) =>
-        ctx.log(`Could not release insufficient-capacity server ${newServer.id}: ${cleanupError}`));
-      throw error;
-    }
+    await assertRolloutDiskSpace(newServer.ipv4, newServer.ssh_host_key || undefined);
     const ingressIp = panelServerRow?.ipv4 || newServer.ipv4;
     return {
       serverId: newServer.id,
@@ -229,14 +223,6 @@ const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
       providerServerId: newServer.provider_id,
       ingressIp,
     };
-  },
-  async compensate(ctx, out) {
-    if (!out) return;
-    try {
-      await db.gcServerIfEmpty(out.serverId);
-    } catch (err) {
-      ctx.log(`gcServerIfEmpty(${out.serverId}) failed: ${err}`);
-    }
   },
 };
 

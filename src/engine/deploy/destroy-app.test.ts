@@ -262,54 +262,22 @@ describe("destroyApp: partial failure handling", () => {
   });
 });
 
-describe("destroyApp: multi-server GC", () => {
-  test("iterates all servers that hosted replicas and GC-attempts each", async () => {
+describe("destroyApp: servers are never auto-deleted", () => {
+  test("keeps every server that hosted the last replicas", async () => {
     const s1 = freshServer();
     const s2 = freshServer();
     const app = freshApp();
     attachReplica(app.id, s1.id, app.name);
     attachReplica(app.id, s2.id, `${app.name}-r2`);
-
-    // gcServerIfEmpty records durable intent; the infrastructure controller
-    // performs provider deletion in a separate retryable pass.
     db.deletePanel();
+
     await destroyApp(app.id);
 
-    expect(db.getServer(s1.id)?.gc_requested_at).toBeTruthy();
-    expect(db.getServer(s2.id)?.gc_requested_at).toBeTruthy();
+    for (const server of [s1, s2]) {
+      expect(db.getServer(server.id)).toBeTruthy();
+      expect(db.getServer(server.id)?.gc_requested_at).toBeNull();
+    }
     expect(compute._mocks.deleteServer).not.toHaveBeenCalled();
-  });
-
-  test("does NOT delete the panel's own server, even when it becomes empty", async () => {
-    const panelSrv = freshServer();
-    db.deletePanel();
-    db.insertPanel({
-      server_id: panelSrv.id,
-      name: "ocd-panel",
-      domain: "panel.example.com",
-      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      container_port: 3001,
-      host_port: 3001,
-    });
-    const app = freshApp();
-    attachReplica(app.id, panelSrv.id, app.name);
-
-    await destroyApp(app.id);
-
-    expect(db.getServer(panelSrv.id)).toBeTruthy();
-    expect(compute._mocks.deleteServer).not.toHaveBeenCalled();
-    db.deletePanel();
-  });
-
-  test("keeps an operator-owned host enrolled when its last app is destroyed", async () => {
-    const server = freshConnectedServer();
-    const app = freshApp();
-    attachReplica(app.id, server.id, app.name);
-
-    await destroyApp(app.id);
-
-    expect(db.getServer(server.id)).toBeTruthy();
-    expect(db.getServer(server.id)?.gc_requested_at).toBeNull();
   });
 });
 

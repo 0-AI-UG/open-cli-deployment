@@ -170,26 +170,11 @@ const recordEvent: Step<MigrateInput, { ok: true }> = {
   },
 };
 
-const gcEmptyServers: Step<MigrateInput, { ok: true }> = {
-  name: "gc_empty_servers",
-  label: "GC empty servers",
-  async run(ctx, prior) {
-    const r = prior["load_and_validate"] as ValidateOut | undefined;
-    if (!r) return { ok: true };
-    try {
-      await db.gcServerIfEmpty(r.sourceServerId);
-    } catch (err) {
-      ctx.log(`gcServerIfEmpty(${r.sourceServerId}) failed: ${err}`);
-    }
-    return { ok: true };
-  },
-};
-
 const migrateOp: OpKindDefinition<MigrateInput> = {
   kind: "migrate",
   label: "Migrate replica",
   resourceKeys: (input) => [`app:${input.appId}`],
-  steps: [loadAndValidate, preflightImage, performMigration, verifyReplicaHealthy, syncIngressStep, recordEvent, gcEmptyServers],
+  steps: [loadAndValidate, preflightImage, performMigration, verifyReplicaHealthy, syncIngressStep, recordEvent],
 };
 
 registerOp(migrateOp as OpKindDefinition<any>);

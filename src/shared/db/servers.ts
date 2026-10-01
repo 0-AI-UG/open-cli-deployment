@@ -154,14 +154,6 @@ export function recordServerObservation(
   );
 }
 
-export function requestServerGc(id: number): void {
-  db.query("UPDATE servers SET gc_requested_at = COALESCE(gc_requested_at, datetime('now')) WHERE id = ?").run(id);
-}
-
-export function clearServerGcRequest(id: number): void {
-  db.query("UPDATE servers SET gc_requested_at = NULL WHERE id = ?").run(id);
-}
-
 export function getServersByPool(pool: string): ServerRow[] {
   return db
     .query("SELECT * FROM servers WHERE pool = ? ORDER BY created_at DESC")

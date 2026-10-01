@@ -5,7 +5,6 @@ import { requireStorageDriver } from "./storage/index.ts";
 import { tryAcquire, release, NON_OP_HOLDER } from "./scheduler.ts";
 import { infrastructureProviderForServer, isManagedServer } from "../shared/infrastructure.ts";
 import { getInfrastructureToken } from "../shared/secret-store.ts";
-import type { InfrastructureProvider } from "../shared/providers/contracts.ts";
 
 function log(context: string, ...args: unknown[]): void {
   console.log(`[${new Date().toISOString()}] [infra-reconciler:${context}]`, ...args);
@@ -15,13 +14,6 @@ async function withLock(keys: string[], kind: string, work: () => Promise<void>)
   const lock = tryAcquire(keys, NON_OP_HOLDER, kind);
   if (!lock.ok) return;
   try { await work(); } finally { release(keys); }
-}
-
-function serverHasReferences(serverId: number): boolean {
-  if (db.getReplicasByServer(serverId).length > 0) return true;
-  if (db.getPanel()?.server_id === serverId) return true;
-  if (db.getBuildWorkerByServerId(serverId)) return true;
-  return db.getApps().some((app) => app.sleeping_server_id === serverId);
 }
 
 /** Observe provider truth, repair private-network attachment, and make a
@@ -106,40 +98,6 @@ export async function reconcileFirewall(): Promise<void> {
       log("firewall", `${server.name}: attachment reconciliation failed: ${error}`);
     }
   }));
-}
-
-/** Finish requested server GC only after a complete reference recheck and a
- * successful/idempotent provider deletion. */
-export async function reconcileServerGc(
-  providerOverride?: Pick<InfrastructureProvider, "deleteServer">,
-): Promise<void> {
-  for (const snapshot of db.getServers().filter((server) => !!server.gc_requested_at)) {
-    await withLock([`server:${snapshot.id}`], "reconcile:server-gc", async () => {
-      const server = db.getServer(snapshot.id);
-      if (!server) return;
-      if (serverHasReferences(server.id)) {
-        db.clearServerGcRequest(server.id);
-        return;
-      }
-      try {
-        if (isManagedServer(server) && server.provider_id) {
-          const provider = providerOverride ?? infrastructureProviderForServer(server);
-          if (!providerOverride) {
-            const registered = infrastructureProviderForServer(server);
-            if (!await getInfrastructureToken(registered.id).catch(() => "")) return;
-          }
-          await provider.deleteServer(server.provider_id);
-        }
-      } catch (error) {
-        if (!isNotFoundError(error)) {
-          log("gc", `${server.name}: provider deletion failed: ${error}`);
-          return;
-        }
-      }
-      db.deleteServer(server.id);
-      log("gc", `${server.name}: provider and DB rows removed`);
-    });
-  }
 }
 
 type VolumeOwner = {

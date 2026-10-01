@@ -152,8 +152,8 @@ prebuilt-image members are resolved to immutable digests before rollout.
 ## App/stack cleanup failure
 
 App destruction uses best-effort cleanup for containers, volume detach,
-ingress, and empty-server GC. If upstream cleanup fails, OCD does not
-blindly erase database rows; it marks the app `cleanup_failed` so the reconciler
+and ingress; servers are never deleted automatically. If upstream cleanup
+fails, OCD does not blindly erase database rows; it marks the app `cleanup_failed` so the reconciler
 and operator retain a target for recovery.
 
 For a failed stack first deploy whose stack row was compensated, use:

@@ -474,55 +474,6 @@ export function hasRunningReplicas(serverId: number): boolean {
   return (row?.c ?? 0) > 0;
 }
 
-/**
- * Returns true iff the server has at least one replica row (of any status).
- * A server with only stopped replicas anchors the light-sleep state and must
- * survive gc — those rows are how wake knows where to `docker start`.
- */
-export function hasAnyReplicas(serverId: number): boolean {
-  const row = db
-    .query("SELECT COUNT(*) as c FROM replicas WHERE server_id = ?")
-    .get(serverId) as { c: number } | null;
-  return (row?.c ?? 0) > 0;
-}
-
-export async function gcServerIfEmpty(serverId: number): Promise<void> {
-  // This function records intent only. Provider deletion is owned by the
-  // infrastructure reconciler so a transient provider error never makes the
-  // DB forget a still-live server. Stopped replicas count as present because
-  // they anchor the light-sleep fast wake path.
-  const { clearServerGcRequest, getServer, requestServerGc } = await import("./servers.ts");
-  const server = getServer(serverId);
-  // Operator-owned hosts are durable fleet enrollment, not disposable
-  // capacity. They remain connected until an operator explicitly removes
-  // them, even after their last app is destroyed.
-  if (!server || server.ownership === "connected") {
-    clearServerGcRequest(serverId);
-    return;
-  }
-  if (hasAnyReplicas(serverId)) {
-    clearServerGcRequest(serverId);
-    return;
-  }
-  const { getPanel } = await import("./panel.ts");
-  if (getPanel()?.server_id === serverId) {
-    clearServerGcRequest(serverId);
-    return;
-  }
-  const { getBuildWorkerByServerId } = await import("./build-workers.ts");
-  if (getBuildWorkerByServerId(serverId)) {
-    clearServerGcRequest(serverId);
-    return;
-  }
-  const sleepingRow = db.query("SELECT COUNT(*) as c FROM apps WHERE sleeping_server_id = ?").get(serverId) as { c: number } | null;
-  const sleepingCount = sleepingRow?.c ?? 0;
-  if (sleepingCount > 0) {
-    clearServerGcRequest(serverId);
-    return;
-  }
-  requestServerGc(serverId);
-}
-
 export function updateAppStatus(id: number, status: string): void {
   db.query("UPDATE apps SET status = ? WHERE id = ?").run(status, id);
 }

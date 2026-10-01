@@ -86,7 +86,6 @@ export async function handleInstallBuildWorker(request: Request): Promise<Respon
       worker = db.insertBuildWorker({ serverId: server.id, name, previousPool });
       insertedId = worker.id;
     }
-    db.clearServerGcRequest(server.id);
     db.updateServerPool(server.id, "build-workers");
     const { opId } = enqueue({
       kind: "install_build_worker",

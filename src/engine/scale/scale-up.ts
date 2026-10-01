@@ -157,7 +157,6 @@ export async function scaleUp(
       );
       if (inserted) db.deleteReplica(inserted.id);
       try { await syncAppIngress(app.id); } catch { /* best-effort convergence */ }
-      try { await db.gcServerIfEmpty(targetServer.id); } catch { /* reconciler will retry */ }
       if (removal.exitCode !== 0) {
         throw new Error(
           `Replica setup failed and partial container ${containerName} could not be removed (ssh exit ${removal.exitCode})`,
@@ -203,18 +202,6 @@ export async function rollbackScaleUp(
     await syncAppIngress(app.id);
   } catch (err) {
     log("rollback", `Failed to sync ingress after rollback: ${err}`);
-  }
-
-  // GC any servers touched by the failed scale-up. gcServerIfEmpty handles
-  // the empty/panel checks (the panel and any server still in use is exempt).
-  const touched = new Set<number>();
-  for (const r of newReplicas) touched.add(r.server_id);
-  for (const serverId of touched) {
-    try {
-      await db.gcServerIfEmpty(serverId);
-    } catch (e) {
-      log("rollback", `Failed to gc server ${serverId}: ${e}`);
-    }
   }
 
   emit("scale", "Rollback complete");

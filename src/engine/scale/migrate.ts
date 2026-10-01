@@ -186,12 +186,6 @@ async function migrateStateless(
     last_scale_at: new Date().toISOString(),
   });
 
-  try {
-    await db.gcServerIfEmpty(sourceServer.id);
-  } catch (err) {
-    log("migrate", `Failed to gc server ${sourceServer.id}: ${err}`);
-  }
-
   emit("migrate", `Migration complete — replica now on ${targetServer.name}`);
   return {
     ok: true,
@@ -399,12 +393,6 @@ async function migrateWithVolume(
     desired_replicas: currentCount,
     last_scale_at: new Date().toISOString(),
   });
-
-  try {
-    await db.gcServerIfEmpty(sourceServer.id);
-  } catch (err) {
-    log("migrate", `Failed to gc server ${sourceServer.id}: ${err}`);
-  }
 
   emit("migrate", `Migration complete — replica and volume now on ${targetServer.name}`);
   return {

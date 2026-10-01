@@ -120,23 +120,4 @@ export async function scaleDown(
       log("scale", `Ingress sync after scale-down failed: ${err}`);
     }
   }
-
-  // GC any server whose last app just went away. `gcServerIfEmpty` no-ops if
-  // the server still has replica rows — including stopped anchors — so
-  // scale-to-zero leaves the tenant VM materialized and only the
-  // last-app-on-a-server case actually destroys the instance.
-  const candidateServerIds = new Set<number>();
-  for (const replica of toRemove) {
-    candidateServerIds.add(replica.server_id);
-  }
-  for (const serverId of candidateServerIds) {
-    try {
-      const before = db.getServer(serverId);
-      await db.gcServerIfEmpty(serverId);
-      const after = db.getServer(serverId);
-      if (before && !after) emit("scale", `Server ${before.name} deleted`);
-    } catch (err) {
-      log("scale", `Failed to gc server ${serverId}: ${err}`);
-    }
-  }
 }

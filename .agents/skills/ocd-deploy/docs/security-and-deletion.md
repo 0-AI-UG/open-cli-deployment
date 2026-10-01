@@ -126,7 +126,8 @@ App deletion:
 3. detaches and retains volumes;
 4. deletes app/replica rows only if cleanup gates succeed;
 5. rerenders ingress;
-6. garbage-collects eligible empty servers.
+6. keeps every server, including servers left empty; only an explicit
+   `ocd servers delete` removes one.
 
 It never calls environment deletion. If cleanup partially fails, keep the app
 row as `cleanup_failed`.
