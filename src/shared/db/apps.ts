@@ -2,7 +2,6 @@ import { affectedAppsForEnvironmentKeys } from "../runtime-env.ts";
 import db from "./connection.ts";
 import type { ServerRow } from "./servers.ts";
 import type { ReplicaRow } from "./replicas.ts";
-import { validatePublicPort } from "../validate.ts";
 import { serializePlacement, type Placement } from "../placement.ts";
 
 const IMMUTABLE_IMAGE = /^[a-z0-9.-]+(?::[0-9]+)?\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/i;
@@ -42,13 +41,6 @@ export type AppRow = {
   desired_volume_size: number;
   desired_volume_path: string;
   desired_volume_driver: string;
-  /** htpasswd bcrypt hash of the app password for Traefik's basicAuth
-   *  middleware. This hash is the sole source of truth for "auth on" — non-empty
-   *  ⇔ basic auth enabled. The plaintext is never stored (write-only at the API).
-   *  Persisted at set-time (bcrypt salts differ per hash, so hashing at render
-   *  time would make every rendered ingress config unique and defeat the
-   *  content-hash sync cache). "" = auth disabled. */
-  auth_password_hash: string;
   /** Declared placement JSON: server id (string) -> replica count. NULL until
    *  the app's first deploy records it. */
   placement: string | null;
@@ -66,7 +58,6 @@ export type AppRow = {
   public_endpoint_status: string;
   public_endpoint_error: string;
   public_endpoint_checked_at: string | null;
-  extra_volumes: string; // JSON array of "host:container" strings
   memory_mb: number; // per-container memory ceiling in MB; 0 = platform default
   cpu_limit: number; // per-container CPU ceiling in cores (fractional allowed); 0 = platform default
   command_json: string;
@@ -81,20 +72,13 @@ export type AppRow = {
   health_check_expected_statuses: string;
   /** Internal routing protocol on the app's internal entrypoint: 'http' =
    *  Traefik HTTP router (L7), 'tcp' = raw TCP pass-through. Decoupled from
-   *  health_check (which only controls the container probe) — see migration 67.
-   *  Auth-protected apps are always effectively HTTP-routed regardless. */
+   *  health_check (which only controls the container probe) — see migration 67. */
   internal_protocol: string; // 'http' | 'tcp'
   internal_port: number; // fleet-unique internal ingress port (20000-20199), owned for the app's lifetime
   virtual_ip: string; // fleet-unique per-app VIP in 10.96.0.0/16, owned for the app's lifetime
-  sticky: number; // 1 = sticky sessions (cookie-based) on the app's Traefik service
   rate_limit_rps: number; // public-router rate limit in req/s; 0 = unlimited
-  ip_allowlist: string; // comma-separated IPs/CIDRs gating the public router; "" = open
   health_check_path: string; // active HTTP health-check path (e.g. /healthz); "" = off
   compress: number; // 1 = gzip/brotli compression on the public router
-  public_port: number | null; // fleet-unique public raw TCP/UDP port on the panel IP; NULL = not exposed
-  public_protocol: string; // 'tcp' | 'udp' — which pool public_port came from
-  target: string; // deploy target tag: '' | 'production' | 'staging' | 'dev'
-  target_of: number | null; // app id this is a staging/dev target of; NULL = standalone
   /** Monotonic desired-configuration revision. It changes independently of
    * source commits and is captured by every successful deployment. */
   config_revision: number;
@@ -128,30 +112,8 @@ export function vipFromIndex(index: number): string {
   return `10.96.${Math.floor(index / 256)}.${index % 256}`;
 }
 
-/** Public raw TCP/UDP exposure pool: Traefik entrypoints are static-config-
- *  only, so the two 50-port blocks are pre-reserved fleet-wide (see
- *  traefikStaticConfig) and opened by compatible provider firewall rules. */
-export const PUBLIC_TCP_PORT_BASE = 30000;
-export const PUBLIC_TCP_PORT_COUNT = 50;
-export const PUBLIC_UDP_PORT_BASE = 30050;
-export const PUBLIC_UDP_PORT_COUNT = 50;
-
-export type PublicProtocol = "tcp" | "udp";
-
 /** Internal routing protocol on the app's internal entrypoint. */
 export type InternalProtocol = "http" | "tcp";
-
-export function publicPortRange(protocol: PublicProtocol): { base: number; count: number } {
-  return protocol === "udp"
-    ? { base: PUBLIC_UDP_PORT_BASE, count: PUBLIC_UDP_PORT_COUNT }
-    : { base: PUBLIC_TCP_PORT_BASE, count: PUBLIC_TCP_PORT_COUNT };
-}
-
-/** bcrypt htpasswd entry hash for Traefik basicAuth ($2b$ — accepted by
- *  Traefik's htpasswd parser). "" in, "" out (auth disabled). */
-export function hashAuthPassword(password: string): string {
-  return password ? Bun.password.hashSync(password, { algorithm: "bcrypt" }) : "";
-}
 
 export function countApps(): number {
   const row = db.query("SELECT COUNT(*) as c FROM apps").get() as { c: number } | null;
@@ -191,33 +153,6 @@ export function allocateVirtualIp(): string {
     if (!used.has(index)) return vipFromIndex(index);
   }
   throw new Error(`Virtual IP range ${VIP_RANGE} is exhausted. Destroy an app before deploying a new one.`);
-}
-
-/** Lowest free port in the protocol's public block. Mirrors
- *  allocateInternalPort: the partial unique index on apps.public_port is the
- *  concurrency backstop; deleting an app frees its port automatically. */
-export function allocatePublicPort(protocol: PublicProtocol): number {
-  const { base, count } = publicPortRange(protocol);
-  const used = new Set(
-    (db.query("SELECT public_port FROM apps WHERE public_port IS NOT NULL").all() as Array<{ public_port: number }>)
-      .map((r) => r.public_port),
-  );
-  for (let port = base; port < base + count; port++) {
-    if (!used.has(port)) return port;
-  }
-  throw new Error(
-    `All ${count} public ${protocol.toUpperCase()} ports (${base}-${base + count - 1}) are taken. Unexpose an app before exposing a new one.`,
-  );
-}
-
-export function getAppByPublicPort(port: number): AppRow | null {
-  return db.query("SELECT * FROM apps WHERE public_port = ?").get(port) as AppRow | null;
-}
-
-/** Expose (port set) or unexpose (port null) an app on the public raw
- *  TCP/UDP pool. Pure Traefik-config change — callers re-sync ingress. */
-export function updateAppPublicExposure(id: number, port: number | null, protocol: PublicProtocol): void {
-  db.query("UPDATE apps SET public_port = ?, public_protocol = ? WHERE id = ?").run(port, protocol, id);
 }
 
 export function getApps(serverId?: number): AppRow[] {
@@ -289,15 +224,13 @@ export function clearAppBuildConfig(id: number): number | null {
 }
 
 export type AppIngressSettings = {
-  sticky?: boolean;
   rate_limit_rps?: number;
-  ip_allowlist?: string;
   health_check_path?: string;
   compress?: boolean;
   /** Post-deploy HTTP probe on/off. Applies on the app's next (re)deploy or
    *  scale — unlike the rest of these, it isn't a live Traefik-config change. */
   health_check?: boolean;
-  health_check_mode?: "http" | "container" | "exec" | "heartbeat" | "periodic_job";
+  health_check_mode?: "http" | "container" | "exec" | "heartbeat";
   health_check_command?: string;
   health_check_file?: string;
   health_check_max_age_seconds?: number;
@@ -310,9 +243,6 @@ type InsertAppFields = {
   image_ref: string;
   container_port: number;
   env_vars: string;
-  /** Write-only plaintext: hashed into auth_password_hash on insert, never
-   *  stored. Empty/omitted = auth disabled. */
-  auth_password?: string;
   environment_id?: number;
   public?: boolean;
   health_check?: boolean;
@@ -320,14 +250,8 @@ type InsertAppFields = {
    *  health_check is on, tcp when off) so callers that only set health_check
    *  keep the historical routing coupling. */
   internal_protocol?: InternalProtocol;
-  /** Public raw TCP/UDP exposure: "auto" = lowest free port, number =
-   *  specific port, omit/null = not exposed. */
-  public_port?: number | "auto" | null;
-  public_protocol?: PublicProtocol;
   /** Resolved placement (server id -> replica count). */
   placement?: Placement;
-  target?: string;
-  target_of?: number | null;
   desired_volume_id?: string;
   desired_volume_size?: number;
   desired_volume_path?: string;
@@ -337,25 +261,10 @@ type InsertAppFields = {
   post_start_command?: string;
 } & AppIngressSettings;
 
-/** Resolve a deploy request's public exposure to a concrete port. Runs
- *  inside the insert transaction; re-checks range/freeness because the
- *  deploy op executes long after the API validated the request. */
-function resolvePublicPort(app: InsertAppFields): number | null {
-  if (app.public_port == null) return null;
-  const protocol = app.public_protocol ?? "tcp";
-  if (app.public_port === "auto") return allocatePublicPort(protocol);
-  const rangeResult = validatePublicPort(app.public_port, protocol);
-  if (!rangeResult.valid) throw new Error(rangeResult.error);
-  if (getAppByPublicPort(app.public_port)) {
-    throw new Error(`Public port ${app.public_port} is already taken by another app`);
-  }
-  return app.public_port;
-}
-
 // The single apps-table INSERT, shared by insertApp and
 // insertAppWithFirstReplica (which wrap it in their own transactions —
 // insertAppWithFirstReplica additionally inserts the first replica in the same
-// tx). resolvePublicPort/allocateInternalPort run here so both paths allocate
+// tx). allocateInternalPort/allocateVirtualIp run here so both paths allocate
 // identically.
 function insertAppRow(app: InsertAppFields): AppRow {
   assertImmutableImageRef(app.image_ref);
@@ -368,7 +277,7 @@ function insertAppRow(app: InsertAppFields): AppRow {
   const internalProtocol: InternalProtocol = app.internal_protocol ?? "http";
   return db
     .query(
-      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, auth_password_hash, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, sticky, rate_limit_rps, ip_allowlist, health_check_path, compress, public_port, public_protocol, placement, target, target_of, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json, post_start_command) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, rate_limit_rps, health_check_path, compress, placement, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json, post_start_command) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     )
     .get(
       app.name,
@@ -376,7 +285,6 @@ function insertAppRow(app: InsertAppFields): AppRow {
       app.image_ref,
       app.container_port,
       app.env_vars,
-      hashAuthPassword(app.auth_password || ""),
       app.environment_id ?? null,
       (app.public ?? true) ? 1 : 0,
       healthCheck ? 1 : 0,
@@ -388,16 +296,10 @@ function insertAppRow(app: InsertAppFields): AppRow {
       internalProtocol,
       allocateInternalPort(),
       allocateVirtualIp(),
-      app.sticky ? 1 : 0,
       app.rate_limit_rps ?? 0,
-      app.ip_allowlist ?? "",
       app.health_check_path ?? "",
       app.compress ? 1 : 0,
-      resolvePublicPort(app),
-      app.public_protocol ?? "tcp",
       app.placement ? serializePlacement(app.placement) : null,
-      app.target ?? "",
-      app.target_of ?? null,
       app.desired_volume_id ?? "",
       app.desired_volume_size ?? 0,
       app.desired_volume_path ?? "/data",
@@ -436,19 +338,6 @@ export function getServersForApp(appId: number): ServerRow[] {
       "SELECT DISTINCT s.* FROM servers s JOIN replicas r ON r.server_id = s.id WHERE r.app_id = ? ORDER BY s.id ASC",
     )
     .all(appId) as ServerRow[];
-}
-
-/**
- * Returns true iff the server has at least one running (non-stopped) replica.
- * A replica row with status = 'stopped' is a light-sleep anchor, not a
- * running tenant — such servers are still materialized on the provider but
- * are doing no work.
- */
-export function hasRunningReplicas(serverId: number): boolean {
-  const row = db
-    .query("SELECT COUNT(*) as c FROM replicas WHERE server_id = ? AND status != 'stopped'")
-    .get(serverId) as { c: number } | null;
-  return (row?.c ?? 0) > 0;
 }
 
 export function updateAppStatus(id: number, status: string): void {
@@ -644,10 +533,6 @@ export function updateAppDesiredVolume(
   ).run(desired.volumeId, desired.sizeGb, desired.mountPath, desired.driverId ?? "", id);
 }
 
-export function updateAppExtraVolumes(id: number, extraVolumes: string[]): void {
-  db.query("UPDATE apps SET extra_volumes = ? WHERE id = ?").run(JSON.stringify(extraVolumes), id);
-}
-
 function parseStringArray(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
@@ -674,21 +559,6 @@ export function updateAppRuntimeOptions(
     .run(JSON.stringify(options.command), JSON.stringify(options.capAdd), options.postStartCommand, id);
 }
 
-/**
- * Parse the `apps.extra_volumes` JSON column into a list of "host:container"
- * mount specs. Tolerates malformed/legacy values (returns []) and filters out
- * any non-string entries so a corrupt row can never inject a bad `-v` flag.
- */
-export function parseExtraVolumes(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 /** Set the per-app memory ceiling in MB. 0 = use the platform default. Applied
  *  to the container on the next (re)deploy / scale operation. */
 export function updateAppMemory(id: number, memoryMb: number): void {
@@ -699,16 +569,6 @@ export function updateAppMemory(id: number, memoryMb: number): void {
  *  platform default. Applied to the container on the next (re)deploy / scale. */
 export function updateAppCpu(id: number, cpuLimit: number): void {
   db.query("UPDATE apps SET cpu_limit = ? WHERE id = ?").run(cpuLimit, id);
-}
-
-/** Set (or clear) the app password. Takes write-only plaintext, stores only the
- *  bcrypt hash — a non-empty `authPassword` enables basic auth, "" disables it.
- *  Callers re-sync ingress after persisting (pure Traefik-config change). */
-export function updateAppAuthPassword(id: number, authPassword: string): void {
-  db.query("UPDATE apps SET auth_password_hash = ? WHERE id = ?").run(
-    hashAuthPassword(authPassword),
-    id,
-  );
 }
 
 export function updateAppPublic(id: number, isPublic: boolean): void {
@@ -725,12 +585,6 @@ export function updateAppInternalProtocol(id: number, protocol: InternalProtocol
 /** Persist the user-declared placement. Convergence makes reality match. */
 export function updateAppPlacement(id: number, placement: Placement): void {
   db.query("UPDATE apps SET placement = ? WHERE id = ?").run(serializePlacement(placement), id);
-}
-
-/** Mark an app as a staging/dev target of another app (or clear it with
- *  targetOf = null) and set its deploy-target tag in the same write. */
-export function setAppTarget(id: number, targetOf: number | null, target: string): void {
-  db.query("UPDATE apps SET target_of = ?, target = ? WHERE id = ?").run(targetOf, target, id);
 }
 
 /** Persist a stack member's `needs` edges (member keys from the manifest), or
@@ -751,29 +605,13 @@ export function parseStackNeeds(raw: string | null | undefined): string[] {
   } catch { return []; }
 }
 
-/** The staging/dev children of a prod app — apps whose target_of points at it. */
-export function getAppTargets(appId: number): AppRow[] {
-  return db
-    .query("SELECT * FROM apps WHERE target_of = ? ORDER BY created_at DESC")
-    .all(appId) as AppRow[];
-}
-
-/** The app's staging sibling (target='staging', target_of=appId), or null. */
-export function getStagingSibling(appId: number): AppRow | null {
-  return (db
-    .query("SELECT * FROM apps WHERE target_of = ? AND target = 'staging' ORDER BY created_at ASC LIMIT 1")
-    .get(appId) as AppRow | undefined) ?? null;
-}
-
-/** Partial update of the per-app ingress settings (sticky sessions, rate
- *  limit, IP allowlist, health-check path, compression). Values are rendered
+/** Partial update of the per-app ingress settings (rate limit, health-check
+ *  path, compression). Values are rendered
  *  into Traefik dynamic config — callers re-sync ingress after persisting. */
 export function updateAppIngressSettings(id: number, fields: AppIngressSettings): void {
   const sets: string[] = [];
   const values: (string | number)[] = [];
-  if (fields.sticky !== undefined) { sets.push("sticky = ?"); values.push(fields.sticky ? 1 : 0); }
   if (fields.rate_limit_rps !== undefined) { sets.push("rate_limit_rps = ?"); values.push(fields.rate_limit_rps); }
-  if (fields.ip_allowlist !== undefined) { sets.push("ip_allowlist = ?"); values.push(fields.ip_allowlist); }
   if (fields.health_check_path !== undefined) { sets.push("health_check_path = ?"); values.push(fields.health_check_path); }
   if (fields.compress !== undefined) { sets.push("compress = ?"); values.push(fields.compress ? 1 : 0); }
   if (fields.health_check !== undefined) { sets.push("health_check = ?"); values.push(fields.health_check ? 1 : 0); }

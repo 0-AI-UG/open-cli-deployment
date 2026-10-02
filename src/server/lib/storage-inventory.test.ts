@@ -20,13 +20,13 @@ test("local storage retains its host identity after app deletion and has no adve
   expect(entries.some(m => m.id === "123456")).toBe(false);
 });
 
-test("app storage exposes local primary and extra mounts without a fictional quota", () => {
+test("app storage exposes the local primary mount without a fictional quota", () => {
   const app = db.insertApp({ name: "storage-app", domain: "", image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 5432, env_vars: "{}" });
-  const mounts = appStorageMounts({ ...app, volume_id: "local:7:shared-db", volume_driver: "local-directory", volume_mount: "/wrong:/var/lib/postgresql/data", desired_volume_size: 10, extra_volumes: '["/srv/media:/media"]' });
+  const mounts = appStorageMounts({ ...app, volume_id: "local:7:shared-db", volume_driver: "local-directory", volume_mount: "/wrong:/var/lib/postgresql/data", desired_volume_size: 10 });
   expect(mounts[0]!.host_path).toBe("/var/lib/ocd/volumes/shared-db");
   expect(mounts[0]!.container_path).toBe("/var/lib/postgresql/data");
   expect(mounts[0]!.kind).toBe("local-directory");
-  expect(mounts[1]!.host_path).toBe("/srv/media");
+  expect(mounts).toHaveLength(1);
   expect(mounts[0]).not.toHaveProperty("size");
   expect(appStorageMounts({ ...app, volume_id: "123456", volume_driver: "hetzner", volume_mount: "/mnt/data:/data" })[0]!.kind).toBe("provider-volume");
 });

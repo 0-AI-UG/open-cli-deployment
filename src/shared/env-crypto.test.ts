@@ -103,18 +103,17 @@ describe("resolveAppEnvVars platform injection", () => {
     expect(vars.OCD_DEPLOY_TARGET).toBe("production");
   });
 
-  test("injects a non-overridable staging deploy target", async () => {
+  test("injects a non-overridable production deploy target", async () => {
     const now = new Date().toISOString();
     const env = db.insertEnvironment(
       `envtest-target-${randomSuffix()}`,
       serializeEnvVars([
-        { key: "OCD_DEPLOY_TARGET", value: "production", secret: false, updated_at: now },
+        { key: "OCD_DEPLOY_TARGET", value: "staging", secret: false, updated_at: now },
       ]),
     );
     const app = makeApp({ environment_id: env.id });
-    db.setAppTarget(app.id, null, "staging");
-    const vars = await resolveAppEnvVars(db.getApp(app.id)!);
-    expect(vars.OCD_DEPLOY_TARGET).toBe("staging");
+    const vars = await resolveAppEnvVars(app);
+    expect(vars.OCD_DEPLOY_TARGET).toBe("production");
   });
 
   test("user-defined var with the same key wins over the injected one", async () => {

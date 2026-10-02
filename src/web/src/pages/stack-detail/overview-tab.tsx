@@ -18,14 +18,8 @@ export function OverviewTab({
   const envName = (id: number | null) =>
     id == null ? null : environments.find((e) => e.id === id)?.name ?? `#${id}`;
   const prodEnv = envName(stack.environment_id);
-  const stagingTargets = new Set(
-    stack.apps
-      .map((app) => app.target_of)
-      .filter((id): id is number => id != null),
-  );
-  const staging = memberApps.filter((app) => stagingTargets.has(app.id)).length;
   // `needs` edges from the stack manifest, persisted per member. They are what
-  // orders deploys and promotes into levels, so they belong on this page even
+  // orders deploys into levels, so they belong on this page even
   // though they're only editable in `ocd-stack.json`.
   const needsOf = (a: StackMemberApp): string[] => {
     try {
@@ -47,20 +41,10 @@ export function OverviewTab({
               ? <a href="#/environments" className="font-medium text-fg hover:underline">{prodEnv}</a>
               : <span className="text-muted">None</span>}
           </DataRow>
-          <DataRow label="Staging environment">
-            {envName(stack.staging_environment_id) != null
-              ? <span className="font-medium">{envName(stack.staging_environment_id)}</span>
-              : <span className="text-muted">None</span>}
-          </DataRow>
         </Card>
         <Card className="overflow-hidden">
-          <CardHeader title="Rollout" icon={<Layers size={15} />} description="Member state across environments" />
+          <CardHeader title="Rollout" icon={<Layers size={15} />} description="Member state" />
           <DataRow label="Apps"><span className="tabular-nums">{memberApps.length}</span></DataRow>
-          <DataRow label="Members on staging">
-            {staging > 0
-              ? <Badge tone="warning">{staging} of {memberApps.length}</Badge>
-              : <span className="text-muted">None</span>}
-          </DataRow>
           <DataRow label="Status"><StatusBadge status={stack.status} /></DataRow>
         </Card>
       </div>
@@ -74,7 +58,7 @@ export function OverviewTab({
         {memberApps.length === 0 ? (
           <EmptyState message="This stack has no apps" icon={Boxes} description="Members are declared in ocd-stack.json." />
         ) : (
-          <Table headers={["Name", "Status", "Domain", "Needs", "Staging", ""]}>
+          <Table headers={["Name", "Status", "Domain", "Needs", ""]}>
             {memberApps.map((a) => (
               <tr key={a.id}>
                 <td>
@@ -93,11 +77,6 @@ export function OverviewTab({
                 </td>
                 <td className="font-mono text-xs text-fg-dim">
                   {needsOf(a).length ? needsOf(a).join(", ") : <span className="text-muted">—</span>}
-                </td>
-                <td>
-                  {stagingTargets.has(a.id)
-                    ? <Badge tone="warning">On</Badge>
-                    : <span className="text-xs text-muted">Off</span>}
                 </td>
                 <td className="text-right">
                   <a href={`#/apps/${a.id}`} className="inline-flex items-center gap-0.5 text-xs font-medium text-muted transition-colors hover:text-fg">Open <ChevronRight size={13} /></a>

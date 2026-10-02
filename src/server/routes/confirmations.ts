@@ -24,8 +24,6 @@ const CONFIRMABLE_ACTIONS = [
   "create_server",
   "create_bucket",
   "delete_bucket",
-  "promote_app",
-  "promote_stack",
 ] as const;
 type ConfirmableAction = (typeof CONFIRMABLE_ACTIONS)[number];
 
@@ -76,7 +74,7 @@ export async function handleCreateConfirmation(request: Request): Promise<Respon
       const s = db.getStack(Number(resourceId));
       if (!s) return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
       const apps = db.getAppsByStackId(s.id);
-      summary = `Destroy stack "${s.name}" and all ${apps.length} app(s); its production and staging environments are retained, and managed volumes are detached for recovery.`;
+      summary = `Destroy stack "${s.name}" and all ${apps.length} app(s); its environment is retained, and managed volumes are detached for recovery.`;
     } else if (action === "delete_environment") {
       const env = db.getEnvironment(Number(resourceId));
       if (!env) return Response.json({ error: "Environment not found" }, { status: 404, headers: corsHeaders });
@@ -124,17 +122,6 @@ export async function handleCreateConfirmation(request: Request): Promise<Respon
       summary = `Create private bucket "${resourceId}" in Hetzner Object Storage (${region}). Hetzner billing may apply.`;
     } else if (action === "delete_bucket") {
       summary = `Delete empty Hetzner Object Storage bucket "${resourceId}". OCD will refuse to recursively delete objects or versions.`;
-    } else if (action === "promote_app") {
-      const match = /^(\d+):(\d+)$/.exec(resourceId);
-      const source = match ? db.getApp(Number(match[1])) : null;
-      const destination = match ? db.getApp(Number(match[2])) : null;
-      if (!source || !destination) return Response.json({ error: "Promotion apps not found" }, { status: 404, headers: corsHeaders });
-      const commit = db.getDeployments(source.id).find((deployment) => deployment.status === "deployed")?.git_commit;
-      summary = `Promote ${source.name}${commit ? ` at commit ${commit}` : ""} to production app ${destination.name}, replacing its running deployment.`;
-    } else if (action === "promote_stack") {
-      const stack = db.getStack(Number(resourceId));
-      if (!stack) return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
-      summary = `Promote every ready staging sibling in stack "${stack.name}" to production, replacing the affected production deployments.`;
     } else {
       const op = getOperation(Number(resourceId));
       if (!op) return Response.json({ error: "Operation not found" }, { status: 404, headers: corsHeaders });

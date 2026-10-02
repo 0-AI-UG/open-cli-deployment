@@ -1,5 +1,4 @@
 import * as db from "../shared/db.ts";
-import { parsePlacement } from "../shared/placement.ts";
 import { getHetznerToken, secretStore } from "../shared/secret-store.ts";
 import { probeBuildWorker } from "./build-worker.ts";
 import { imageMatchesRegistryScope } from "./registry-config.ts";
@@ -13,7 +12,6 @@ export type DeployReadiness = {
     status: ReadinessStatus;
     online: number;
     total: number;
-    candidate_server: { id: number; name: string } | null;
   };
   registry: {
     status: ReadinessStatus;
@@ -31,18 +29,6 @@ export type DeployReadiness = {
   actions: Array<{ command: string; label: string }>;
 };
 
-function unusedReadyServer() {
-  const panelServerId = db.getPanel()?.server_id;
-  const workerServerIds = new Set(db.getBuildWorkers().map((worker) => worker.server_id));
-  return db.getServers().find((server) =>
-    server.status === "ready" &&
-    server.id !== panelServerId &&
-    !workerServerIds.has(server.id) &&
-    db.getApps(server.id).length === 0 &&
-    !db.getApps().some((app) => parsePlacement(app.placement)[String(server.id)])
-  );
-}
-
 export async function inspectDeployReadiness(input: {
   repository?: string;
   image?: string;
@@ -58,7 +44,6 @@ export async function inspectDeployReadiness(input: {
     const observed = await probeBuildWorker(server).catch(() => ({ online: false }));
     if (observed.online) online++;
   }
-  const candidate = unusedReadyServer();
   const scope = settings.oci_artifact_ref || "";
   const registryPassword = await secretStore.get("oci_registry_password");
   const registryConfigured = !!(scope && settings.oci_registry_username && registryPassword);
@@ -71,8 +56,8 @@ export async function inspectDeployReadiness(input: {
     : null;
   const actions: DeployReadiness["actions"] = [];
   if (buildDelivery && !online) actions.push({
-    command: candidate ? `ocd runners install --server=${candidate.id}` : "ocd servers create --type=<type> --location=<location>",
-    label: candidate ? `Install a worker on ${candidate.name}` : "Create a dedicated build server, then install a worker on it",
+    command: "ocd runners install --server=<name>",
+    label: "Install a build worker on a dedicated server (create one with `ocd servers create` if needed)",
   });
   if (buildDelivery && (!registryConfigured || coversTarget === false)) {
     actions.push({ command: "ocd registry login", label: "Connect the build output registry" });
@@ -83,10 +68,9 @@ export async function inspectDeployReadiness(input: {
     ready: !buildDelivery || (online > 0 && registryConfigured && coversTarget !== false),
     hetzner: { status: hetznerConfigured ? "ready" : "warning", configured: hetznerConfigured },
     worker: {
-      status: !buildDelivery ? "ready" : online ? "ready" : candidate ? "warning" : "blocked",
+      status: !buildDelivery ? "ready" : online ? "ready" : "blocked",
       online,
       total: workers.length,
-      candidate_server: candidate ? { id: candidate.id, name: candidate.name } : null,
     },
     registry: {
       status: buildDelivery && coversTarget === false

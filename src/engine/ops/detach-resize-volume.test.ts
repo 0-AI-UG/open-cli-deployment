@@ -91,7 +91,7 @@ describe("detach_volume", () => {
     expect(compute._mocks.volumeDetach).toHaveBeenCalledWith("v-9");
     expect(db.getApp(app.id)!.volume_id).toBe("");
     expect(db.getRetiredVolumes().some((row) => row.provider_volume_id === "v-9")).toBe(true);
-    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, undefined, expect.anything());
+    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, undefined);
   });
 
   test("has no compensations (pure removal)", () => {

@@ -181,7 +181,7 @@ async function runOneForwardStep(
         // resource). Do not discard that validation result and run anyway.
         if (err instanceof FatalProbeError) throw err;
 
-        // Legacy probe failures are informational — a transient provider or
+        // Legacy probe failures are informational — a transient Hetzner or
         // transport failure must not change the behavior of existing steps.
         log(`op#${op.id} probe ${step.name} failed (continuing):`, errMsg(err));
       }

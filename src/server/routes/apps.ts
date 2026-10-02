@@ -8,7 +8,7 @@ import type { AppRow } from "../../shared/db/apps.ts";
 import { getServersWithApps } from "../../engine/deploy/index.ts";
 import { getContainerLogs } from "../../shared/remote/index.ts";
 import { validateDeployRequest, validateBuildDeployRequest } from "../../shared/validate.ts";
-import { syncAppIngress, getPanelIngressIpv4 } from "../../engine/scale/traefik-manager.ts";
+import { syncAppIngress } from "../../engine/scale/traefik-manager.ts";
 import { enqueue } from "../ipc/enqueue.ts";
 import { enqueueOp } from "./_ops.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
@@ -20,32 +20,25 @@ import { stackLockKeys, withOwningStackKeys } from "../lib/stack-operations.ts";
 import { reconcileAppDns } from "../../engine/dns-reconciler.ts";
 import { resolveOciImage } from "../../engine/oci-image.ts";
 
-/** Enrich app row for API responses — adds environment name, the resolved
- *  public raw TCP/UDP address, a boolean `auth_enabled` flag, and strips every
- *  secret/credential field so nothing sensitive leaks to `apps.view` users.
- *  `auth_password_hash` is the source of truth for "auth on" but is itself a
- *  credential (bcrypt hash), so only the derived boolean goes out. */
+/** Enrich app row for API responses — adds environment name and strips every
+ *  secret/credential field so nothing sensitive leaks to `apps.view` users. */
 export function enrichAppForResponse(app: AppRow & Record<string, unknown>) {
   const envRow = app.environment_id ? db.getEnvironment(app.environment_id as number) : null;
-  const panelIp = app.public_port != null ? getPanelIngressIpv4() : null;
-  const { auth_password_hash, ...safe } = app;
   const placement: PlacementEntry[] = Object.entries(parsePlacement(app.placement)).map(([serverId, replicas]) => ({
     server_id: Number(serverId),
     server_name: db.getServer(Number(serverId))?.name ?? `#${serverId}`,
     replicas,
   }));
   return {
-    ...safe,
+    ...app,
     placement,
     env_vars: [],
     storage: getAppStorage(app.id),
     notifications: getAppNtfy(app.id),
     storage_bindings: appStorageView(app.id),
-    auth_enabled: !!auth_password_hash,
     environment_id: app.environment_id ?? null,
     environment_name: envRow?.name ?? null,
     deployed_commit: db.getDeployedCommit(app.id),
-    public_address: app.public_port != null && panelIp ? `${panelIp}:${app.public_port}` : null,
   };
 }
 
@@ -70,8 +63,7 @@ export async function handleGetDashboard(request: Request): Promise<Response> {
   try {
     await requirePermission(request, "fleet.view");
     const compact = new URL(request.url).searchParams.get("compact") === "1";
-    // Staging targets are shown through their production app's promotion view.
-    const visibleApps = db.getApps().filter((a) => a.target_of == null);
+    const visibleApps = db.getApps();
     const apps = compact
       ? await Promise.all(visibleApps.map((app) => withDnsInstruction({
           id: app.id,
@@ -521,98 +513,6 @@ export async function handleGetDeployments(request: Request, appId: number): Pro
     await requirePermission(request, "deployments.view", appScope(appId));
     const deployments = db.getDeployments(appId);
     return Response.json(deployments, { headers: corsHeaders });
-  } catch (error) {
-    return handleError(error);
-  }
-}
-
-/**
- * POST /api/apps/promote — promote the exact version running in a SOURCE app
- * (e.g. `<name>-staging`) up to a DEST app (production). Validates both apps
- * exist, that they differ, and that the source has a successful deployment to
- * promote; then enqueues the promote op, which pulls and runs the exact source
- * artifact digest on the destination.
- */
-export async function handlePromoteApp(request: Request): Promise<Response> {
-  try {
-    const payload = await requireAuthenticated(request);
-    const body = (await request.json().catch(() => ({}))) as { source_app?: string; dest_app?: string };
-    if (!body.source_app || !body.dest_app) {
-      return Response.json({ error: "source_app and dest_app are required" }, { status: 400, headers: corsHeaders });
-    }
-
-    const source = db.getAppByName(body.source_app);
-    if (!source) return Response.json({ error: `Source app not found: ${body.source_app}` }, { status: 404, headers: corsHeaders });
-    const dest = db.getAppByName(body.dest_app);
-    if (!dest) return Response.json({ error: `Destination app not found: ${body.dest_app}` }, { status: 404, headers: corsHeaders });
-
-    // The promote op acts on the destination app, so that's the app the permission is scoped against. The body
-    // has to be read first to know which app that is.
-    await requirePermission(request, "apps.promote", appScope(dest.id));
-
-    if (source.id === dest.id) {
-      return Response.json({ error: "Source and destination must be different apps" }, { status: 400, headers: corsHeaders });
-    }
-
-    const sourceDeployment = db.getDeployments(source.id).find((d) => d.status === "deployed");
-    if (!sourceDeployment?.image_digest?.includes("@sha256:")) {
-      return Response.json({ error: `Source app "${source.name}" has no successful deployment to promote` }, { status: 400, headers: corsHeaders });
-    }
-    await enforceConfirmation(
-      request,
-      payload,
-      "promote_app",
-      "promotion",
-      `${source.id}:${dest.id}`,
-    );
-
-    const { opId } = enqueue({
-      kind: "promote",
-      resourceKeys: [`app:${dest.id}`],
-      input: { appId: dest.id, sourceAppId: source.id, userId: payload.userId },
-      trigger: payload.client === "cli" ? "cli" : "ui",
-      triggeredBy: payload.userId,
-    });
-    return Response.json({ op_id: opId, image: sourceDeployment.image_digest, commit: sourceDeployment.git_commit || null }, { headers: corsHeaders });
-  } catch (error) {
-    return handleError(error);
-  }
-}
-
-/** The git commit of an app's most recent successful deployment, or null. */
-function deployedCommit(appId: number): string | null {
-  return db.getDeployments(appId).find((d) => d.status === "deployed")?.git_commit ?? null;
-}
-
-/**
- * GET /api/apps/:id/staging — explicit artifact staging target status.
- */
-export async function handleGetAppStaging(request: Request, appId: number): Promise<Response> {
-  try {
-    await requirePermission(request, "apps.view", appScope(appId));
-    const app = db.getApp(appId);
-    if (!app) return Response.json({ error: "App not found" }, { status: 404, headers: corsHeaders });
-
-    const siblingRow = db.getStagingSibling(appId);
-    const sibling = siblingRow
-      ? {
-          id: siblingRow.id,
-          name: siblingRow.name,
-          status: siblingRow.status,
-          domain: siblingRow.domain,
-          commit: deployedCommit(siblingRow.id),
-        }
-      : null;
-
-    return Response.json(
-      {
-        staging_enabled: siblingRow != null,
-        staging_environment_id: siblingRow?.environment_id ?? null,
-        prod_commit: deployedCommit(app.id),
-        sibling,
-      },
-      { headers: corsHeaders },
-    );
   } catch (error) {
     return handleError(error);
   }

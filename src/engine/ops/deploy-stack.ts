@@ -14,7 +14,7 @@ import { awaitChildren } from "./_children.ts";
 import { registerOp } from "./registry.ts";
 import type { OpContext, OpKindDefinition, Step } from "../types.ts";
 import { classifyAppConfigChanges, classifyConfigOnlyChanges, diffAppConfig, resolveDeployRequestEnvironmentIds, type AppReconcileMode } from "../../shared/app-config.ts";
-import { validateDeployRequest, assertSafeHostPath } from "../../shared/validate.ts";
+import { validateDeployRequest } from "../../shared/validate.ts";
 import { allReplicasAttested, hashEnvironment } from "../revision.ts";
 import dbInstance from "../../shared/db/connection.ts";
 
@@ -142,9 +142,6 @@ const validatePlan: Step<DeployStackInput, ValidatePlanOut> = {
     if (req.environment_id != null && !db.getEnvironment(req.environment_id)) {
       throw new Error(`Environment ${req.environment_id} not found`);
     }
-    if (req.staging_environment_id != null && !db.getEnvironment(req.staging_environment_id)) {
-      throw new Error(`Staging environment ${req.staging_environment_id} not found`);
-    }
     // Resolve every desired member, including unselected dependencies, before mutation.
     const desired = req.apps.map((app) => ({
       ...runtimeAppFromRequest({ ...app, app_name: memberName(req.name, app.key), environment_id: stackMemberEnvironmentId(app, req.environment_id ?? null) }, -1),
@@ -176,12 +173,6 @@ const plan: Step<DeployStackInput, PlanOut> = {
       );
     }
     const appKeys = new Set(req.apps.map((a) => a.key));
-    // Keep direct step invocation safe as well as normal runner execution:
-    // every validation that depends only on input/current state precedes the
-    // first stack/environment mutation.
-    if (req.staging_environment_id != null && !db.getEnvironment(req.staging_environment_id)) {
-      throw new Error(`Staging environment ${req.staging_environment_id} not found`);
-    }
     // Every dependency must resolve to a known app key.
     for (const a of req.apps) {
       for (const n of appDependencies(a)) {
@@ -213,7 +204,6 @@ const plan: Step<DeployStackInput, PlanOut> = {
     const stackId = existing?.id ?? db.insertStack({ name: req.name, environment_id: envId }).id;
     dbInstance.query("UPDATE stacks SET environment_id = ? WHERE id = ?").run(envId, stackId);
     db.updateStackStatus(stackId, "deploying");
-    db.updateStackStagingEnvironment(stackId, req.staging_environment_id ?? null);
     // Keep manifest provenance synchronized for every member, including
     // members omitted from a partial reconcile.
     if (req.stack_manifest_path !== undefined) {
@@ -257,9 +247,6 @@ const preflightApps: Step<DeployStackInput, PreflightOut> = {
       const name = memberName(req.name, appReq.key);
       const validation = validateDeployRequest({ ...appReq, app_name: name });
       if (!validation.valid) throw new Error(`App "${appReq.key}": ${validation.error}`);
-      for (const volume of appReq.extra_volumes ?? []) {
-        assertSafeHostPath(volume.host_path, name);
-      }
       checkedApps.push(appReq.key);
       sourceRevisionByKey[appReq.key] = `artifact:${appReq.image_ref}`;
     }
@@ -353,8 +340,8 @@ const deployApps: Step<DeployStackInput, { ok: true }> = {
         let row: OperationRow;
         if (existingApp) {
           // The stack and standalone paths share one complete desired-config
-          // apply. Stack ownership only supplies the resolved shared prod and
-          // staging environments before the code-only child redeploy.
+          // apply. Stack ownership only supplies the resolved shared
+          // environment before the code-only child redeploy.
           const {
             key: _key,
             needs: _needs,
@@ -457,9 +444,7 @@ const deployApps: Step<DeployStackInput, { ok: true }> = {
         if (!app) continue;
         db.setAppStack(app.id, stackId);
         db.updateAppStackManifestPath(app.id, req.stack_manifest_path ?? null);
-        // Persist the member's dependency edges. They're otherwise consumed once
-        // here (topoLevels) and forgotten, which left promote_stack unable to
-        // order anything — see promote-stack.ts `orderPromotions`.
+        // Persist the member's dependency edges for later stack-wide operations.
         db.setAppStackNeeds(app.id, appDependencies(appByKey.get(key)!));
 
       }

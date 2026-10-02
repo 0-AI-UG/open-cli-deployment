@@ -15,7 +15,6 @@ export type ReplicaRow = {
   memory_limit_mb: number;
   unhealthy_ticks: number;
   last_health_at: string | null;
-  stopped_at: string | null;
   image_digest: string;
   desired_image_digest: string;
   env_hash: string;
@@ -34,7 +33,7 @@ export type MetricSampleRow = {
   sampled_at: string;
 };
 
-export type ScalingEventRow = {
+export type ReplicaEventRow = {
   id: number;
   app_id: number;
   event_type: string;
@@ -196,14 +195,14 @@ export function pruneOldMetrics(olderThanSeconds: number): void {
   ).run(`-${olderThanSeconds} seconds`);
 }
 
-export function insertScalingEvent(event: {
+export function insertReplicaEvent(event: {
   app_id: number;
   event_type: string;
   from_count: number;
   to_count: number;
   reason?: string;
   operation_id?: number;
-}): ScalingEventRow {
+}): ReplicaEventRow {
   if (event.operation_id != null) {
     return db.query(
       `INSERT INTO scaling_events
@@ -219,7 +218,7 @@ export function insertScalingEvent(event: {
       event.to_count,
       event.reason || "",
       event.operation_id,
-    ) as ScalingEventRow;
+    ) as ReplicaEventRow;
   }
   return db.query(
     "INSERT INTO scaling_events (app_id, event_type, from_count, to_count, reason) VALUES (?, ?, ?, ?, ?) RETURNING *",
@@ -229,11 +228,11 @@ export function insertScalingEvent(event: {
     event.from_count,
     event.to_count,
     event.reason || "",
-  ) as ScalingEventRow;
+  ) as ReplicaEventRow;
 }
 
-export function getScalingEvents(appId: number, limit = 50): ScalingEventRow[] {
+export function getReplicaEvents(appId: number, limit = 50): ReplicaEventRow[] {
   return db
     .query("SELECT * FROM scaling_events WHERE app_id = ? ORDER BY created_at DESC LIMIT ?")
-    .all(appId, limit) as ScalingEventRow[];
+    .all(appId, limit) as ReplicaEventRow[];
 }

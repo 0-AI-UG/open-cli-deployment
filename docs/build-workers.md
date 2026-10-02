@@ -23,7 +23,7 @@ Every delivery follows the same identity chain:
 7. deploy only `repository@sha256:digest`.
 
 Mutable tags and the `:ocd-buildcache` reference are transport state. Neither
-may be used for runtime identity, rollback, promotion, or recovery.
+may be used for runtime identity, rollback, or recovery.
 
 ## Scheduling and capacity
 

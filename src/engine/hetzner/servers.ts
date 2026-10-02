@@ -1,11 +1,5 @@
 import { hetznerApi } from "./api.ts";
 import { isNotFoundError } from "../../shared/hetzner/errors.ts";
-import {
-  PUBLIC_TCP_PORT_BASE,
-  PUBLIC_TCP_PORT_COUNT,
-  PUBLIC_UDP_PORT_BASE,
-  PUBLIC_UDP_PORT_COUNT,
-} from "../../shared/db/apps.ts";
 
 function log(context: string, ...args: unknown[]) {
   console.log(`[${new Date().toISOString()}] [hetzner:${context}]`, ...args);
@@ -37,32 +31,12 @@ const FIREWALL_NAME = "open-cli-deployment";
 
 const ANY_SOURCE = ["0.0.0.0/0", "::/0"];
 
-/**
- * Base inbound rules every fleet server gets. The public raw TCP/UDP blocks
- * (apps.public_port pool, see traefik-provision.ts) are opened fleet-wide like
- * 80/443: only the panel's Traefik ever routes them, on workers nothing
- * listens there (replicas bind private IPs) — same stance as the
- * 20000-20199 internal block staying unreachable.
- */
+/** Base inbound rules every fleet server gets. */
 export const BASE_FIREWALL_RULES: FirewallRule[] = [
   { direction: "in", protocol: "tcp", port: "22", source_ips: ANY_SOURCE, description: "SSH" },
   { direction: "in", protocol: "tcp", port: "80", source_ips: ANY_SOURCE, description: "HTTP" },
   { direction: "in", protocol: "tcp", port: "443", source_ips: ANY_SOURCE, description: "HTTPS" },
   { direction: "in", protocol: "icmp", source_ips: ANY_SOURCE, description: "ICMP ping" },
-  {
-    direction: "in",
-    protocol: "tcp",
-    port: `${PUBLIC_TCP_PORT_BASE}-${PUBLIC_TCP_PORT_BASE + PUBLIC_TCP_PORT_COUNT - 1}`,
-    source_ips: ANY_SOURCE,
-    description: "Public TCP apps",
-  },
-  {
-    direction: "in",
-    protocol: "udp",
-    port: `${PUBLIC_UDP_PORT_BASE}-${PUBLIC_UDP_PORT_BASE + PUBLIC_UDP_PORT_COUNT - 1}`,
-    source_ips: ANY_SOURCE,
-    description: "Public UDP apps",
-  },
 ];
 
 function sameRuleSlot(a: FirewallRule, b: FirewallRule): boolean {
@@ -74,8 +48,8 @@ function sameRuleSlot(a: FirewallRule, b: FirewallRule): boolean {
  * the full desired rule set (base rules re-asserted, operator-added extras
  * preserved) when anything is missing, or null when already converged. Pure —
  * exported for tests; ensureFirewall applies the result via set_rules. This
- * is how a pre-existing fleet firewall picks up newly added base rules (e.g.
- * the public TCP/UDP blocks) without manual work.
+ * is how a pre-existing fleet firewall picks up newly added base rules
+ * without manual work.
  */
 export function reconcileFirewallRules(existing: FirewallRule[]): FirewallRule[] | null {
   const missing = BASE_FIREWALL_RULES.filter((b) => !existing.some((r) => sameRuleSlot(r, b)));

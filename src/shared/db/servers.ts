@@ -15,7 +15,6 @@ export type ServerRow = {
   provider_status: string;
   last_observed_at: string | null;
   unavailable_ticks: number;
-  gc_requested_at: string | null;
   created_at: string;
 };
 

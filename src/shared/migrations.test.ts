@@ -191,6 +191,60 @@ describe("runMigrations", () => {
     expect(db.query("SELECT config_revision FROM apps WHERE id = 1").get()).toEqual({ config_revision: before + 1 });
   });
 
+  test("migration 125 drops removed-feature columns and keeps everything else", () => {
+    const db = freshDb();
+    runMigrationsWithImageCutover(db, 124);
+    db.run(`INSERT INTO servers (id, name, provider_id, status, ipv4, gc_requested_at)
+      VALUES (1, 'srv', 'h-1', 'ready', '203.0.113.5', '2026-09-01 00:00:00')`);
+    db.run(`INSERT INTO apps (id, name, domain, image_ref, status, auth_password_hash, sticky, ip_allowlist,
+        public_port, public_protocol, extra_volumes, target, target_of, health_check_mode, rate_limit_rps,
+        compress, internal_protocol, placement, virtual_ip)
+      VALUES (1, 'db', 'db.example.com', ?, 'running', '$2b$hash', 1, '10.0.0.0/8', 30001, 'udp',
+        '["/srv/a:/a"]', 'staging', NULL, 'periodic_job', 50, 1, 'tcp', '{"1":1}', '10.96.0.1'),
+        (2, 'web', '', ?, 'running', '', 0, '', NULL, 'tcp', '[]', '', 1, 'http', 0, 0, 'http', '{"1":2}', '10.96.0.2')`,
+      [IMAGE_REF, IMAGE_REF]);
+    db.run(`INSERT INTO replicas (id, app_id, server_id, host_port, container_name, status, stopped_at)
+      VALUES (1, 1, 1, 10001, 'db', 'running', '2026-09-01 00:00:00')`);
+    db.run(`INSERT INTO stacks (id, name, status, staging_environment_id, staging_env_keys)
+      VALUES (1, 'bc', 'running', 7, '["A"]')`);
+    db.run("INSERT INTO users (id, username, password_hash) VALUES ('u1', 'ops', 'x')");
+    db.run(`INSERT INTO user_permissions (user_id, permission) VALUES
+      ('u1', 'apps.promote'), ('u1', 'stacks.promote'), ('u1', 'apps.deploy')`);
+
+    migrations.find((m) => m.version === 125)!.up(db);
+
+    const columns = (table: string) => (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
+    for (const column of [
+      "auth_password_hash", "sticky", "ip_allowlist", "public_port", "public_protocol", "extra_volumes",
+      "target", "target_of", "compose_file", "compose_web_service", "deploy_mode", "userns", "env_projection",
+    ]) {
+      expect(columns("apps")).not.toContain(column);
+    }
+    expect(columns("replicas")).not.toContain("stopped_at");
+    expect(columns("servers")).not.toContain("gc_requested_at");
+    expect(columns("stacks")).not.toContain("staging_environment_id");
+    expect(columns("stacks")).not.toContain("staging_env_keys");
+    expect(db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_apps_public_port'").get()).toBeNull();
+
+    expect(db.query(`SELECT id, name, domain, status, health_check_mode, rate_limit_rps, compress,
+        internal_protocol, placement, virtual_ip FROM apps ORDER BY id`).all()).toEqual([
+      { id: 1, name: "db", domain: "db.example.com", status: "running", health_check_mode: "heartbeat", rate_limit_rps: 50,
+        compress: 1, internal_protocol: "tcp", placement: '{"1":1}', virtual_ip: "10.96.0.1" },
+      { id: 2, name: "web", domain: "", status: "running", health_check_mode: "http", rate_limit_rps: 0,
+        compress: 0, internal_protocol: "http", placement: '{"1":2}', virtual_ip: "10.96.0.2" },
+    ]);
+    expect(db.query("SELECT container_name, status, host_port FROM replicas").get())
+      .toEqual({ container_name: "db", status: "running", host_port: 10001 });
+    expect(db.query("SELECT name, ipv4, status FROM servers").get()).toEqual({ name: "srv", ipv4: "203.0.113.5", status: "ready" });
+    expect(db.query("SELECT name, status FROM stacks").get()).toEqual({ name: "bc", status: "running" });
+    expect(db.query("SELECT permission FROM user_permissions").all()).toEqual([{ permission: "apps.deploy" }]);
+
+    // The recreated trigger still bumps the revision on declared-config edits.
+    const before = (db.query("SELECT config_revision FROM apps WHERE id = 2").get() as { config_revision: number }).config_revision;
+    db.run("UPDATE apps SET rate_limit_rps = 10 WHERE id = 2");
+    expect(db.query("SELECT config_revision FROM apps WHERE id = 2").get()).toEqual({ config_revision: before + 1 });
+  });
+
   test("migration 113 repairs committed manifest paths for webhook builds", () => {
     const db = freshDb();
     runMigrationsWithImageCutover(db);
@@ -464,7 +518,7 @@ describe("runMigrations", () => {
 
   test("migration 66 drops apps.auth_password but keeps auth_password_hash", () => {
     const db = freshDb();
-    runMigrations(db);
+    runMigrationsWithImageCutover(db, 124);
     const cols = (db.query("PRAGMA table_info(apps)").all() as any[]).map((c) => c.name);
     // The plaintext column is gone; the bcrypt hash is the sole source of truth.
     expect(cols).not.toContain("auth_password");
@@ -575,7 +629,7 @@ describe("runMigrations", () => {
 
   test("migration 80 renames env_label/sibling_of to target/target_of on the full schema", () => {
     const db = freshDb();
-    runMigrations(db);
+    runMigrationsWithImageCutover(db, 124);
     const cols = (db.query("PRAGMA table_info(apps)").all() as any[]).map((c) => c.name);
     expect(cols).toContain("target");
     expect(cols).toContain("target_of");

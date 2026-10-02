@@ -9,11 +9,6 @@
  *  checks for health_check=0 apps. */
 export const TRAEFIK_VERSION = "3.7.7";
 
-/** Fixed username for password-protected apps. The old auth-proxy sidecar was
- *  password-only; basicAuth needs a user, so every htpasswd entry uses this
- *  one (UI copy tells visitors to sign in as "admin"). */
-export const BASIC_AUTH_USER = "admin";
-
 export const TRAEFIK_STATIC_CONFIG_PATH = "/etc/traefik/traefik.yml";
 /** JSON access log, one line per request. Rotated by logrotate (see
  *  traefikInstallScript) so a busy fleet never fills the disk. */

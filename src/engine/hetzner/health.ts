@@ -421,16 +421,15 @@ export async function probeAppHealth(
     if (!app.health_check_command) return { healthy: false, error: "Exec health check command is missing" };
     return execHealthCheck(ip, containerName, app.health_check_command, maxAttempts, hostKey);
   }
-  if (mode === "heartbeat" || mode === "periodic_job") {
+  if (mode === "heartbeat") {
     if (!app.health_check_file || !app.health_check_max_age_seconds) {
-      return { healthy: false, error: `${mode} health check marker file/max age is missing` };
+      return { healthy: false, error: "heartbeat health check marker file/max age is missing" };
     }
     return markerFreshnessHealthCheck(
       ip,
       containerName,
       app.health_check_file,
       app.health_check_max_age_seconds,
-      mode,
       maxAttempts,
       hostKey,
     );
@@ -490,15 +489,14 @@ export async function markerFreshnessHealthCheck(
   containerName: string,
   markerFile: string,
   maxAgeSeconds: number,
-  label: "heartbeat" | "periodic_job",
   maxAttempts = 5,
   hostKey?: string,
 ): Promise<{ healthy: boolean; error?: string; inconclusive?: boolean }> {
   if (!/^\/[A-Za-z0-9._/-]+$/.test(markerFile)) {
-    return { healthy: false, error: `Invalid ${label} marker path` };
+    return { healthy: false, error: "Invalid heartbeat marker path" };
   }
   return runHealthProbe(
-    `${label} freshness check for ${containerName}: ${markerFile} <= ${maxAgeSeconds}s`,
+    `heartbeat freshness check for ${containerName}: ${markerFile} <= ${maxAgeSeconds}s`,
     maxAttempts,
     async (i) => {
       const inspect = await inspectContainer(ip, containerName, hostKey);
@@ -525,13 +523,13 @@ export async function markerFreshnessHealthCheck(
       if (result.exitCode === 0 && freshness.fresh) {
         return {
           done: true,
-          log: `${label} marker is fresh (${freshness.ageSeconds}s old)`,
+          log: `heartbeat marker is fresh (${freshness.ageSeconds}s old)`,
           result: { healthy: true, running: true, ready: true },
         };
       }
       const error = result.exitCode === 0 && Number.isFinite(modified)
-        ? `${label} marker is stale (${freshness.ageSeconds}s old; maximum ${maxAgeSeconds}s)`
-        : `${label} marker file ${markerFile} is missing or unreadable`;
+        ? `heartbeat marker is stale (${freshness.ageSeconds}s old; maximum ${maxAgeSeconds}s)`
+        : `heartbeat marker file ${markerFile} is missing or unreadable`;
       return {
         done: false,
         retryLog: `${error} (attempt ${i + 1}/${maxAttempts})`,

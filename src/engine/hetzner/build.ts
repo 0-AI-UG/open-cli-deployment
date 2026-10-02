@@ -62,7 +62,6 @@ export async function pullImmutableImageAndRun(
     containerName?: string;
     bindAddr?: string;
     volumeMount?: string;
-    extraVolumes?: string[];
     memoryMb?: number;
     cpus?: number;
     hostKey?: string;
@@ -88,7 +87,6 @@ export async function pullImmutableImageAndRun(
     hostPort: opts.hostPort,
     containerPort: opts.port,
     volumeMount: opts.volumeMount,
-    extraVolumes: opts.extraVolumes,
     memoryMb: opts.memoryMb,
     cpus: opts.cpus,
     envVars: opts.envVars,

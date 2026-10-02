@@ -53,15 +53,6 @@ export function renderProxyConfig(state: DesiredState): ProxyConfig {
       vip: app.virtualIp,
       frontPorts: frontPorts(app),
       backends: app.upstreams,
-      // Password-protected apps: an L4 proxy cannot check HTTP basic-auth
-      // credentials, so the proxy fail-closes these connections (destroys
-      // them on accept) — otherwise the VIP would be an unauthenticated
-      // bypass of the basicAuth Traefik enforces on the public router.
-      ...(app.authHash ? { authProtected: true } : {}),
-      // Public raw TCP/UDP exposure (30000-30099 pool): the proxy opens a
-      // dedicated auth-free public listener and the panel DNATs the public
-      // port to it. Traefik no longer carries this path.
-      ...(app.publicPort != null ? { publicPort: app.publicPort, publicProtocol: app.publicProtocol } : {}),
     }))
     // collectDesiredState already sorts by name; re-sort so hand-built
     // snapshots (tests, callers) render deterministically too.
@@ -69,12 +60,6 @@ export function renderProxyConfig(state: DesiredState): ProxyConfig {
 
   return {
     version: 1,
-    // The panel's public IPv4: DNAT `daddr` for the public raw path. The proxy
-    // config is byte-identical fleet-wide, so keying the public rules on this
-    // single value makes them fire only on the panel — preserving today's
-    // panel-only public ingress with zero per-host config. Null until a panel
-    // server exists; the public DNAT rules are then omitted.
-    publicIngressIp: state.panelPublicIpv4,
     apps,
   };
 }
@@ -94,18 +79,12 @@ export function renderProxyConfigJson(state: DesiredState): string {
  * legacy `<server-private-ip>` fallback pointed at the server's Traefik
  * internal entrypoints, which the port-based ingress teardown removed — such
  * a line would route internal calls to a closed port.
- *
- * Auth-protected apps get no hosts line at all: the L4 proxy cannot verify
- * basic-auth credentials (it fail-closes those VIPs), so internal callers
- * must resolve the app's public DNS and go through Traefik, which enforces
- * the basicAuth middleware.
  */
 export function appHostsLine(
-  app: { name: string; virtual_ip: string; auth_password_hash?: string | null },
+  app: { name: string; virtual_ip: string },
   _serverPrivateIpv4: string,
   proxyEverReady: boolean,
 ): string | null {
-  if (app.auth_password_hash) return null;
   if (!proxyEverReady || !app.virtual_ip) return null;
   return `${app.virtual_ip} ${app.name}.ocd.internal`;
 }

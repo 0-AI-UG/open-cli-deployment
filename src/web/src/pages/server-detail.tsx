@@ -120,10 +120,9 @@ function portDot(port: number, address: string): string {
 // socket scan; collapse each known block into a single summary chip instead of
 // flooding the view. Internal ingress is per-app VIPs: every app VIP shares the
 // proxy's single :18790 listener (PROXY_LISTEN_PORT in src/proxy/config.ts).
-// The public pool range mirrors src/shared/db/apps.ts (PUBLIC_*).
-// tone "blue" = private-net only, "amber" = publicly exposed via the firewall.
+// tone "blue" = private-net only.
 const PORT_GROUPS = [
-  { key: "proxy vip", lo: 18789, hi: 18790, tone: "blue", note: "per-app VIP ingress — L4 proxy listeners (18790 internal, 18789 public raw)" },
+  { key: "proxy vip", lo: 18790, hi: 18790, tone: "blue", note: "per-app VIP ingress — L4 proxy listener" },
 ] as const;
 
 function portGroupKey(port: number): string | null {

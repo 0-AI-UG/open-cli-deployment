@@ -22,8 +22,6 @@ const ACTION_PRESENTATION: Record<string, { confirmLabel: string; destructive: b
   delete_bucket: { confirmLabel: "Confirm & Delete", destructive: true },
   cancel_operation: { confirmLabel: "Confirm & Cancel", destructive: true },
   create_server: { confirmLabel: "Confirm & Create", destructive: false },
-  promote_app: { confirmLabel: "Confirm & Promote", destructive: false },
-  promote_stack: { confirmLabel: "Confirm & Promote", destructive: false },
 };
 
 export function CliConfirmPage({ userCode }: { userCode: string }) {

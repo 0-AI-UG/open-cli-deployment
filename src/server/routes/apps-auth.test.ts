@@ -83,16 +83,18 @@ function deployRequest(
 }
 
 describe("app response scrubbing", () => {
-  test("secrets never leave the server; auth_enabled is derived", async () => {
-    const app = makeApp({ auth_password: "hunter2" });
+  test("secrets never leave the server and removed columns are gone", async () => {
+    const app = makeApp();
 
     const response = await handleGetApps(new Request("http://x/api/apps"));
     const row = ((await response.json()) as Array<Record<string, unknown>>).find((candidate) => candidate.id === app.id)!;
-    expect(row).not.toHaveProperty("auth_password");
-    expect(row).not.toHaveProperty("auth_password_hash");
-    expect(row).not.toHaveProperty("wake_token");
     expect(row.env_vars).toEqual([]);
-    expect(row.auth_enabled).toBe(true);
+    for (const removed of [
+      "auth_password", "auth_password_hash", "auth_enabled", "sticky", "ip_allowlist", "public_port",
+      "public_protocol", "public_address", "extra_volumes", "target", "target_of",
+    ]) {
+      expect(row).not.toHaveProperty(removed);
+    }
   });
 
   test("compact dashboard omits large and sensitive fields needed only by the web UI", async () => {
@@ -184,7 +186,7 @@ test("operation events report an updated wait reason on the same step", async ()
 
 describe("external artifact release endpoint", () => {
   test("enqueues an atomic immutable-image candidate and preserves configuration", async () => {
-    const app = makeApp({ sticky: true, placement: { [String(appServer().id)]: 2 } });
+    const app = makeApp({ compress: true, placement: { [String(appServer().id)]: 2 } });
     db.updateAppMemory(app.id, 768);
     const request = new Request(`http://x/api/apps/${app.id}/release`, {
       method: "POST",
@@ -198,12 +200,12 @@ describe("external artifact release endpoint", () => {
     const operation = getOperation(body.op_id)!;
     const input = JSON.parse(operation.input_json) as {
       gitCommit: string;
-      candidate: { image_ref: string; sticky: boolean; memory_mb: number; placement: Record<string, number> };
+      candidate: { image_ref: string; compress: boolean; memory_mb: number; placement: Record<string, number> };
     };
     expect(input.gitCommit).toBe("c".repeat(40));
     expect(input.candidate).toMatchObject({
       image_ref: DIGEST_B,
-      sticky: true,
+      compress: true,
       memory_mb: 768,
       placement: { [String(appServer().id)]: 2 },
     });
@@ -380,7 +382,7 @@ describe("CLI-only manifest endpoint", () => {
   });
 
   test("config-only applies a complete manifest and documented defaults", async () => {
-    const app = makeApp({ sticky: true, auth_password: "hunter2" });
+    const app = makeApp({ compress: true });
     db.updateAppMemory(app.id, 1024);
 
     const response = await handleDeploy(deployRequest(app));
@@ -390,37 +392,17 @@ describe("CLI-only manifest endpoint", () => {
     expect(body.op_id).toBeNumber();
 
     const updated = db.getApp(app.id)!;
-    expect(updated.sticky).toBe(0);
+    expect(updated.compress).toBe(0);
     expect(updated.memory_mb).toBe(0);
-    expect(updated.auth_password_hash).toBe("");
-  });
-
-  test("manifest password inputs remain write-only", async () => {
-    const app = makeApp();
-    const response = await handleDeploy(deployRequest(app, { auth_password: "s3cret" }));
-    expect(response.status).toBe(200);
-    const updated = db.getApp(app.id)!;
-    expect(updated.auth_password_hash).not.toBe("s3cret");
-    expect(Bun.password.verifySync("s3cret", updated.auth_password_hash)).toBe(true);
-  });
-
-  test("rejects HTTP auth for a raw TCP manifest", async () => {
-    const app = makeApp();
-    const response = await handleDeploy(deployRequest(app, {
-      internal_protocol: "tcp",
-      auth_password: "s3cret",
-    }));
-    expect(response.status).toBe(400);
-    expect(((await response.json()) as { error: string }).error).toMatch(/requires HTTP internal routing/i);
   });
 
   test("dry-run reports changes without applying them", async () => {
     const app = makeApp();
-    const response = await handleDeploy(deployRequest(app, { sticky: true, dry_run: true }));
+    const response = await handleDeploy(deployRequest(app, { compress: true, dry_run: true }));
     expect(response.status).toBe(200);
     const body = await response.json() as { dry_run: boolean; changes: Array<{ field: string }> };
     expect(body.dry_run).toBe(true);
-    expect(body.changes.map((change) => change.field)).toContain("sticky");
-    expect(db.getApp(app.id)!.sticky).toBe(0);
+    expect(body.changes.map((change) => change.field)).toContain("compress");
+    expect(db.getApp(app.id)!.compress).toBe(0);
   });
 });

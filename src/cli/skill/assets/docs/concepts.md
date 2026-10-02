@@ -21,18 +21,11 @@ Build repositories use temporary tags only for publication. Prebuilt image
 tags are resolved before deployment. Runtime desired state and deployment
 history always store digest-qualified image references.
 
-A manifest catalog is just version-controlled app manifests. It has no
-separate server-side lifecycle: catalog entries deploy as standalone apps or
-stack members.
-
-## Environments and staging
+## Environments
 
 An environment stores named values and secrets. Each app's env map explicitly
 selects references or literal values. Webhook delivery reads committed manifests,
 so mapping changes are applied with the image built from that commit.
-
-Staging is an explicit app or stack target with its own environment and domain.
-Promotion copies an exact tested digest; it does not rebuild.
 
 ## Integration boundaries
 

@@ -22,11 +22,8 @@ const _deploy: DeployManifest = {
   volume: { size: 5, path: "/data" },
   health_check: { enabled: false, path: "/healthz" },
   internal_protocol: "http",
-  public_port: "auto",
-  public_protocol: "tcp",
   domain: "web.example.com",
   environment: "production",
-  auth: { enabled: true, password_env: "OCD_BASIC_AUTH_PASSWORD" },
   placement: { "server-2": 1 },
 };
 const _enabled: boolean | undefined = _deploy.health_check?.enabled;
@@ -141,7 +138,7 @@ describe("validateDeployManifest", () => {
           volume: null, placement: { "server-2": 1 },
           build: BUILD,
           health_check: {
-            mode: "periodic_job",
+            mode: "heartbeat",
             file: "/run/last-success",
             max_age_seconds: 3600,
           },
@@ -151,10 +148,21 @@ describe("validateDeployManifest", () => {
     ).not.toThrow();
     expect(() =>
       validateDeployManifest(
-        { name: "cron", volume: null, placement: { "server-2": 1 }, health_check: { mode: "periodic_job", file: "/run/last-success" } },
+        { name: "cron", volume: null, placement: { "server-2": 1 }, health_check: { mode: "heartbeat", file: "/run/last-success" } },
         ".ocd-deploy.json",
       ),
     ).toThrow();
+    expect(() =>
+      validateDeployManifest(
+        {
+          name: "cron",
+          volume: null, placement: { "server-2": 1 },
+          build: BUILD,
+          health_check: { mode: "periodic_job", file: "/run/last-success", max_age_seconds: 3600 },
+        },
+        ".ocd-deploy.json",
+      ),
+    ).toThrow(/health_check\.mode/);
   });
   test("a correct manifest passes", () => {
     expect(() => validateDeployManifest(validApp, "docker/.ocd-deploy.json")).not.toThrow();
@@ -249,7 +257,7 @@ describe("validateDeployManifest", () => {
     }
   });
 
-  test("CLI-focused domain, environment projection, auth and placement fields validate", () => {
+  test("CLI-focused domain, environment projection and placement fields validate", () => {
     expect(() =>
       validateDeployManifest({
         name: "web",
@@ -257,17 +265,22 @@ describe("validateDeployManifest", () => {
         build: BUILD,
         domain: "web.example.com",
         env: {},
-        auth: { enabled: true, password_env: "OCD_BASIC_AUTH_PASSWORD" },
       }, "a/.ocd-deploy.json"),
     ).not.toThrow();
-    expect(() =>
-      validateDeployManifest({
-        name: "web",
-        volume: null, placement: { "server-2": 1 },
-        build: BUILD,
-        auth: { enabled: true, password_env: "not-valid!" },
-      }, "a/.ocd-deploy.json"),
-    ).toThrow(/auth\.password_env/);
+  });
+
+  test("basic auth, sticky sessions, IP allowlists, host bind mounts and public raw ports are rejected as unknown keys", () => {
+    for (const removed of [
+      { auth: { enabled: false } },
+      { sticky: true },
+      { ip_allowlist: "10.0.0.0/8" },
+      { extra_volumes: [{ host_path: "/srv/a", container_path: "/a" }] },
+      { public_port: "auto" },
+      { public_protocol: "tcp" },
+    ]) {
+      expect(() => validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", build: BUILD, ...removed }, "a/.ocd-deploy.json"))
+        .toThrow(`${Object.keys(removed)[0]}: unknown key`);
+    }
   });
 
   test("environment selectors validate; autoscaling and scale-to-zero are rejected", () => {
@@ -321,14 +334,17 @@ describe("validateStackManifest", () => {
     expect(() => validateStackManifest(validStack, "ocd-stack.json")).not.toThrow();
   });
 
-  test("selects an existing staging environment", () => {
-    expect(() => validateStackManifest({ ...validStack, staging_environment: "staging" }, "ocd-stack.json")).not.toThrow();
-  });
   test("rejects removed stack configuration fields", () => {
     for (const field of ["env", "env_all"]) {
       expect(() => validateStackManifest({ name: "s", apps: { web: { manifest: "web.json", [field]: [] } } }, "ocd-stack.json")).toThrow(field);
     }
     expect(() => validateStackManifest({ ...validStack, staging_env: [] }, "ocd-stack.json")).toThrow("staging_env");
+    expect(() => validateStackManifest({ ...validStack, staging_environment: "staging" }, "ocd-stack.json"))
+      .toThrow("staging_environment: unknown key");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    expect(() => validateStackManifest({ ...validStack, staging_environment: "staging" }, "ocd-stack.json", { allowUnknown: true }))
+      .toThrow("staging_environment: unknown key");
+    warn.mockRestore();
   });
 
   test("needs referencing a missing app key fails", () => {

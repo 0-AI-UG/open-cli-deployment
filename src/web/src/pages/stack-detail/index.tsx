@@ -5,7 +5,7 @@ import { Btn, StatusBadge, showToast, confirm, PageShell, PageHeader, PageState 
 import { PermissionGate } from "../../components/permission-gate.tsx";
 import { TabBar } from "../../components/tab-bar.tsx";
 import { trackOperationInToast, useActiveOperations } from "../../hooks/useOperation.ts";
-import { ArrowUpFromLine, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { OverviewTab } from "./overview-tab.tsx";
 import { StackLogsTab } from "./logs-tab.tsx";
 import type { StackDetail, EnvironmentData } from "../../types.ts";
@@ -71,13 +71,7 @@ export function StackDetailPage({ stackId }: { stackId: number }) {
   if (loading) return <PageState title="Loading stack" />;
   if (!stack) return <PageState kind="empty" title="Stack not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}>Back to overview</Btn>} />;
 
-  // Staging siblings are hidden implementation detail of their production app —
-  // they belong to the member, not to the stack's member list.
-  const memberApps = stack.apps.filter((a) => a.target_of == null);
-  const stagingTargets = new Set(
-    stack.apps.map((app) => app.target_of).filter((id): id is number => id != null),
-  );
-  const promotable = memberApps.filter((app) => stagingTargets.has(app.id)).length;
+  const memberApps = stack.apps;
 
   // Stack configuration and membership come exclusively from ocd-stack.json.
   const tabs = [
@@ -110,27 +104,6 @@ export function StackDetailPage({ stackId }: { stackId: number }) {
           )}
         </>}
         actions={<>
-          {/* Promote only exists when there is something to promote — a stack
-              with no staging siblings has no use for the button at all. */}
-          {promotable > 0 && (
-          <PermissionGate permission="stacks.promote" environmentId={stack.environment_id}>
-            <Btn
-              variant="primary"
-              disabled={ops.isBusy}
-              loading={actionLoading === "promote" || ops.isBusyWith("promote_stack")}
-              onClick={async () => {
-                if (await confirm(
-                  "Promote Stack",
-                  `Promote the staging sibling of ${promotable} member(s) of "${stack.name}" to production? Each production app will receive the exact immutable image running in staging.`,
-                )) await action("promote", () => runConfirmedCliAction(
-                  "stacks.promote",
-                  { stack: String(stackId) },
-                  { action: "promote_stack", resourceType: "stack", resourceId: stackId },
-                ));
-              }}
-            ><ArrowUpFromLine size={14} /> Promote</Btn>
-          </PermissionGate>
-          )}
           <PermissionGate permission="stacks.destroy" environmentId={stack.environment_id}>
             <Btn
               variant="default"

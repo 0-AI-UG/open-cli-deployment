@@ -1,12 +1,10 @@
 import { deleteAppNtfy } from "../../shared/ntfy.ts";
 import { deleteAppStorage } from "../../shared/object-storage.ts";
 import * as db from "../../shared/db.ts";
-import { enqueueOperation, listChildOperations } from "../../shared/db/operations.ts";
 import {
   sshExec,
   removeContainer,
 } from "../../shared/remote/index.ts";
-import { awaitChildren } from "./_children.ts";
 import { syncAllTraefik } from "../scale/traefik-manager.ts";
 import { requireStorageDriver } from "../storage/index.ts";
 import { registerOp } from "./registry.ts";
@@ -31,74 +29,6 @@ const markDeleting: Step<DestroyInput, { ok: true }> = {
       db.markAppDeletionRequested(ctx.input.appId);
     }
     return { ok: true };
-  },
-};
-
-/**
- * Tear down the app's hidden `<name>-staging` sibling first, as a child
- * `destroy_app`.
- *
- * A staging sibling deliberately carries no `stack_id` and is filtered
- * out of every app listing, so nothing else would ever reach it: destroying the
- * production app (directly, or via `destroy_stack`, which fans out to this very
- * op) used to leave the sibling running and invisible, still holding its
- * containers, internal port/VIP and volume. Delegating to a child op reuses the
- * whole teardown path rather than duplicating it.
- *
- * Recursion is impossible: a sibling has `target_of != null`, and this step
- * only looks for a sibling when `target_of` is null.
- */
-const destroyStagingSibling: Step<DestroyInput, { ok: boolean; childIds: number[]; error?: string }> = {
-  name: "destroy_staging_sibling",
-  label: "Destroy staging sibling",
-  async run(ctx) {
-    // Adopt a child from a previous attempt BEFORE looking at the sibling row.
-    // That child's whole job is to delete the row, so by the time we resume it
-    // may already be gone — and resolving the sibling first would then read as
-    // "nothing to cascade to", abandoning a destroy that is still in flight and
-    // letting us dismantle production underneath it. The key is therefore keyed
-    // on this step, not on the sibling id, so it stays findable afterwards.
-    const idk = `destroy_app:${ctx.opId}:staging-sibling`;
-    const prev = listChildOperations(ctx.opId).find((c) => c.idempotency_key === idk);
-
-    let childId: number;
-    if (prev) {
-      childId = prev.id;
-    } else {
-      const app = db.getApp(ctx.input.appId);
-      // Already gone, or this IS a staging/dev target — nothing to cascade to.
-      // The `target_of` guard is what makes recursion impossible: a sibling is
-      // never asked for a sibling of its own.
-      if (!app || app.target_of != null) return { ok: true, childIds: [] };
-      const sibling = db.getStagingSibling(app.id);
-      if (!sibling) return { ok: true, childIds: [] };
-
-      childId = enqueueOperation({
-        kind: "destroy_app",
-        resourceKeys: [
-          `app:${sibling.id}`,
-          ...(sibling.volume_id ? [`volume:${sibling.volume_id}`] : []),
-        ],
-        input: {
-          appId: sibling.id,
-          ...(ctx.input.retentionClass ? { retentionClass: ctx.input.retentionClass } : {}),
-        },
-        trigger: "cascade",
-        triggeredBy: ctx.triggeredBy,
-        parentId: ctx.opId,
-        idempotencyKey: idk,
-      }).id;
-      ctx.log(`destroying staging sibling ${sibling.name} (app #${sibling.id})`);
-    }
-    // Best-effort like every other destroy step: a failed sibling teardown is
-    // reported through the db-cleanup gate (leaving the app `cleanup_failed`
-    // for the reconciler) instead of throwing out of the parent destroy.
-    const r = await softStep(ctx, "destroy_staging_sibling", async () => {
-      await awaitChildren(ctx, { childIds: [childId] });
-    });
-    return r.ok
-      ? { ok: true, childIds: [childId] }
-      : { ok: false, childIds: [childId], error: r.error };
   },
 };
 
@@ -233,7 +163,6 @@ const destroyAppOp: OpKindDefinition<DestroyInput> = {
   },
   steps: [
     markDeleting,
-    destroyStagingSibling,
     stopAndRemoveContainers,
     deleteVolume,
     deleteDbRows,

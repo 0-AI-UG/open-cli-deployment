@@ -13,31 +13,20 @@
 import os from "os";
 import path from "path";
 import { rmSync } from "fs";
-import { PROXY_LISTEN_PORT, PROXY_PUBLIC_LISTEN_PORT, type ProxyApp } from "./config.ts";
+import { PROXY_LISTEN_PORT, type ProxyApp } from "./config.ts";
 
 const TABLE = "ip ocd-proxy";
 
-function dnatRules(apps: ProxyApp[], publicIngressIp: string | null): string[] {
+function dnatRules(apps: ProxyApp[]): string[] {
   return [...apps]
     .sort((a, b) => a.vip.localeCompare(b.vip))
     .flatMap((app) => {
-      const rules: string[] = [];
-      // Internal path: every user-facing front port on the VIP → the internal
-      // listen port. Keys on `daddr=vip`, so it fires on every host.
+      // Every user-facing front port on the VIP → the listen port. Keys on
+      // `daddr=vip`, so it fires on every host.
       const ports = [...new Set(app.frontPorts)].filter((p) => p !== PROXY_LISTEN_PORT).sort((a, b) => a - b);
-      if (ports.length > 0) {
-        rules.push(`ip daddr ${app.vip} tcp dport { ${ports.join(", ")} } dnat to ${app.vip}:${PROXY_LISTEN_PORT}`);
-      }
-      // Public raw path: the panel's public port → the public listen port on
-      // the app's VIP. Keys on `daddr=publicIngressIp` (the fleet-wide panel
-      // public IP) so the byte-identical ruleset only intercepts on the panel.
-      if (app.publicPort != null && publicIngressIp) {
-        const proto = app.publicProtocol === "udp" ? "udp" : "tcp";
-        rules.push(
-          `ip daddr ${publicIngressIp} ${proto} dport ${app.publicPort} dnat to ${app.vip}:${PROXY_PUBLIC_LISTEN_PORT}`,
-        );
-      }
-      return rules;
+      return ports.length > 0
+        ? [`ip daddr ${app.vip} tcp dport { ${ports.join(", ")} } dnat to ${app.vip}:${PROXY_LISTEN_PORT}`]
+        : [];
     });
 }
 
@@ -48,8 +37,8 @@ function dnatRules(apps: ProxyApp[], publicIngressIp: string | null): string[] {
  * rules. Deterministic (apps sorted by vip, ports deduped and sorted) so the
  * caller can string-compare renders and skip no-op applies.
  */
-export function renderNatRuleset(apps: ProxyApp[], publicIngressIp: string | null = null): string {
-  const rules = dnatRules(apps, publicIngressIp);
+export function renderNatRuleset(apps: ProxyApp[]): string {
+  const rules = dnatRules(apps);
   const chain = (name: string, header: string): string =>
     [`  chain ${name} {`, `    ${header}`, ...rules.map((r) => `    ${r}`), `  }`].join("\n");
   return [

@@ -73,7 +73,7 @@ for OCD's `/api/storage/authorize` API, not an S3 access key. Object bytes move
 directly between the app and storage using short-lived authorized URLs.
 
 Bindings do not copy objects. Explicitly migrate and verify objects before
-changing a bucket/prefix. Staging needs its own scope. Managed grants retire
+changing a bucket/prefix. Managed grants retire
 after all replicas attest to replacement configuration; app deletion revokes
 managed grants. External readers use separate GET/HEAD-only grants and must be
 revoked explicitly.

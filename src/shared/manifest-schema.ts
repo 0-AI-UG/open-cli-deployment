@@ -182,15 +182,6 @@ const volumeSchema = z.object(
   { error: "expected object { size, id?, path? }" },
 );
 
-/** Extra host→container bind mount. */
-const extraVolumeSchema = z.object(
-  {
-    host_path: z.string({ error: "expected string" }),
-    container_path: z.string({ error: "expected string" }),
-  },
-  { error: "expected object { host_path, container_path }" },
-);
-
 /**
  * HTTP health check. `enabled:false` skips the HTTP probe and only verifies the
  * container runs (default true). `path` is the endpoint both the post-deploy
@@ -205,12 +196,12 @@ const healthCheckSchema = z.object(
     enabled: z.boolean({ error: "expected boolean" }).optional(),
     path: z.string({ error: "expected string" }).optional(),
     /** Readiness contract. Omit for the legacy enabled/path behavior. */
-    mode: z.enum(["http", "container", "exec", "heartbeat", "periodic_job"], {
-      error: 'expected "http" | "container" | "exec" | "heartbeat" | "periodic_job"',
+    mode: z.enum(["http", "container", "exec", "heartbeat"], {
+      error: 'expected "http" | "container" | "exec" | "heartbeat"',
     }).optional(),
     /** Shell command executed inside the container for mode=exec. Exit 0=ready. */
     command: nonEmptyString("expected a non-empty string").optional(),
-    /** Absolute timestamp-marker path for heartbeat/periodic_job modes. */
+    /** Absolute timestamp-marker path for heartbeat mode. */
     file: z.string({ error: 'expected absolute path string' }).refine((v) => /^\/[A-Za-z0-9._/-]+$/.test(v), {
       error: (iss) => `expected absolute path string, got ${got(iss.input)}`,
     }).optional(),
@@ -231,11 +222,11 @@ const healthCheckSchema = z.object(
   if (mode === "exec" && !value.command) {
     ctx.addIssue({ code: "custom", message: "required when mode is exec", path: ["command"] });
   }
-  if ((mode === "heartbeat" || mode === "periodic_job") && !value.file) {
-    ctx.addIssue({ code: "custom", message: `required when mode is ${mode}`, path: ["file"] });
+  if (mode === "heartbeat" && !value.file) {
+    ctx.addIssue({ code: "custom", message: "required when mode is heartbeat", path: ["file"] });
   }
-  if ((mode === "heartbeat" || mode === "periodic_job") && !value.max_age_seconds) {
-    ctx.addIssue({ code: "custom", message: `required when mode is ${mode}`, path: ["max_age_seconds"] });
+  if (mode === "heartbeat" && !value.max_age_seconds) {
+    ctx.addIssue({ code: "custom", message: "required when mode is heartbeat", path: ["max_age_seconds"] });
   }
   if (value.mode && mode !== "http" && value.path) {
     ctx.addIssue({ code: "custom", message: "only valid when mode is http", path: ["path"] });
@@ -244,24 +235,6 @@ const healthCheckSchema = z.object(
     ctx.addIssue({ code: "custom", message: "only valid when mode is http", path: ["expected_statuses"] });
   }
 });
-
-/**
- * HTTP basic-auth intent. Password material is deliberately never accepted
- * inline: it comes from a local process environment variable or a hidden CLI
- * prompt, so a deploy manifest remains safe to commit.
- */
-const authSchema = z.object(
-  {
-    enabled: z.boolean({ error: "expected boolean" }),
-    password_env: z
-      .string({ error: "expected environment variable name string" })
-      .refine((v) => ENV_KEY_PATTERN.test(v), {
-        error: (iss) => `expected environment variable name string, got ${got(iss.input)}`,
-      })
-      .optional(),
-  },
-  { error: "expected object { enabled, password_env? }" },
-).strict();
 
 /** Explicit per-server placement: server name or numeric id -> replica count. */
 const placementSchema = z.record(
@@ -304,15 +277,9 @@ export const DeployManifestSchema = z
     suggested_app_name: z.string({ error: "expected string" }).optional(),
     /** Custom public domain. */
     domain: z.string({ error: "expected string" }).optional(),
-    auth: authSchema.optional(),
     /** Required explicit placement: server name (or numeric id) -> replica count. */
     placement: placementSchema,
     public: z.boolean({ error: "expected boolean" }).optional(),
-    extra_volumes: z
-      .array(extraVolumeSchema, {
-        error: "expected array of { host_path, container_path }",
-      })
-      .optional(),
     /** Per-container memory ceiling in MB. Omit / 0 → platform default. */
     memory_mb: guardedNumber(
       `expected integer 0 (default) or ${MIN_MEMORY_MB}-${MAX_MEMORY_MB}`,
@@ -340,25 +307,13 @@ export const DeployManifestSchema = z
     /** Internal routing protocol (independent of health_check.enabled); omit → "http".
      *  Raw-TCP apps (e.g. databases) must set "tcp". */
     internal_protocol: z.enum(["http", "tcp"], { error: 'expected "http" | "tcp"' }).optional(),
-    /** Sticky sessions (cookie-based) on the app's ingress service. */
-    sticky: z.boolean({ error: "expected boolean" }).optional(),
     /** Public-router rate limit in req/s; omit / 0 = unlimited. */
     rate_limit_rps: guardedNumber(
       "expected integer 0 (unlimited) to 1000000",
       isValidRateLimitRps,
     ).optional(),
-    /** Comma-separated IPs/CIDRs gating the public router; omit / "" = open. */
-    ip_allowlist: z.string({ error: "expected string" }).optional(),
     /** Response compression on the public router. */
     compress: z.boolean({ error: "expected boolean" }).optional(),
-    /** Public raw TCP/UDP exposure: "auto" = lowest free pool port, number = specific pool port, omit = none. */
-    public_port: z
-      .union([z.number().int(), z.literal("auto"), z.null()], {
-        error: 'expected integer, "auto", or null',
-      })
-      .optional(),
-    /** Pool for public_port (default "tcp"). */
-    public_protocol: z.enum(["tcp", "udp"], { error: 'expected "tcp" | "udp"' }).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -406,11 +361,6 @@ export const StackManifestSchema = z
     release_order: z.number().int().optional(),
     /** Existing shared production environment selected by name. */
     environment: nonEmptyString("expected a non-empty environment name").optional(),
-    /** Existing shared staging environment selected by name; null disables it. */
-    staging_environment: z.union([
-      nonEmptyString("expected a non-empty environment name"),
-      z.null(),
-    ]).optional(),
     apps: z.record(z.string(), stackAppSchema, { error: "expected object map of key -> app" }),
   })
   .strict()

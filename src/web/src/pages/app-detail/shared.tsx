@@ -4,7 +4,7 @@ export { InfoTip };
 /**
  * The app's HTTP health check, as one control shared by the deploy form and the
  * settings tab. `health_check` is the master switch — it gates both the
- * post-deploy/scale probe and Traefik's continuous rotation check — and
+ * post-deploy/move probe and Traefik's continuous rotation check — and
  * `health_check_path` is the single path both of those probes request (blank =
  * the root `/` for the deploy probe; Traefik's continuous check needs an
  * explicit path). They used to be two separate fields that read as duplicates;
@@ -24,7 +24,7 @@ export function HealthCheckField({
     <Field
       align="start"
       label="Health check"
-      hint="Checks that the app answers HTTP after deploys and while running. Failing replicas restart or leave rotation. Turn it off for non-HTTP apps. Changes apply on the next deploy or scale."
+      hint="Checks that the app answers HTTP after deploys and while running. Failing replicas restart or leave rotation. Turn it off for non-HTTP apps. Changes apply on the next deploy or move."
     >
       <div className="space-y-2">
         <div className="flex justify-start">

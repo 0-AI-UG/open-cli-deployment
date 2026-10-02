@@ -82,26 +82,17 @@ export function buildStackAppSpec(
   if (healthCheck?.expected_statuses) spec.health_check_expected_statuses = healthCheck.expected_statuses;
   const internalProtocol = manifest.internal_protocol;
   if (internalProtocol) spec.internal_protocol = internalProtocol;
-  const sticky = manifest.sticky;
-  if (sticky !== undefined) spec.sticky = sticky;
   const rateLimit = manifest.rate_limit_rps;
   if (rateLimit !== undefined) spec.rate_limit_rps = rateLimit;
-  const allowlist = manifest.ip_allowlist;
-  if (allowlist !== undefined) spec.ip_allowlist = allowlist;
   if (healthCheck?.enabled !== false && healthCheck?.path)
     spec.health_check_path = healthCheck.path;
   const compress = manifest.compress;
   if (compress !== undefined) spec.compress = compress;
-  const publicPort = manifest.public_port;
-  if (publicPort !== undefined) spec.public_port = publicPort;
-  const publicProtocol = manifest.public_protocol;
-  if (publicProtocol) spec.public_protocol = publicProtocol;
 
   spec.volume_id = manifest.volume?.id ?? "";
   spec.volume_driver = manifest.volume?.driver;
   spec.volume_size = manifest.volume?.size ?? 0;
   spec.volume_path = manifest.volume?.path ?? "/data";
-  if (manifest.extra_volumes?.length) spec.extra_volumes = manifest.extra_volumes;
 
   return spec;
 }

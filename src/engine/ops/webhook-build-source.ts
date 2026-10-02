@@ -138,7 +138,7 @@ const build: Step<WebhookBuildSourceInput, Built> = {
     assertFreshDelivery(ctx);
     const source = db.getBuildSource(ctx.input.sourceId)!;
     const prepared = prior.prepare_source as Prepared;
-    const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app && app.target_of == null);
+    const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app);
     await preflightRolloutSpace(apps.map((app) => app.name), (message) => ctx.log(message));
     const roots = apps.flatMap((app) => [app.stack_id == null ? app.manifest_path : null, app.stack_manifest_path])
       .filter((path): path is string => !!path);
@@ -288,7 +288,7 @@ const reconcile: Step<WebhookBuildSourceInput, { childIds: number[] }> = {
     assertFreshDelivery(ctx);
     const prepared = prior.prepare_source as Prepared;
     const built = prior.build_images as Built;
-    const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app && app.target_of == null);
+    const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app);
     const childIds: number[] = [];
     const stacks = new Map<number, AppRow[]>();
     const standalone: AppRow[] = [];
@@ -376,11 +376,6 @@ const reconcile: Step<WebhookBuildSourceInput, { childIds: number[] }> = {
         environment_id: manifest.environment
           ? environmentId(manifest.environment, stackPath)
           : null,
-        staging_environment_id: manifest.staging_environment === null
-          ? null
-          : manifest.staging_environment
-            ? environmentId(manifest.staging_environment, stackPath)
-            : null,
         apps: specs,
         selected_app_keys: specs.map((spec) => spec.key),
         partial: false,

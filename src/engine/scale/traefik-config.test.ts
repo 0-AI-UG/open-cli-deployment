@@ -15,7 +15,6 @@ import {
   traefikSystemdUnit,
 } from "./traefik-provision.ts";
 import {
-  BASIC_AUTH_USER,
   TRAEFIK_ACCESS_LOG_PATH,
   TRAEFIK_LOGROTATE_PATH,
 } from "./traefik-constants.ts";
@@ -43,17 +42,12 @@ function makeApp(opts: {
   isPublic?: boolean;
   healthCheck?: boolean;
   internalProtocol?: "http" | "tcp";
-  authPassword?: string;
   replicaStatus?: string | null; // null = no replica at all
   hostPort?: number;
   status?: string;
-  sticky?: boolean;
   rateLimitRps?: number;
-  ipAllowlist?: string;
   healthCheckPath?: string;
   compress?: boolean;
-  publicPort?: number;
-  publicProtocol?: "tcp" | "udp";
 } ) {
   const name = `app-${randomSuffix()}`;
   const app = db.insertApp({
@@ -65,14 +59,9 @@ function makeApp(opts: {
     public: opts.isPublic ?? true,
     health_check: opts.healthCheck ?? true,
     internal_protocol: opts.internalProtocol,
-    auth_password: opts.authPassword,
-    sticky: opts.sticky,
     rate_limit_rps: opts.rateLimitRps,
-    ip_allowlist: opts.ipAllowlist,
     health_check_path: opts.healthCheckPath,
     compress: opts.compress,
-    public_port: opts.publicPort,
-    public_protocol: opts.publicProtocol,
   });
   if (opts.replicaStatus !== null) {
     db.insertReplica({
@@ -111,17 +100,6 @@ describe("traefikStaticConfig", () => {
     ).toBe(false);
   });
 
-  test("public raw TCP/UDP pool is NOT a set of Traefik entrypoints (owned by the VIP proxy now)", () => {
-    // The 30000-30099 pool moved off Traefik onto the per-host VIP proxy
-    // (nftables DNAT off the panel's public IP). Traefik must no longer reserve
-    // those 100 static entrypoints fleet-wide.
-    const cfg = parse(traefikStaticConfig());
-    expect(cfg.entryPoints.pub30000).toBeUndefined();
-    expect(cfg.entryPoints.pubu30050).toBeUndefined();
-    const poolCount = Object.keys(cfg.entryPoints).filter((k) => /^pubu?\d/.test(k)).length;
-    expect(poolCount).toBe(0);
-  });
-
   test("JSON access log with buffering to /var/log/traefik/access.log", () => {
     const cfg = parse(traefikStaticConfig());
     expect(cfg.accessLog).toEqual({
@@ -145,7 +123,7 @@ describe("renderDynamicConfig", () => {
     const server = makeServer("10.0.1.2");
     const httpApp = makeApp({ server, hostPort: 10042 });
     const tcpApp = makeApp({ server, internalProtocol: "tcp", healthCheck: false, hostPort: 10050 });
-    const gatedApp = makeApp({ server, authPassword: "pw", hostPort: 10044, domain: "g.example.com" });
+    const gatedApp = makeApp({ server, hostPort: 10044, domain: "g.example.com" });
     const cfg = renderDynamicConfig(stateFor(httpApp.name, tcpApp.name, gatedApp.name), { isPanel: false });
     expect(parse(cfg)).toEqual({});
   });
@@ -153,53 +131,11 @@ describe("renderDynamicConfig", () => {
   test("no rendered router ever targets an int* entrypoint", () => {
     const server = makeServer("10.0.1.22");
     const httpApp = makeApp({ server, hostPort: 10043 });
-    const gatedApp = makeApp({ server, authPassword: "pw", hostPort: 10045, domain: "g2.example.com" });
+    const gatedApp = makeApp({ server, hostPort: 10045, domain: "g2.example.com" });
     const cfg = renderDynamicConfig(stateFor(httpApp.name, gatedApp.name), { isPanel: true });
     expect(cfg).not.toContain("int-");
     expect(cfg).not.toContain("int2");
     expect(cfg).not.toContain("internal-http");
-  });
-
-  test("auth-protected app: basicAuth middleware on the public router, upstreams at the replica port", () => {
-    const server = makeServer("10.0.1.4");
-    const app = makeApp({ server, authPassword: "hunter2", hostPort: 10060, domain: "gated.example.com" });
-    const cfg = parse(renderDynamicConfig(stateFor(app.name), { isPanel: true }));
-
-    // No sidecar anymore: upstreams dial the replica's host port directly.
-    expect(cfg.http.services[`app-${app.name}`].loadBalancer.servers).toEqual([
-      { url: "http://10.0.1.4:10060" },
-    ]);
-
-    // htpasswd entry: fixed username + the bcrypt hash persisted at set-time.
-    const users = cfg.http.middlewares[`auth-${app.name}`].basicAuth.users;
-    expect(users).toHaveLength(1);
-    expect(users[0].startsWith(`${BASIC_AUTH_USER}:$2`)).toBe(true);
-    const hash = users[0].slice(`${BASIC_AUTH_USER}:`.length);
-    expect(hash).toBe(app.auth_password_hash);
-    expect(Bun.password.verifySync("hunter2", hash)).toBe(true);
-
-    expect(cfg.http.routers[`pub-${app.name}`].middlewares).toEqual([`auth-${app.name}`, "sec-headers", "retry"]);
-  });
-
-  test("render gates on auth_password_hash: setting/clearing the hash toggles basicAuth", () => {
-    const server = makeServer("10.0.1.24");
-    const app = makeApp({ server, hostPort: 10062, domain: "gate2.example.com" });
-
-    // No password yet — no basicAuth middleware.
-    let cfg = parse(renderDynamicConfig(stateFor(app.name), { isPanel: true }));
-    expect(cfg.http.middlewares[`auth-${app.name}`]).toBeUndefined();
-
-    // Setting the password writes only the hash; the renderer gates on the hash
-    // (not any plaintext), so the middleware appears.
-    db.updateAppAuthPassword(app.id, "s3cret");
-    cfg = parse(renderDynamicConfig(stateFor(app.name), { isPanel: true }));
-    const users = cfg.http.middlewares[`auth-${app.name}`].basicAuth.users;
-    expect(Bun.password.verifySync("s3cret", users[0].slice(`${BASIC_AUTH_USER}:`.length))).toBe(true);
-
-    // Clearing the hash disables auth and drops the middleware.
-    db.updateAppAuthPassword(app.id, "");
-    cfg = parse(renderDynamicConfig(stateFor(app.name), { isPanel: true }));
-    expect(cfg.http.middlewares[`auth-${app.name}`]).toBeUndefined();
   });
 
   test("tcp-routed public app still proxies HTTP on its domain (same as the old public vhost)", () => {
@@ -212,14 +148,6 @@ describe("renderDynamicConfig", () => {
     expect(cfg.http.services[`app-${app.name}`].loadBalancer.servers).toEqual([
       { url: "http://10.0.1.14:10061" },
     ]);
-  });
-
-  test("auth-protected app renders deterministically (hash persisted, not re-derived)", () => {
-    const server = makeServer("10.0.1.15");
-    const app = makeApp({ server, authPassword: "hunter2", hostPort: 10062 });
-    const first = renderDynamicConfig(stateFor(app.name), { isPanel: true });
-    const second = renderDynamicConfig(stateFor(app.name), { isPanel: true });
-    expect(first).toBe(second);
   });
 
   test("public routers render only on the panel, with sec-headers + certResolver", () => {
@@ -274,19 +202,6 @@ describe("renderDynamicConfig", () => {
     expect(cfg).not.toContain(appDraining.name);
   });
 
-  test("sticky sessions: cookie affinity on the app's HTTP service; off by default", () => {
-    const server = makeServer("10.0.2.2");
-    const plain = makeApp({ server, hostPort: 10100 });
-    const sticky = makeApp({ server, sticky: true, hostPort: 10101 });
-    const cfg = parse(renderDynamicConfig(stateFor(plain.name, sticky.name), { isPanel: true }));
-
-    expect(cfg.http.services[`app-${plain.name}`].loadBalancer.sticky).toBeUndefined();
-    expect(cfg.http.services[`app-${sticky.name}`].loadBalancer.sticky).toEqual({
-      cookie: { name: "ocd_sticky", httpOnly: true, secure: true, sameSite: "lax" },
-    });
-    expect(cfg.http.routers[`pub-${sticky.name}`].service).toBe(`app-${sticky.name}`);
-  });
-
   test("active HTTP health check: path renders on the HTTP loadBalancer", () => {
     const server = makeServer("10.0.2.3");
     const httpApp = makeApp({ server, healthCheckPath: "/healthz", hostPort: 10110 });
@@ -315,19 +230,6 @@ describe("renderDynamicConfig", () => {
     expect(worker).not.toContain(`ratelimit-${app.name}`);
   });
 
-  test("IP allowlist: parsed comma-separated entries as ipAllowList sourceRange on the pub- router only", () => {
-    const server = makeServer("10.0.2.5");
-    const app = makeApp({ server, ipAllowlist: "203.0.113.7, 10.0.0.0/8 ,2001:db8::/32", hostPort: 10130 });
-    const panel = parse(renderDynamicConfig(stateFor(app.name), { isPanel: true }));
-
-    expect(panel.http.middlewares[`allowlist-${app.name}`]).toEqual({
-      ipAllowList: { sourceRange: ["203.0.113.7", "10.0.0.0/8", "2001:db8::/32"] },
-    });
-    expect(panel.http.routers[`pub-${app.name}`].middlewares).toEqual([
-      `allowlist-${app.name}`, "sec-headers", "retry",
-    ]);
-  });
-
   test("compression: compress middleware on the pub- router only", () => {
     const server = makeServer("10.0.2.6");
     const app = makeApp({ server, compress: true, hostPort: 10140 });
@@ -339,14 +241,11 @@ describe("renderDynamicConfig", () => {
     ]);
   });
 
-  test("pub- middleware order: allowlist → ratelimit → auth → compress → sec-headers → retry (cheap rejections before bcrypt)", () => {
+  test("pub- middleware order: ratelimit → compress → sec-headers → retry", () => {
     const server = makeServer("10.0.2.7");
     const app = makeApp({
       server,
-      authPassword: "hunter2",
-      sticky: true,
       rateLimitRps: 10,
-      ipAllowlist: "10.0.0.0/8",
       healthCheckPath: "/up",
       compress: true,
       hostPort: 10150,
@@ -354,39 +253,14 @@ describe("renderDynamicConfig", () => {
     const panel = parse(renderDynamicConfig(stateFor(app.name), { isPanel: true }));
 
     expect(panel.http.routers[`pub-${app.name}`].middlewares).toEqual([
-      `allowlist-${app.name}`,
       `ratelimit-${app.name}`,
-      `auth-${app.name}`,
       `compress-${app.name}`,
       "sec-headers",
       "retry",
     ]);
     // Service-level options coexist with the middleware chain.
     const lb = panel.http.services[`app-${app.name}`].loadBalancer;
-    expect(lb.sticky.cookie.name).toBe("ocd_sticky");
     expect(lb.healthCheck.path).toBe("/up");
-  });
-
-  test("public raw TCP/UDP exposure renders NO Traefik tcp/udp config (owned by the VIP proxy now)", () => {
-    // A TCP-exposed app with a public HTTP domain and a UDP-exposed private
-    // app: Traefik renders the HTTP path as before, but emits nothing for the
-    // raw ports — no tcp/udp sections at all. The raw path lives on the proxy
-    // (see proxy-render.test.ts / nat.test.ts).
-    const server = makeServer("10.0.3.2");
-    const tcpApp = makeApp({ server, domain: "game.example.com", publicPort: 30040, hostPort: 10160 });
-    const udpApp = makeApp({ server, isPublic: false, domain: "", publicPort: 30090, publicProtocol: "udp", hostPort: 10170 });
-    const panel = parse(renderDynamicConfig(stateFor(tcpApp.name, udpApp.name), { isPanel: true }));
-
-    // The HTTP domain of the TCP-exposed app is untouched.
-    expect(panel.http.routers[`pub-${tcpApp.name}`]).toBeDefined();
-    // But no raw ingress objects, and no tcp/udp roots.
-    expect(panel.tcp).toBeUndefined();
-    expect(panel.udp).toBeUndefined();
-    const raw = renderDynamicConfig(stateFor(tcpApp.name, udpApp.name), { isPanel: true });
-    expect(raw).not.toContain("pubtcp-");
-    expect(raw).not.toContain("pubudp-");
-    // A UDP-only private app has no HTTP presence either — renders nothing.
-    expect(panel.http?.routers?.[`pub-${udpApp.name}`]).toBeUndefined();
   });
 
   test("output is deterministic (stable key order) for the content-hash cache", () => {

@@ -1,6 +1,6 @@
 import { NtfyBindingsSchema } from "./ntfy-schema.ts";
 import { StorageBindingsSchema } from "./storage-schema.ts";
-import { publicPortRange, type PublicProtocol, type InternalProtocol } from "./db/apps.ts";
+import type { InternalProtocol } from "./db/apps.ts";
 import {
   DeployManifestSchema,
   RuntimeEnvSchema,
@@ -124,48 +124,6 @@ export function validateEnvVars(
   return { valid: true, value: result };
 }
 
-function isIpv4(addr: string): boolean {
-  const octets = addr.split(".");
-  if (octets.length !== 4) return false;
-  return octets.every((o) => /^\d{1,3}$/.test(o) && Number(o) <= 255);
-}
-
-function isIpv6(addr: string): boolean {
-  if (addr.includes(":::")) return false;
-  const halves = addr.split("::");
-  if (halves.length > 2) return false;
-  const groups = halves.flatMap((h) => (h === "" ? [] : h.split(":")));
-  // Without "::" exactly 8 groups; with "::" at most 7 (it stands in for >= 1).
-  if (halves.length === 1 && groups.length !== 8) return false;
-  if (halves.length === 2 && groups.length > 7) return false;
-  return groups.every((g) => /^[0-9a-fA-F]{1,4}$/.test(g));
-}
-
-/**
- * Validate a comma-separated list of IPv4/IPv6 addresses or CIDR blocks for
- * the per-app ingress IP allowlist (Traefik ipAllowList.sourceRange).
- * Returns the normalized list (trimmed entries, comma-joined); "" = allowlist
- * off. Rejected garbage never reaches the rendered Traefik config.
- */
-export function validateIpAllowlist(raw: string): ValidationResult<string> {
-  const entries = raw.split(",").map((e) => e.trim()).filter(Boolean);
-  for (const entry of entries) {
-    const [addr, prefix, ...rest] = entry.split("/");
-    if (rest.length > 0)
-      return { valid: false, error: `IP allowlist entry "${entry}" is not a valid IP or CIDR` };
-    const v4 = isIpv4(addr);
-    const v6 = !v4 && isIpv6(addr);
-    if (!v4 && !v6)
-      return { valid: false, error: `IP allowlist entry "${entry}" is not a valid IPv4/IPv6 address or CIDR` };
-    if (prefix !== undefined) {
-      const maxPrefix = v4 ? 32 : 128;
-      if (!/^\d{1,3}$/.test(prefix) || Number(prefix) > maxPrefix)
-        return { valid: false, error: `IP allowlist entry "${entry}" has an invalid prefix length (0-${maxPrefix})` };
-    }
-  }
-  return { valid: true, value: entries.join(",") };
-}
-
 /** Active HTTP health-check path (Traefik loadBalancer.healthCheck.path).
  *  "" = disabled. Must be an absolute path with no whitespace/control chars. */
 export function validateHealthCheckPath(path: string): ValidationResult<string> {
@@ -178,24 +136,6 @@ export function validateHealthCheckPath(path: string): ValidationResult<string> 
   if (!/^[!-~]+$/.test(trimmed))
     return { valid: false, error: "Health check path must not contain spaces or control characters" };
   return { valid: true, value: trimmed };
-}
-
-/**
- * Public raw TCP/UDP exposure port: must sit in the protocol's pool block
- * (see PUBLIC_TCP_PORT_BASE / PUBLIC_UDP_PORT_BASE). Freeness is checked
- * against the DB by callers — this only validates shape and range.
- */
-export function validatePublicPort(port: unknown, protocol: PublicProtocol): ValidationResult<number> {
-  if (typeof port !== "number" || !Number.isInteger(port))
-    return { valid: false, error: "Public port must be an integer" };
-  const { base, count } = publicPortRange(protocol);
-  if (port < base || port >= base + count)
-    return { valid: false, error: `Public ${protocol.toUpperCase()} ports are ${base}-${base + count - 1}` };
-  return { valid: true, value: port };
-}
-
-export function isPublicProtocol(value: unknown): value is PublicProtocol {
-  return value === "tcp" || value === "udp";
 }
 
 export function isInternalProtocol(value: unknown): value is InternalProtocol {
@@ -221,24 +161,15 @@ export function resolveInternalProtocol(
  *  Every field is optional so a partial ingress PATCH validates only what it
  *  sends; deploy passes the full set. */
 export type IngressFieldsInput = {
-  /** Write-only plaintext; presence (truthy) means "enable basic auth". */
-  auth_password?: string;
   rate_limit_rps?: number;
-  ip_allowlist?: string;
   health_check_path?: string;
-  public_port?: number | "auto" | null;
-  public_protocol?: string;
 };
 
 /** Normalized ingress values (trimmed/joined) ready to persist. Only the keys
  *  that were present in the input are set. */
 export type NormalizedIngressFields = {
-  auth_password?: string;
   rate_limit_rps?: number;
-  ip_allowlist?: string;
   health_check_path?: string;
-  public_port?: number | "auto" | null;
-  public_protocol?: PublicProtocol;
 };
 
 /**
@@ -246,9 +177,8 @@ export type NormalizedIngressFields = {
  * manifest and partial app-config apply paths. Returns the
  * normalized values (or the first error) so both call sites agree on both the
  * rules and the error strings. `httpRouted` is whether the app is (or will be)
- * HTTP-routed (internal_protocol='http') — password protection and an active
- * health-check path are Traefik HTTP-router features and can't gate a
- * raw-TCP-routed app.
+ * HTTP-routed (internal_protocol='http') — an active health-check path is a
+ * Traefik HTTP-router feature and can't apply to a raw-TCP-routed app.
  */
 export function validateIngressFields(
   fields: IngressFieldsInput,
@@ -256,26 +186,11 @@ export function validateIngressFields(
 ): ValidationResult<NormalizedIngressFields> {
   const out: NormalizedIngressFields = {};
 
-  // Password protection is a Traefik basicAuth middleware, which only exists
-  // for HTTP routers — a raw-TCP-routed app can't enforce it.
-  if (fields.auth_password !== undefined) {
-    if (fields.auth_password && !ctx.httpRouted) {
-      return { valid: false, error: "Password protection requires HTTP internal routing — it is enforced by HTTP basic auth at the ingress and cannot gate raw-TCP apps (set internal_protocol to 'http')" };
-    }
-    out.auth_password = fields.auth_password;
-  }
-
   if (fields.rate_limit_rps !== undefined) {
     if (!isValidRateLimitRps(fields.rate_limit_rps)) {
       return { valid: false, error: "Rate limit must be an integer 0 (unlimited) to 1000000 requests/sec" };
     }
     out.rate_limit_rps = fields.rate_limit_rps;
-  }
-
-  if (fields.ip_allowlist !== undefined) {
-    const allowResult = validateIpAllowlist(String(fields.ip_allowlist));
-    if (!allowResult.valid) return { valid: false, error: allowResult.error };
-    out.ip_allowlist = allowResult.value;
   }
 
   if (fields.health_check_path !== undefined) {
@@ -287,23 +202,6 @@ export function validateIngressFields(
       return { valid: false, error: "Health check path requires HTTP internal routing — raw-TCP apps use a TCP connect check instead (set internal_protocol to 'http')" };
     }
     out.health_check_path = pathResult.value;
-  }
-
-  // Raw TCP/UDP exposure is independent of HTTP publicness — an HTTP-private
-  // app may still be TCP-exposed (e.g. a database).
-  const protocol: PublicProtocol = isPublicProtocol(fields.public_protocol) ? fields.public_protocol : "tcp";
-  if (fields.public_protocol !== undefined) {
-    if (!isPublicProtocol(fields.public_protocol)) {
-      return { valid: false, error: 'Public protocol must be "tcp" or "udp"' };
-    }
-    out.public_protocol = protocol;
-  }
-  if (fields.public_port !== undefined) {
-    if (fields.public_port != null && fields.public_port !== "auto") {
-      const portRes = validatePublicPort(fields.public_port, protocol);
-      if (!portRes.valid) return { valid: false, error: portRes.error };
-    }
-    out.public_port = fields.public_port;
   }
 
   return { valid: true, value: out };
@@ -400,8 +298,7 @@ export function validateDeployManifest(
 
   const obj = raw as Record<string, unknown>;
 
-  // Rate limit / allowlist / health-check path / public port+protocol share the
-  // deploy request's rules — one validator, one set of error strings. The
+  // Rate limit / health-check path share the deploy request's rules — one validator, one set of error strings. The
   // health-check-path HTTP-routing rule keys off the manifest's resolved
   // internal protocol (explicit internal_protocol, else the "http" default).
   const healthCheck = obj.health_check;
@@ -412,10 +309,7 @@ export function validateDeployManifest(
   const httpRouted = resolveInternalProtocol(obj.internal_protocol) === "http";
   const ingressInput: IngressFieldsInput = {};
   if ("rate_limit_rps" in obj) ingressInput.rate_limit_rps = obj.rate_limit_rps as number;
-  if ("ip_allowlist" in obj) ingressInput.ip_allowlist = obj.ip_allowlist as string;
   if (healthPath !== undefined) ingressInput.health_check_path = healthPath;
-  if ("public_port" in obj) ingressInput.public_port = obj.public_port as number | "auto" | null;
-  if ("public_protocol" in obj) ingressInput.public_protocol = obj.public_protocol as string;
   const ingressResult = validateIngressFields(ingressInput, { httpRouted });
   if (!ingressResult.valid) return { ok: false, error: ingressResult.error };
 
@@ -452,7 +346,6 @@ export function validateDeployRequest(req: {
   memory_mb?: number;
   cpu_limit?: number;
   public?: boolean;
-  auth_password?: string;
   health_check?: boolean;
   health_check_mode?: string;
   health_check_command?: string;
@@ -460,13 +353,9 @@ export function validateDeployRequest(req: {
   health_check_max_age_seconds?: number;
   health_check_expected_statuses?: number[];
   internal_protocol?: string;
-  sticky?: boolean;
   rate_limit_rps?: number;
-  ip_allowlist?: string;
   health_check_path?: string;
   compress?: boolean;
-  public_port?: number | "auto" | null;
-  public_protocol?: string;
   command?: string[];
   cap_add?: string[];
   post_start_command?: string;
@@ -559,39 +448,35 @@ export function validateDeployRequest(req: {
   }
 
   // Internal routing protocol: explicit value wins, else the "http" default
-  // (independent of health_check). Auth / health-check-path rules key off the
-  // resolved routing protocol (they are HTTP-router features).
+  // (independent of health_check). The health-check-path rule keys off the
+  // resolved routing protocol (it is an HTTP-router feature).
   const internalProtocol = resolveInternalProtocol(req.internal_protocol);
 
   const healthMode = req.health_check_mode ?? (req.health_check === false ? "container" : "http");
-  if (!["http", "container", "exec", "heartbeat", "periodic_job"].includes(healthMode)) {
+  if (!["http", "container", "exec", "heartbeat"].includes(healthMode)) {
     return { valid: false, error: "Health check mode is invalid" };
   }
   if (healthMode === "exec" && !req.health_check_command?.trim()) {
     return { valid: false, error: "Exec health checks require health_check.command" };
   }
-  if (healthMode === "heartbeat" || healthMode === "periodic_job") {
+  if (healthMode === "heartbeat") {
     if (!req.health_check_file || !/^\/[A-Za-z0-9._/-]+$/.test(req.health_check_file)) {
-      return { valid: false, error: `${healthMode} health checks require a safe absolute file path` };
+      return { valid: false, error: "heartbeat health checks require a safe absolute file path" };
     }
     if (!Number.isInteger(req.health_check_max_age_seconds) || (req.health_check_max_age_seconds ?? 0) < 1) {
-      return { valid: false, error: `${healthMode} health checks require max_age_seconds >= 1` };
+      return { valid: false, error: "heartbeat health checks require max_age_seconds >= 1" };
     }
   }
   if (healthMode !== "http" && req.health_check_path) {
     return { valid: false, error: "health_check.path is only valid for HTTP health checks" };
   }
 
-  // Auth / rate limit / allowlist / health-check path / public-port rules are
-  // shared with the ingress-update endpoint — one validator, one set of errors.
+  // Rate limit / health-check path rules are shared with the ingress-update
+  // endpoint — one validator, one set of errors.
   const ingressResult = validateIngressFields(
     {
-      auth_password: req.auth_password,
       rate_limit_rps: req.rate_limit_rps,
-      ip_allowlist: req.ip_allowlist,
       health_check_path: req.health_check_path,
-      public_port: req.public_port,
-      public_protocol: req.public_protocol,
     },
     { httpRouted: internalProtocol === "http" },
   );

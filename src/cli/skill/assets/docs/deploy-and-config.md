@@ -49,7 +49,6 @@ its current immutable image. Use it only when source bytes do not need a build.
 ## Allowed deploy flags
 
 ```text
---auth-password-env=KEY
 --app=EXISTING_APP
 --commit=SOURCE_SHA
 --dry-run
@@ -57,7 +56,7 @@ its current immutable image. Use it only when source bytes do not need a build.
 --allow-unknown
 ```
 
-Set stored values with `ocd envs set`; `--auth-password-env` reads a local basic-auth password.
+Set stored values with `ocd envs set`.
 Servers and replica counts come only from the manifest's `placement`; move an
 existing app between servers with `ocd move`.
 

@@ -1,5 +1,9 @@
 # Shared PostgreSQL and OCD storage rollout
 
+> **Historical:** describes the pre-2026-10-02 provider/connection model. OCD is
+> now Hetzner-only with a single object storage account; see
+> `src/cli/skill/assets/docs/hetzner-infrastructure.md` for the current model.
+
 Completed 2026-09-05. Applications use `ocd-shared-postgres.ocd.internal:5432`.
 The cluster runs PostgreSQL 17.11, PGMQ 1.12.0, PostGIS 3.5.2 and pgvector 0.8.1.
 

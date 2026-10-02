@@ -51,12 +51,10 @@ export const ALL_PERMISSIONS = [
   "apps.pause",
   "apps.destroy",
   "apps.logs",
-  "apps.promote",
 
   // --- Stacks ----------------------------------------------------------
   "stacks.view",
   "stacks.deploy",
-  "stacks.promote",
   "stacks.destroy",
 
   // --- Environments ----------------------------------------------------
@@ -125,7 +123,6 @@ export const PERMISSION_SCOPES: Readonly<Record<string, readonly ScopeType[]>> =
   // A stack has no environment of its own; stackScope() resolves it from the
   // members' shared environment, so only an environment grant can match.
   "stacks.view": ["environment"],
-  "stacks.promote": ["environment"],
   "stacks.destroy": ["environment"],
 
   // --- app-only: operations that only make sense against one app -----------
@@ -140,7 +137,6 @@ export const PERMISSION_SCOPES: Readonly<Record<string, readonly ScopeType[]>> =
   "apps.pause": ["app", "environment"],
   "apps.destroy": ["app", "environment"],
   "apps.logs": ["app", "environment"],
-  "apps.promote": ["app", "environment"],
   "deployments.view": ["app", "environment"],
   "metrics.view": ["app", "environment"],
 } as const;

@@ -47,15 +47,14 @@ function makeServer() {
   });
 }
 
-function makeApp(stackId: number, overrides: Record<string, unknown> = {}) {
+function makeApp(stackId: number) {
   const app = db.insertApp({
     name: `app-${randomSuffix()}`,
     domain: "",
     image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     container_port: 3000,
     env_vars: "{}",
-    ...overrides,
-  } as Parameters<typeof db.insertApp>[0]);
+  });
   db.setAppStack(app.id, stackId);
   return app;
 }
@@ -75,16 +74,12 @@ const req = (stackId: number, tail?: number) =>
   );
 
 describe("GET /api/stacks/:id/member-logs", () => {
-  test("returns one timestamped block per member and skips staging siblings", async () => {
+  test("returns one timestamped block per member", async () => {
     const stack = db.insertStack({ name: `stack-${randomSuffix()}`, environment_id: db.insertEnvironment(`env-${randomSuffix()}`, "{}").id });
     const server = makeServer();
 
     const app = makeApp(stack.id);
     db.insertReplica({ app_id: app.id, server_id: server.id, host_port: 20001, container_name: "app-main" });
-    // Staging sibling: follows its production app, so it is not a member of the
-    // stack's log stream in its own right.
-    const sibling = makeApp(stack.id, { target_of: app.id });
-    db.insertReplica({ app_id: sibling.id, server_id: server.id, host_port: 20002, container_name: "app-staging" });
 
     logCalls.length = 0;
     const body = await (await req(stack.id, 50)).json() as { members: Array<{ name: string; kind: string; logs: string; error?: string }> };

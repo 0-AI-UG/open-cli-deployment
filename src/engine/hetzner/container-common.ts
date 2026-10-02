@@ -63,8 +63,6 @@ export type DockerRunOpts = {
   envFilePath?: string;
   /** Primary "host:container" volume mount string (validated). */
   volumeMount?: string;
-  /** Additional "host:container" volume mount strings (validated). */
-  extraVolumes?: string[];
   /** Per-container memory ceiling in MB. Default DEFAULT_MEM_MB. */
   memoryMb?: number;
   /** Per-container CPU ceiling. Default DEFAULT_CPUS. */
@@ -148,14 +146,11 @@ export function buildDockerRunArgs(opts: DockerRunOpts): string {
   }
   if (opts.envFilePath) parts.push(`--env-file ${opts.envFilePath}`);
 
-  const allVolumes: string[] = [];
-  if (opts.volumeMount) allVolumes.push(opts.volumeMount);
-  if (opts.extraVolumes) allVolumes.push(...opts.extraVolumes);
-  for (const spec of allVolumes) {
-    const parsed = parseVolumeSpec(spec);
-    if (!parsed) throw new Error(`Invalid volume spec: ${spec}`);
+  if (opts.volumeMount) {
+    const parsed = parseVolumeSpec(opts.volumeMount);
+    if (!parsed) throw new Error(`Invalid volume spec: ${opts.volumeMount}`);
     assertSafeHostPath(parsed.host, opts.appName);
-    parts.push(`-v ${spec}`);
+    parts.push(`-v ${opts.volumeMount}`);
   }
 
   parts.push(opts.image);

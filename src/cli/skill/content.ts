@@ -20,11 +20,11 @@ import DOC_STACK_MANIFEST from "./assets/docs/stack-manifest.md" with { type: "t
 import DOC_CLI_REFERENCE from "./assets/docs/cli-reference.md" with { type: "text" };
 import DOC_DEPLOY_CONFIG from "./assets/docs/deploy-and-config.md" with { type: "text" };
 import DOC_ENVIRONMENTS from "./assets/docs/environments-and-secrets.md" with { type: "text" };
-import DOC_INFRASTRUCTURE from "./assets/docs/infrastructure-and-enrollment.md" with { type: "text" };
+import DOC_INFRASTRUCTURE from "./assets/docs/hetzner-infrastructure.md" with { type: "text" };
 import DOC_BUILD_WORKERS from "./assets/docs/build-workers-and-webhooks.md" with { type: "text" };
 import DOC_NETWORKING from "./assets/docs/networking-and-ingress.md" with { type: "text" };
 import DOC_SCALING_STORAGE from "./assets/docs/scaling-storage-and-placement.md" with { type: "text" };
-import DOC_RELEASES from "./assets/docs/releases-promotion-and-rollback.md" with { type: "text" };
+import DOC_RELEASES from "./assets/docs/releases-and-rollback.md" with { type: "text" };
 import DOC_OPERATIONS from "./assets/docs/operations-and-recovery.md" with { type: "text" };
 import DOC_SECURITY from "./assets/docs/security-and-deletion.md" with { type: "text" };
 import DOC_TROUBLESHOOTING from "./assets/docs/troubleshooting.md" with { type: "text" };
@@ -51,11 +51,11 @@ const RAW_FILES: ReadonlyArray<readonly [string, string]> = [
   ["docs/cli-reference.md", DOC_CLI_REFERENCE],
   ["docs/deploy-and-config.md", DOC_DEPLOY_CONFIG],
   ["docs/environments-and-secrets.md", DOC_ENVIRONMENTS],
-  ["docs/infrastructure-and-enrollment.md", DOC_INFRASTRUCTURE],
+  ["docs/hetzner-infrastructure.md", DOC_INFRASTRUCTURE],
   ["docs/build-workers-and-webhooks.md", DOC_BUILD_WORKERS],
   ["docs/networking-and-ingress.md", DOC_NETWORKING],
   ["docs/scaling-storage-and-placement.md", DOC_SCALING_STORAGE],
-  ["docs/releases-promotion-and-rollback.md", DOC_RELEASES],
+  ["docs/releases-and-rollback.md", DOC_RELEASES],
   ["docs/operations-and-recovery.md", DOC_OPERATIONS],
   ["docs/security-and-deletion.md", DOC_SECURITY],
   ["docs/troubleshooting.md", DOC_TROUBLESHOOTING],

@@ -31,8 +31,6 @@ export type AppData = {
   image_ref?: string;
   status: string;
   container_port: number;
-  /** App id this app is a staging sibling of; set = it's a hidden sibling. */
-  target_of?: number | null;
   /** Declared placement: which servers run the app and how many replicas each. */
   placement?: Array<{ server_id: number; server_name: string; replicas: number }>;
   volume_id?: string | number;
@@ -40,9 +38,6 @@ export type AppData = {
   desired_volume_id?: string;
   desired_volume_size?: number;
   desired_volume_path?: string;
-  /** Whether HTTP basic auth is enabled (derived server-side from the password
-   *  hash). The password itself is write-only and never sent to the client. */
-  auth_enabled?: boolean;
   deployed_by_username?: string;
   env_vars?: EnvVarEntry[] | string | Record<string, string>;
   environment_id?: number | null;
@@ -58,15 +53,9 @@ export type AppData = {
   health_check_file?: string;
   health_check_max_age_seconds?: number;
   internal_protocol?: string; // 'http' | 'tcp'
-  sticky?: boolean | number;
   rate_limit_rps?: number;
-  ip_allowlist?: string;
   health_check_path?: string;
   compress?: boolean | number;
-  public_port?: number | null;
-  public_protocol?: string;
-  /** `<panel-ip>:<public_port>` when raw TCP/UDP exposed (server-derived). */
-  public_address?: string | null;
   dns_instruction?: DnsInstruction;
   config_revision?: number;
   last_manifest_path?: string | null;
@@ -96,7 +85,7 @@ export type MetricSample = {
   ts?: string;
 };
 
-export type ScalingEvent = {
+export type ReplicaEvent = {
   id: number;
   event_type: string;
   from_count: number;
@@ -123,6 +112,8 @@ export type ServerData = {
   ipv4: string;
   type?: string;
   location?: string;
+  status?: string;
+  build_worker?: boolean;
   replica_count?: number;
   monthly_eur?: number;
   provider_id?: string | number;
@@ -262,11 +253,8 @@ export type StackMemberApp = {
   public?: boolean | number;
   image_ref?: string;
   /** JSON array of member keys this app depends on, as declared by `needs` in
-   *  the stack manifest. Drives the level-by-level deploy/promote order. */
+   *  the stack manifest. Drives the level-by-level deploy order. */
   stack_needs?: string | null;
-  /** Set on staging siblings — they follow their production app and are not
-   *  members in their own right. */
-  target_of?: number | null;
   environment_stale?: boolean | number;
 };
 
@@ -277,7 +265,6 @@ export type StackDetail = {
   deploy_log: string;
   created_at: string;
   environment_id: number | null;
-  staging_environment_id: number | null;
   last_operation_id?: number | null;
   last_operation_status?: string | null;
   last_operation_failed?: boolean;

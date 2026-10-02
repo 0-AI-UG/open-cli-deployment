@@ -200,23 +200,8 @@ async function connectUpstream(conn: Conn, ref: { app: ProxyApp }): Promise<void
   teardown(conn);
 }
 
-/**
- * Open one TCP listener on `app.vip:listener.port`.
- *
- * `enforceAuth` (default true) is the internal-path guard: a password-protected
- * app fail-closes on accept, because the internal VIP must not become an
- * unauthenticated bypass of the basicAuth Traefik enforces on the HTTP path.
- * The PUBLIC raw listener passes `enforceAuth:false` — raw exposure is
- * deliberately auth-free (Traefik served it unauthenticated too), and after
- * DNAT the original port is gone, so the two paths are told apart only by which
- * listen port accepted the connection.
- */
-export function openTcpListener(
-  app: ProxyApp,
-  listener: ProxyListener,
-  opts: { enforceAuth?: boolean } = {},
-): TcpListenerHandle {
-  const enforceAuth = opts.enforceAuth ?? true;
+/** Open one TCP listener on `app.vip:listener.port`. */
+export function openTcpListener(app: ProxyApp, listener: ProxyListener): TcpListenerHandle {
   const ref = { app };
   const server = Bun.listen<Conn>({
     hostname: app.vip,
@@ -235,14 +220,6 @@ export function openTcpListener(
           closed: false,
         };
         socket.data = conn;
-        // L4 cannot check credentials — fail closed for password-protected
-        // apps: no backend dial, just destroy the connection. Skipped
-        // on the public raw listener (enforceAuth:false), which serves the
-        // auth-free raw port exactly as Traefik did.
-        if (enforceAuth && ref.app.authProtected) {
-          teardown(conn);
-          return;
-        }
         // Snapshot at connect time: config reloads affect new connections only.
         void connectUpstream(conn, ref);
       },

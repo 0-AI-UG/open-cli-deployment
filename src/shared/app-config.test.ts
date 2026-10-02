@@ -37,7 +37,7 @@ test("manifest reconciliation retains or explicitly selects the storage driver",
 
 describe("classifyAppConfigChanges", () => {
   test("separates control, runtime, and artifact changes", () => {
-    expect(classifyAppConfigChanges([{ field: "sticky", before: false, after: true }])).toBe("control");
+    expect(classifyAppConfigChanges([{ field: "compress", before: false, after: true }])).toBe("control");
     expect(classifyAppConfigChanges([{ field: "container_port", before: 3000, after: 4000 }])).toBe("runtime");
     expect(classifyAppConfigChanges([{ field: "image_ref", before: "old", after: "new" }])).toBe("artifact");
     expect(classifyAppConfigChanges([
@@ -176,7 +176,6 @@ describe("desired app configuration", () => {
   test("manifest mode resets omitted fields and supports explicit detach", async () => {
     const { app } = seedApp();
     db.updateAppPlacement(app.id, { [String(SECOND_SERVER.id)]: 3 });
-    db.updateAppExtraVolumes(app.id, ["/srv/data:/data"]);
     await applyAppConfig(app.id, {
       apply_mode: "manifest",
       app_name: app.name, placement: placement(),
@@ -190,7 +189,6 @@ describe("desired app configuration", () => {
     expect(updated.health_check).toBe(0);
     expect(updated.health_check_mode).toBe("container");
     expect(JSON.parse(updated.placement!)).toEqual({ [String(SERVER.id)]: 1 });
-    expect(db.parseExtraVolumes(updated.extra_volumes)).toEqual([]);
   });
 
   test("records primary-volume intent without mutating observed attachment state", async () => {

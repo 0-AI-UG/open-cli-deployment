@@ -1,7 +1,6 @@
 import { del, get, post } from "../api.ts";
 import { followOp } from "../ops.ts";
 import { BOLD, DIM, GREEN, RED, RESET, colorStatus, table } from "../format.ts";
-import { ensureBuildReadiness } from "../deploy-readiness.ts";
 
 type Server = { id: number; name: string; ipv4: string; status?: string };
 type Worker = {
@@ -154,7 +153,7 @@ ${BOLD}Commands:${RESET}
       removal token is needed only when converting an existing Actions runner.
 
   remove <name|id>
-      Remove the worker and release its server for app placement.
+      Remove the worker and free its server so it can be used in an app's placement.
 
   deploy <source-id|repository-url> --commit=<sha>
       Build changed inputs and reconcile all repository stacks as one durable release.
@@ -164,9 +163,6 @@ ${BOLD}Commands:${RESET}
 
   webhook-secret <source-id>
       Rotate and show a GitHub webhook URL and HMAC secret once.
-
-  bootstrap
-      Reserve an empty server as dedicated build capacity.
 
 ${DIM}The worker checks out the exact push SHA, uses BuildKit to push an immutable
 digest, then OCD reconciles the committed manifest or stack.${RESET}`);
@@ -184,7 +180,6 @@ export async function runners(args: string[] = []): Promise<void> {
     case "deploy": return deploySource(rest);
     case "sources": return listSources();
     case "webhook-secret": return webhookSecret(rest);
-    case "bootstrap": return ensureBuildReadiness();
     case "help":
     case "--help":
     case "-h": return usage();

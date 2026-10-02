@@ -23,7 +23,7 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
       { key: "fleet.view", label: "View servers and dashboard" },
       { key: "apps.view", label: "View apps" },
       { key: "environments.view", label: "View environments (not their values)" },
-      { key: "metrics.view", label: "View replicas, metrics, scaling events" },
+      { key: "metrics.view", label: "View replicas, metrics, replica events" },
       { key: "operations.view", label: "View engine operations" },
       { key: "deployments.view", label: "View deployment history and deploy logs" },
     ],
@@ -39,7 +39,6 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
       { key: "apps.pause", label: "Pause/unpause apps" },
       { key: "apps.destroy", label: "Destroy apps" },
       { key: "apps.logs", label: "View app logs" },
-      { key: "apps.promote", label: "Promote staging to production" },
     ],
   },
   {
@@ -47,7 +46,6 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
     permissions: [
       { key: "stacks.view", label: "View stacks" },
       { key: "stacks.deploy", label: "Deploy/redeploy stacks with the CLI" },
-      { key: "stacks.promote", label: "Promote a stack's staging members" },
       { key: "stacks.destroy", label: "Destroy stacks" },
     ],
   },
@@ -59,7 +57,7 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
     ],
   },
   {
-    label: "Scaling",
+    label: "Placement",
     permissions: [
       { key: "scaling.migrate", label: "Move apps between servers" },
     ],

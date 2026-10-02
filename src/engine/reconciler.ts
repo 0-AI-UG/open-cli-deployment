@@ -83,7 +83,7 @@ async function processServer(work: ServerWorkItem): Promise<void> {
   const checks: Array<() => Promise<void>> = [];
 
   for (const { replica, app } of work.replicas) {
-    if (replica.status === "stopped" || replica.status === "paused") continue;
+    if (replica.status === "paused") continue;
     checks.push(() => checkReplicaHealth(replica, app, server));
   }
 
@@ -138,7 +138,7 @@ async function tick(): Promise<void> {
       byApp.set(replica.app_id, list);
 
       // Skip non-live replicas for metrics/health (but still include in byApp)
-      if (replica.status === "stopped" || replica.status === "paused") continue;
+      if (replica.status === "paused") continue;
 
       const app = db.getApp(replica.app_id);
       if (!app) continue;

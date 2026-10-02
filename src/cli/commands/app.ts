@@ -266,8 +266,6 @@ async function availability(args: string[]): Promise<void> {
     current: {
       desired: number;
       running: number;
-      distinctHosts: number;
-      distinctLocations: number;
       meetsTarget: boolean;
     };
   }>(`/api/apps/${app.id}/availability?window=${window}`);
@@ -278,13 +276,12 @@ async function availability(args: string[]): Promise<void> {
     ["Samples", String(result.sampleCount)],
     ["Meets target now", String(result.current.meetsTarget)],
     ["Desired / running", `${result.current.desired} / ${result.current.running}`],
-    ["Hosts / locations", `${result.current.distinctHosts} / ${result.current.distinctLocations}`],
   ]);
 }
 
-async function scalingEvents(args: string[]): Promise<void> {
+async function replicaEvents(args: string[]): Promise<void> {
   const parsed = parseAppFlags(args);
-  const app = await resolveApp(requireAppName(parsed, "ocd app scaling-events <app>"));
+  const app = await resolveApp(requireAppName(parsed, "ocd app events <app>"));
   const rows = await get<Array<{
     id: number;
     event_type: string;
@@ -292,7 +289,7 @@ async function scalingEvents(args: string[]): Promise<void> {
     to_count: number;
     reason?: string;
     created_at: string;
-  }>>(`/api/apps/${app.id}/scaling-events`);
+  }>>(`/api/apps/${app.id}/events`);
   table(
     ["When", "Event", "From", "To", "Reason"],
     rows.map((e) => [
@@ -305,28 +302,6 @@ async function scalingEvents(args: string[]): Promise<void> {
   );
 }
 
-async function staging(args: string[]): Promise<void> {
-  const parsed = parseAppFlags(args);
-  const app = await resolveApp(requireAppName(parsed, "ocd app staging <app>"));
-  const result = await get<{
-    staging_enabled: boolean;
-    staging_environment_id: number | null;
-    sibling: {
-      id: number;
-      name: string;
-      status: string;
-      domain?: string;
-    } | null;
-  }>(`/api/apps/${app.id}/staging`);
-  table(["Field", "Value"], [
-    ["Enabled", String(result.staging_enabled)],
-    ["Environment", result.staging_environment_id == null ? "-" : `#${result.staging_environment_id}`],
-    ["Sibling", result.sibling ? `${result.sibling.name} (#${result.sibling.id})` : "-"],
-    ["Sibling status", result.sibling?.status || "-"],
-    ["Preview domain", result.sibling?.domain || "-"],
-  ]);
-}
-
 function usage(): void {
   console.log(`${BOLD}Usage:${RESET} ocd app <command> [args]
 
@@ -334,9 +309,8 @@ function usage(): void {
   deployments <app>            List deployment history
   replicas <app>               List replicas and current resource use
   metrics <app> [--since=SEC]   Current metrics or sampled history
-  availability <app>           Show trailing availability and placement
-  scaling-events <app>         List recent scaling events
-  staging <app>                Inspect the staging sibling
+  availability <app>           Show trailing availability
+  events <app>                 List recent replica events
   reload-env <app> --force     Recreate only this app from its immutable image
   redeploy <app>               Recreate using the stored immutable image and configuration${RESET}`);
 }
@@ -355,9 +329,7 @@ export async function app(args: string[]): Promise<void> {
     case "replicas": return replicas(rest);
     case "metrics": return metrics(rest);
     case "availability": return availability(rest);
-    case "scaling-events":
-    case "events": return scalingEvents(rest);
-    case "staging": return staging(rest);
+    case "events": return replicaEvents(rest);
     case "reload-env": return reloadEnvironment(rest);
     case "deploy":
     case "redeploy": return redeployExisting(rest);

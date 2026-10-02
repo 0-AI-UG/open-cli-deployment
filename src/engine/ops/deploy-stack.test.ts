@@ -425,12 +425,11 @@ describe("explicit stack runtime environment", () => {
   });
   test("does not change stored values and clears omitted environment selectors", async () => {
     const environment = db.insertEnvironment(`existing-${randomSuffix()}`, "{}");
-    const input = { ...req(`s-${randomSuffix()}`, [app("web")]), environment_id: environment.id, staging_environment_id: environment.id };
+    const input = { ...req(`s-${randomSuffix()}`, [app("web")]), environment_id: environment.id };
     await planStep.run(makeCtx(input), {});
     expect(db.getEnvironment(environment.id)!.env_vars).toBe("{}");
     await planStep.run(makeCtx(req(input.name, [app("web")])), {});
     expect(db.getStackByName(input.name)!.environment_id).toBeNull();
-    expect(db.getStackByName(input.name)!.staging_environment_id).toBeNull();
   });
 });
 

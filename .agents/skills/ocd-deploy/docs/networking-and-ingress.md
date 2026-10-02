@@ -8,19 +8,17 @@
 - [Internal protocol](#internal-protocol)
 - [Health checks](#health-checks)
 - [HTTP middleware](#http-middleware)
-- [Raw public TCP and UDP](#raw-public-tcp-and-udp)
 - [Configuration timing](#configuration-timing)
 
 ## Network layers
 
-OCD provides three distinct exposure mechanisms:
+OCD provides two distinct exposure mechanisms:
 
 1. stable private app names on the fleet network;
-2. public HTTP/HTTPS domain routing through panel ingress;
-3. optional raw TCP/UDP ports on the panel IP.
+2. public HTTP/HTTPS domain routing through panel ingress.
 
-`public: false` only disables public-domain routing. Private app networking and
-explicit raw public port exposure are separate.
+`public: false` only disables public-domain routing. Private app networking is
+separate.
 
 ## Private app addressing
 
@@ -111,38 +109,14 @@ that the container remains running.
 
 HTTP-routed public apps support:
 
-- basic auth;
-- cookie stickiness;
 - per-client rate limiting;
-- IPv4/IPv6/CIDR allowlists;
 - gzip compression;
 - active health-check path.
 
 Rules:
 
-- basic auth, stickiness, and health paths are invalid for raw TCP;
-- rate limit must be `0..1000000`, where zero disables it;
-- allowlist entries must be valid IPs or CIDRs, with IPv4 prefix `0..32` and
-  IPv6 prefix `0..128`;
-- an empty allowlist means open access;
-- never commit the basic-auth plaintext password.
-
-## Raw public TCP and UDP
-
-`public_port` exposes an app directly on the panel IP, independently of its HTTP
-domain:
-
-- TCP pool: `30000..30049`;
-- UDP pool: `30050..30099`;
-- `"auto"`: choose the lowest available port in the selected pool;
-- integer: request that exact free port;
-- `null`: remove exposure.
-
-`public_protocol` defaults to `tcp`. Port uniqueness is fleet-wide.
-
-Raw exposure can coexist with `public: false`. This is useful for games, MQTT,
-databases, and other non-HTTP protocols, but it is internet exposure and should
-be treated as security-sensitive.
+- health paths are invalid for raw TCP;
+- rate limit must be `0..1000000`, where zero disables it.
 
 ## Configuration timing
 
@@ -151,7 +125,7 @@ values such as `OCD_INTERNAL_URL` update only when a container is recreated.
 
 Examples:
 
-- changing an allowlist or compression can take effect without an image release;
+- changing the rate limit or compression can take effect without an image release;
 - changing `internal_protocol` resyncs ingress, but recreate the container so
   its `OCD_INTERNAL_*` values match;
 - changing `container_port`, environment, memory, or CPU needs a rollout to

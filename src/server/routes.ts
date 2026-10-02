@@ -35,8 +35,6 @@ import {
   handleGetDeployLog,
   handleGetDeployments,
   handleRollbackApp,
-  handlePromoteApp,
-  handleGetAppStaging,
 } from "./routes/apps.ts";
 import { handleDeleteServer, handleRefreshServers } from "./routes/servers.ts";
 import { handleGetSettings, handleSaveSettings, handleGetServerTypes } from "./routes/settings.ts";
@@ -47,7 +45,7 @@ import {
   handlePanelReleaseWebhook,
   handleRotatePanelReleaseWebhook,
 } from "./routes/panel-release.ts";
-import { handleGetReplicas, handleGetScalingEvents, handleGetAppMetrics, handleGetAppMetricsHistory, handleMoveApp } from "./routes/scaling.ts";
+import { handleGetReplicas, handleGetReplicaEvents, handleGetAppMetrics, handleGetAppMetricsHistory, handleMoveApp } from "./routes/scaling.ts";
 import { handleGetAvailability } from "./routes/availability.ts";
 import {
   handleGetPanel,
@@ -97,7 +95,6 @@ import {
   handleGetStackLog,
   handleGetStackMemberLogs,
   handleDestroyStack,
-  handlePromoteStack,
 } from "./routes/stacks.ts";
 import { VERSION } from "../shared/version.ts";
 import { handleGcExecute, handleGcInventory } from "./routes/gc.ts";
@@ -274,7 +271,6 @@ export const apiRoutes = {
   // --- Apps ---
   "/api/apps": { GET: (req: Request) => handleGetApps(req) },
   "/api/apps/deploy": { POST: (req: Request) => handleDeploy(req) },
-  "/api/apps/promote": { POST: (req: Request) => handlePromoteApp(req) },
 
   // App-specific
   "/api/apps/:appId": { DELETE: (req: Request) => handleDestroyApp(req, appIdFrom(req)) },
@@ -288,13 +284,12 @@ export const apiRoutes = {
   "/api/apps/:appId/deploy-log": { GET: (req: Request) => handleGetDeployLog(req, appIdFrom(req)) },
   "/api/apps/:appId/deployments": { GET: (req: Request) => handleGetDeployments(req, appIdFrom(req)) },
   "/api/apps/:appId/rollback": { POST: (req: Request) => handleRollbackApp(req, appIdFrom(req)) },
-  "/api/apps/:appId/staging": { GET: (req: Request) => handleGetAppStaging(req, appIdFrom(req)) },
   "/api/apps/:appId/storage": { GET: (req: Request) => handleGetAppStorage(req, appIdFrom(req)) },
 
   // Scaling
   "/api/apps/:appId/replicas": { GET: (req: Request) => handleGetReplicas(req, appIdFrom(req)) },
   "/api/apps/:appId/move": { POST: (req: Request) => handleMoveApp(req, appIdFrom(req)) },
-  "/api/apps/:appId/scaling-events": { GET: (req: Request) => handleGetScalingEvents(req, appIdFrom(req)) },
+  "/api/apps/:appId/events": { GET: (req: Request) => handleGetReplicaEvents(req, appIdFrom(req)) },
   "/api/apps/:appId/metrics": { GET: (req: Request) => handleGetAppMetrics(req, appIdFrom(req)) },
   "/api/apps/:appId/metrics/history": { GET: (req: Request) => handleGetAppMetricsHistory(req, appIdFrom(req)) },
   "/api/apps/:appId/availability": { GET: (req: Request) => handleGetAvailability(req, appIdFrom(req)) },
@@ -440,9 +435,6 @@ export const apiRoutes = {
   "/api/stacks/:id": {
     GET: (req: Request) => handleGetStack(req, stackIdFrom(req)),
     DELETE: (req: Request) => handleDestroyStack(req, stackIdFrom(req)),
-  },
-  "/api/stacks/:id/promote": {
-    POST: (req: Request) => handlePromoteStack(req, stackIdFrom(req)),
   },
   "/api/stacks/:id/log": {
     GET: (req: Request) => handleGetStackLog(req, stackIdFrom(req)),

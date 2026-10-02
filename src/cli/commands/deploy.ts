@@ -4,7 +4,6 @@ import { BOLD, DIM, GREEN, RED, RESET } from "../format.ts";
 import {
   manifestRepoLocation,
   readManifest,
-  resolveAuthPassword,
   manifestHash,
   localGitCommit,
 } from "../manifest.ts";
@@ -31,7 +30,6 @@ async function resolveEnvironment(name: string): Promise<Environment> {
 
 async function parseFlags(args: string[]): Promise<{
   manifestPath: string;
-  authPasswordEnv?: string;
   appName?: string;
   help: boolean;
   dryRun: boolean;
@@ -40,7 +38,6 @@ async function parseFlags(args: string[]): Promise<{
   commit?: string;
 }> {
   const parsed = parseCliArgs(args, {
-    "auth-password-env": { type: "string" },
     app: { type: "string" },
     help: { type: "boolean", aliases: ["h"] },
     "dry-run": { type: "boolean" },
@@ -49,14 +46,13 @@ async function parseFlags(args: string[]): Promise<{
     commit: { type: "string" },
   }, { maxPositionals: 1 });
   const manifestPath = parsed.positionals[0] || ".ocd-deploy.json";
-  const authPasswordEnv = parsed.flags["auth-password-env"] as string | undefined;
   const appName = parsed.flags.app as string | undefined;
   const commit = parsed.flags.commit as string | undefined;
   if (commit !== undefined && !/^[a-f0-9]{7,64}$/i.test(commit)) {
     throw new Error("--commit must contain 7-64 hexadecimal characters");
   }
   return {
-    manifestPath, authPasswordEnv, appName, commit,
+    manifestPath, appName, commit,
     help: parsed.flags.help === true,
     dryRun: parsed.flags["dry-run"] === true,
     configOnly: parsed.flags["config-only"] === true,
@@ -71,7 +67,7 @@ export async function deploy(args: string[]): Promise<void> {
     return;
   }
 
-  const { manifestPath, authPasswordEnv, appName, help, dryRun, configOnly, allowUnknown, commit } = await parseFlags(args);
+  const { manifestPath, appName, help, dryRun, configOnly, allowUnknown, commit } = await parseFlags(args);
 
   if (help) {
     console.error(`${BOLD}Usage:${RESET} ocd deploy [manifest] [options]
@@ -96,8 +92,6 @@ ${BOLD}Subcommands:${RESET}
                              See \`ocd deploy stack --help\`.
 
 ${BOLD}Options:${RESET}
-  --auth-password-env=<key>  Read the basic-auth password from a local
-                             environment variable (never stored in the manifest)
   --app=<name>               Apply to an explicit existing app.
   --commit=<sha>             Record the source revision as deployment provenance
   --dry-run                  Show the desired-configuration diff without applying or deploying
@@ -118,7 +112,6 @@ ${BOLD}Options:${RESET}
   const name = appName || manifest.suggested_app_name ||
     (manifest.image ?? manifest.build!.image_repository).split("/").pop()!.split("@")[0].split(":")[0];
   const port = manifest.container_port ?? 3000;
-  const authPassword = await resolveAuthPassword(manifest.auth, authPasswordEnv);
   const environment = typeof manifest.environment === "string"
     ? await resolveEnvironment(manifest.environment)
     : null;
@@ -141,7 +134,6 @@ ${BOLD}Options:${RESET}
     storage: manifest.storage,
     notifications: manifest.notifications,
     environment_id: environment?.id ?? null,
-    auth_password: authPassword ?? "",
     public: manifest.public ?? true,
     memory_mb: manifest.memory_mb ?? 0,
     cpu_limit: manifest.cpu_limit ?? 0,
@@ -156,18 +148,13 @@ ${BOLD}Options:${RESET}
     health_check_max_age_seconds: manifest.health_check?.max_age_seconds ?? 0,
     health_check_expected_statuses: manifest.health_check?.expected_statuses ?? [200],
     internal_protocol: manifest.internal_protocol ?? "http",
-    sticky: manifest.sticky ?? false,
     rate_limit_rps: manifest.rate_limit_rps ?? 0,
-    ip_allowlist: manifest.ip_allowlist ?? "",
     compress: manifest.compress ?? false,
-    public_port: manifest.public_port ?? null,
-    public_protocol: manifest.public_protocol ?? "tcp",
     placement: manifest.placement,
     volume_id: manifest.volume?.id ?? "",
     volume_driver: manifest.volume?.driver,
     volume_size: manifest.volume?.size ?? 0,
     volume_path: manifest.volume?.path ?? "/data",
-    extra_volumes: manifest.extra_volumes ?? [],
     manifest_path: location.path,
     manifest_hash: manifestHash(location.fullPath),
   };

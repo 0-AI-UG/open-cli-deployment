@@ -56,7 +56,6 @@ type RollbackSnapshot = {
   containerPort: number;
   bindAddr: string;
   volumeMount: string | null;
-  extraVolumes: string[];
   memoryMb: number | null;
   cpus: number | null;
   command: string[];
@@ -96,7 +95,6 @@ function candidateApp(app: AppRow, candidate: DeployRequest | null): AppRow {
     health_check_expected_statuses: JSON.stringify(candidate.health_check_expected_statuses ?? [200]),
     health_check_path: candidate.health_check_path ?? "",
     internal_protocol: candidate.internal_protocol ?? "http",
-    extra_volumes: JSON.stringify((candidate.extra_volumes ?? []).map((v) => `${v.host_path}:${v.container_path}`)),
     command_json: JSON.stringify(candidate.command ?? []),
     cap_add_json: JSON.stringify(candidate.cap_add ?? []),
     post_start_command: candidate.post_start_command ?? "",
@@ -184,7 +182,6 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
       containerPort: target.app.container_port,
       bindAddr: replicaBindHost(target.server),
       volumeMount: target.app.volume_mount || null,
-      extraVolumes: db.parseExtraVolumes(target.app.extra_volumes),
       memoryMb: target.app.memory_mb ?? null,
       cpus: target.app.cpu_limit ?? null,
       command: db.parseAppCommand(target.app),
@@ -207,7 +204,6 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
       containerPort: target.app.container_port,
       bindAddr: replicaBindHost(target.server),
       volumeMount: target.app.volume_mount || null,
-      extraVolumes: db.parseExtraVolumes(target.app.extra_volumes),
       memoryMb: target.app.memory_mb ?? null,
       cpus: target.app.cpu_limit ?? null,
       command: db.parseAppCommand(target.app),
@@ -234,7 +230,6 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
       containerPort: snap.containerPort,
       envFilePath: snap.remote.envFilePath || undefined,
       volumeMount: snap.volumeMount || undefined,
-      extraVolumes: snap.extraVolumes,
       memoryMb: snap.memoryMb ?? undefined,
       cpus: snap.cpus ?? undefined,
       command: snap.command,
@@ -280,7 +275,6 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
     const containerPort = app.container_port;
     const envVars = await candidateEnvVars(storedApp, candidate, ctx);
     const bindAddr = replicaBindHost(server);
-    const extraVolumes = db.parseExtraVolumes(app.extra_volumes);
     const imageTag = app.image_ref;
 
     const runOpts = {
@@ -289,7 +283,6 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
       hostPort: first.host_port,
       envVars,
       volumeMount: app.volume_mount || undefined,
-      extraVolumes,
       bindAddr,
       containerName: first.container_name,
       memoryMb: app.memory_mb || undefined,

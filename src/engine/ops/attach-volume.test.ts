@@ -188,7 +188,7 @@ describe("attach_volume: attach_to_app", () => {
     await step.compensate!(ctx, { volumeMount: "/mnt/y:/data" }, {});
     const fresh = db.getApp(app.id)!;
     expect(fresh.volume_id).toBe("");
-    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, undefined, expect.anything());
+    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, undefined);
   });
 });
 

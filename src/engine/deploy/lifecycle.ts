@@ -244,7 +244,6 @@ export async function reloadAppEnvironment(appId: number): Promise<{ ok: boolean
 export async function recreateAppContainer(
   appId: number,
   volumeMount: string | undefined,
-  extraVolumes?: string[]
 ): Promise<{ ok: boolean; error?: string }> {
   log("recreateContainer", `Recreating container for app id=${appId} volumeMount=${volumeMount || "none"}`);
   try {
@@ -279,7 +278,6 @@ export async function recreateAppContainer(
       configRevision: app.config_revision,
       envHash: hashEnvironment(envVars),
       volumeMount: volumeMount || undefined,
-      extraVolumes: extraVolumes || [],
       memoryMb: app.memory_mb || undefined,
       cpus: app.cpu_limit || undefined,
       command: db.parseAppCommand(app),

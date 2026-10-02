@@ -1,5 +1,9 @@
 # Object storage cutover — 2026-09-05
 
+> **Historical:** describes the pre-2026-10-02 provider/connection model. OCD is
+> now Hetzner-only with a single object storage account; see
+> `src/cli/skill/assets/docs/hetzner-infrastructure.md` for the current model.
+
 The running panel at `ocd.cero-ai.com` was manually upgraded to schema 116 and the object-storage release. No startup migration for this cutover was added.
 
 Final panel image:

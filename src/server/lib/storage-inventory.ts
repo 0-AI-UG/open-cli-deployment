@@ -14,7 +14,6 @@ export function appStorageMounts(app: ReturnType<typeof db.getApps>[number]): St
       container_path: container, state: "attached", used_bytes: null });
   };
   if (app.volume_id) add(app.volume_id, app.volume_mount, local || app.volume_driver === "local-directory" ? "local-directory" : "provider-volume");
-  for (const mount of db.parseExtraVolumes(app.extra_volumes)) add(mount, mount, "local-directory");
   return mounts;
 }
 

@@ -204,8 +204,12 @@ test("migration 121 preserves accounts holding every previous global permission"
     user_id TEXT NOT NULL, permission TEXT NOT NULL,
     scope_type TEXT NOT NULL DEFAULT 'global', scope_id TEXT
   )`);
-  const oldPermissions = ALL_PERMISSIONS.filter((permission) =>
-    !["apps.storage.bind", "apps.notifications.bind", "operations.manage"].includes(permission));
+  const oldPermissions = [
+    ...ALL_PERMISSIONS.filter((permission) =>
+      !["apps.storage.bind", "apps.notifications.bind", "operations.manage"].includes(permission)),
+    // Retired after 121; still part of the catalog that migration froze.
+    "apps.promote", "stacks.promote",
+  ];
   const insert = d.query("INSERT INTO user_permissions (user_id, permission, scope_type) VALUES (?, ?, 'global')");
   for (const permission of oldPermissions) insert.run("full", permission);
   for (const permission of oldPermissions.slice(1)) insert.run("partial", permission);
@@ -369,6 +373,7 @@ describe("migration 85", () => {
         ...(ALL_PERMISSIONS as readonly string[]),
         "services.view",
         "volumes.create", "volumes.attach", "volumes.detach", "volumes.resize",
+        "apps.promote", "stacks.promote",
       ]).toContain(r.permission);
     }
     // Spot-check a few of the splits.

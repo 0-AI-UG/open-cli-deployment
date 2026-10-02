@@ -26,14 +26,9 @@ describe("buildStackAppSpec", () => {
       cpu_limit: 1.5,
       health_check: { enabled: true, path: "/ready" },
       internal_protocol: "http",
-      sticky: true,
       rate_limit_rps: 100,
-      ip_allowlist: "10.0.0.0/8",
       compress: true,
-      public_port: null,
-      public_protocol: "tcp",
       volume: null,
-      extra_volumes: [{ host_path: "/srv/shared", container_path: "/shared" }],
     };
     const entry: StackManifest["apps"][string] = {
       manifest: "services/api/.ocd-deploy.json",
@@ -64,17 +59,12 @@ describe("buildStackAppSpec", () => {
       memory_mb: 1024,
       cpu_limit: 1.5,
       internal_protocol: "http",
-      sticky: true,
       rate_limit_rps: 100,
-      ip_allowlist: "10.0.0.0/8",
       health_check_path: "/ready",
       compress: true,
-      public_port: null,
-      public_protocol: "tcp",
       volume_id: "",
       volume_size: 0,
       volume_path: "/data",
-      extra_volumes: [{ host_path: "/srv/shared", container_path: "/shared" }],
     });
   });
 

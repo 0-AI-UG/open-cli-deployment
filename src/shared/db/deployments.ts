@@ -118,9 +118,7 @@ export function getDeployments(appId: number): DeploymentRow[] {
 }
 
 /** The git commit an app is currently running, i.e. its most recent successful
- *  deployment — or null if it has never deployed successfully. This is the
- *  definition of "has something to promote", so promote paths share it rather
- *  than each re-deriving it. */
+ *  deployment — or null if it has never deployed successfully. */
 export function getDeployedCommit(appId: number): string | null {
   return getLastSuccessfulDeployment(appId)?.git_commit ?? null;
 }

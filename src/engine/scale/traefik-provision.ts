@@ -12,12 +12,9 @@
 //                       services, ACME). The panel is the only server with
 //                       routers on these.
 //
-// Neither internal app-to-app traffic NOR the public raw TCP/UDP pool
-// (30000-30099) touches Traefik anymore — the per-host VIP proxy (src/proxy/)
-// owns both (port-less HTTP, natural ports, legacy internal_port URLs, and raw
-// TCP/UDP). The public pool used to be a block of
-// static entrypoints reserved fleet-wide; the proxy replaces them with
-// nftables DNAT off the panel's public IP.
+// Internal app-to-app traffic does not touch Traefik — the per-host VIP proxy
+// (src/proxy/) owns it (port-less HTTP, natural ports, legacy internal_port
+// URLs).
 //
 // Static config rarely changes; when it does, the reconciler converges the
 // panel (rewrite + service restart) within one tick — steady-state ticks
@@ -62,11 +59,6 @@ export function traefikStaticConfig(): string {
     web: { address: ":80" },
     websecure: { address: ":443" },
   };
-  // The public raw TCP/UDP pool (30000-30099) is no longer a set of Traefik
-  // entrypoints — the per-host VIP proxy now owns that ingress via nftables
-  // DNAT off the panel's public IP (see src/proxy/ and proxy-render.ts). The
-  // cloud firewall keeps the block open (BASE_FIREWALL_RULES); the proxy's
-  // DNAT catches the traffic before Traefik's sockets ever see it.
   const email = acmeEmail();
   const config = {
     entryPoints,

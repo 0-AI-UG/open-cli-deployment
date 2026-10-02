@@ -43,32 +43,6 @@ describe("resource-derived stack state", () => {
     expect(state.lastOperationFailed).toBe(true);
   });
 
-  test("assesses promote_stack by stackId rather than requiring deploy input", () => {
-    const name = `promote-state-${randomSuffix()}`;
-    const env = db.insertEnvironment(`${name}-env`, "");
-    const stack = db.insertStack({ name, environment_id: env.id });
-    const app = db.insertApp({
-      name: `${name}-app`,
-      domain: "",
-      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      container_port: 3000,
-      env_vars: "{}",
-    });
-    db.setAppStack(app.id, stack.id);
-    db.updateAppStatus(app.id, "running");
-    const op = enqueueOperation({
-      kind: "promote_stack",
-      resourceKeys: [`stack:${stack.id}`, `stack:${name}`],
-      input: { stackId: stack.id },
-      trigger: "test",
-    });
-
-    const assessment = assessOperationResources(getOperation(op.id)!);
-
-    expect(assessment.status).toBe("done");
-    expect(assessment.safeToFinalizeDone).toBe(true);
-  });
-
   test("is degraded when a replica is restarting before aggregate propagation", () => {
     const name = `instance-state-${randomSuffix()}`;
     const env = db.insertEnvironment(`${name}-env`, "");
@@ -103,6 +77,32 @@ describe("resource-derived stack state", () => {
 
     expect(state.status).toBe("degraded");
     expect(state.reason).toContain("restarting");
+  });
+
+  test("is deploying, not degraded, while an operation is rolling out a member", () => {
+    const name = `rollout-state-${randomSuffix()}`;
+    const env = db.insertEnvironment(`${name}-env`, "");
+    const stack = db.insertStack({ name, environment_id: env.id });
+    const app = db.insertApp({
+      name: `${name}-web`,
+      domain: "",
+      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      container_port: 3000,
+      env_vars: "{}",
+    });
+    db.setAppStack(app.id, stack.id);
+    db.updateAppStatus(app.id, "deploying");
+    const op = enqueueOperation({
+      kind: "redeploy",
+      resourceKeys: [`app:${app.id}`],
+      input: { appId: app.id },
+      trigger: "test",
+    });
+
+    expect(deriveStackResourceState(db.getStack(stack.id)!).status).toBe("deploying");
+
+    markOperationFinished(op.id, "done");
+    expect(deriveStackResourceState(db.getStack(stack.id)!).status).toBe("degraded");
   });
 });
 

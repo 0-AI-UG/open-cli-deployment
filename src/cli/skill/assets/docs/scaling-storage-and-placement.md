@@ -51,8 +51,7 @@ volume app with a different placement server fails and asks for `ocd move`.
 
 ## Storage
 
-Declare the primary `volume` and `extra_volumes` in the manifest. The primary
-`volume` field is required: `null` means no attached volume, an object without
+Declare the primary `volume` in the manifest. The field is required: `null` means no attached volume, an object without
 `id` means an OCD-managed volume, and an object with `id` adopts that exact
 Hetzner volume. `ocd deploy` is the only topology/size/path mutation path.
 

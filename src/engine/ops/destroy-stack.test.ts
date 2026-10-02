@@ -28,14 +28,12 @@ describe("destroy_stack environment ownership", () => {
     expect(await remove.probe!(ctx, {})).toEqual({ ok: true });
   });
 
-  test("deletes the stack row but retains production and staging environments", async () => {
+  test("deletes the stack row but retains its environment", async () => {
     const suffix = randomSuffix();
     const prod = db.insertEnvironment(`prod-${suffix}`, "");
-    const staging = db.insertEnvironment(`staging-${suffix}`, "");
     const stack = db.insertStack({
       name: `stack-${suffix}`,
       environment_id: prod.id,
-      staging_environment_id: staging.id,
     });
     const input = { stackId: stack.id };
     const logs: string[] = [];
@@ -58,7 +56,6 @@ describe("destroy_stack environment ownership", () => {
 
     expect(db.getStack(stack.id)).toBeNull();
     expect(db.getEnvironment(prod.id)).not.toBeNull();
-    expect(db.getEnvironment(staging.id)).not.toBeNull();
     expect(logs.join("\n")).toContain("environments are only deleted explicitly");
   });
 });

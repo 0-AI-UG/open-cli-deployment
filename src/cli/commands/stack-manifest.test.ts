@@ -15,8 +15,8 @@ describe("stack reconciliation mode", () => {
     container_port: 3000, public: 1, memory_mb: 0,
     cpu_limit: 0, health_check_mode: "http", health_check_path: "",
     health_check_command: "", health_check_file: "", health_check_max_age_seconds: 0,
-    internal_protocol: "http", sticky: 0, rate_limit_rps: 0, ip_allowlist: "",
-    compress: 0, public_port: null, public_protocol: "tcp",
+    internal_protocol: "http", rate_limit_rps: 0,
+    compress: 0,
     desired_volume_id: "", desired_volume_size: 0, desired_volume_path: "/data",
   };
 

@@ -123,7 +123,6 @@ import {
   handleGetStack,
   handleDeployStack,
   handleDestroyStack,
-  handlePromoteStack,
   handleGetStackLog,
 } from "./stacks.ts";
 import {
@@ -493,19 +492,6 @@ const CASES: Case[] = [
         stackA,
       );
     },
-  },
-  {
-    name: "stacks: handlePromoteStack",
-    permission: "stacks.promote",
-    call: (c) =>
-      handlePromoteStack(
-        req(`/api/stacks/${stackA}/promote`, {
-          body: {},
-          token: c.token,
-          headers: confirmedHeader(c, "promote_stack", "stack", String(stackA)),
-        }),
-        stackA,
-      ),
   },
 
   // --- environments ---------------------------------------------------------

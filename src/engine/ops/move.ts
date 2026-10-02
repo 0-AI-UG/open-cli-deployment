@@ -43,9 +43,6 @@ const loadAndValidate: Step<MoveInput, ValidateOut> = {
       throw new Error(`App ${app.name} is not placed on ${source?.name ?? `server #${fromServerId}`}`);
     }
     assertPlacementUsable({ [String(toServerId)]: 1 });
-    if (db.parseExtraVolumes(app.extra_volumes).length > 0) {
-      throw new Error("Apps with host-directory mounts cannot move between servers");
-    }
     if (app.volume_id) {
       const driver = requireStorageDriver(app.volume_driver);
       if (!driver.portable) {
@@ -181,7 +178,7 @@ const recordEvent: Step<MoveInput, { ok: true }> = {
   async run(ctx, prior) {
     const out = prior["perform_move"] as MoveOut | undefined;
     if (!out || out.count === 0) return { ok: true };
-    db.insertScalingEvent({
+    db.insertReplicaEvent({
       app_id: ctx.input.appId,
       operation_id: ctx.opId,
       event_type: "move",

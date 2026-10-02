@@ -22,13 +22,7 @@ export function withOwningStackKeys(args: EnqueueInput): EnqueueInput {
     const match = /^app:(\d+)$/.exec(key);
     if (!match) continue;
     const id = Number(match[1]);
-    let stackId: number | null = null;
-    const app = db.getApp(id);
-    if (!app) continue;
-    stackId = app.stack_id;
-    if (stackId == null && app.target_of != null) {
-      stackId = db.getApp(app.target_of)?.stack_id ?? null;
-    }
+    const stackId = db.getApp(id)?.stack_id;
     if (stackId == null) continue;
     const stack = db.getStack(stackId);
     if (!stack) continue;
@@ -54,7 +48,6 @@ function parseKeys(op: OperationRow): string[] {
 export function relatedStackResourceKeys(stack: db.StackRow): Set<string> {
   const keys = new Set(stackLockKeys(stack));
   if (stack.environment_id != null) keys.add(`env:${stack.environment_id}`);
-  if (stack.staging_environment_id != null) keys.add(`env:${stack.staging_environment_id}`);
   for (const app of db.getAppsByStackId(stack.id)) {
     keys.add(`app:${app.id}`);
     keys.add(`app:${app.name}`);

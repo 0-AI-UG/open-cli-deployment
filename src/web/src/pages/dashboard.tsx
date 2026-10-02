@@ -4,7 +4,7 @@ import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
 import { Badge, Card, CardHeader, StatusBadge, Stat, Btn, EmptyState, showToast, confirm, CopyButton, PageShell, PageHeader, PageState, statusTone } from "../components/ui.tsx";
 import { PermissionGate } from "../components/permission-gate.tsx";
 import { useActiveOperations } from "../hooks/useOperation.ts";
-import { RefreshCw, Play, Pause, RotateCcw, Trash2, ExternalLink, Check, Box, Boxes, ChevronDown, ArrowUpFromLine, MoreHorizontal, Settings2 } from "lucide-react";
+import { RefreshCw, Play, Pause, RotateCcw, Trash2, ExternalLink, Check, Box, Boxes, ChevronDown, MoreHorizontal, Settings2 } from "lucide-react";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
 import { MobileActionSheet, MobileSheetAction } from "../components/mobile-action-sheet.tsx";
 import { ContextActionItem, ContextActionMenu } from "../components/context-action-menu.tsx";
@@ -24,9 +24,6 @@ type AppData = {
 type StackData = {
   id: number; name: string; status: string; created_at: string;
   environment_id: number | null; app_count: number;
-  // Production members that currently have a staging sibling. 0 = the
-  // "Promote staging" bulk action has nothing to do.
-  staging_sibling_count?: number;
 };
 type DashboardData = { apps: AppData[] };
 
@@ -34,7 +31,7 @@ const APP_OP_KINDS = new Set([
   "restart_app", "pause_app", "unpause_app", "redeploy", "destroy_app",
 ]);
 const STACK_OP_KINDS = new Set([
-  "deploy_stack", "destroy_stack", "cascade_redeploy", "promote_stack",
+  "deploy_stack", "destroy_stack", "cascade_redeploy",
 ]);
 
 const APP_ACTION_TO_KIND: Record<string, string> = {
@@ -133,31 +130,6 @@ export function DashboardPage() {
     }
   };
 
-  // Bulk promote: every member with a staging sibling holding a deployed
-  // image moves to production. Members are promoted concurrently — stack
-  // dependency edges are not persisted, so there is no order to respect.
-  const stackPromote = async (stack: StackData) => {
-    const n = stack.staging_sibling_count ?? 0;
-    if (!(await confirm(
-      "Promote Staging",
-      `Promote the staging sibling of ${n} member(s) of "${stack.name}" to production? Each production app will receive the exact image digest running in staging.`,
-    ))) return;
-    const key = `stack-promote-${stack.id}`;
-    setActionLoading(key);
-    try {
-      await runConfirmedCliAction(
-        "stacks.promote",
-        { stack: String(stack.id) },
-        { action: "promote_stack", resourceType: "stack", resourceId: stack.id },
-      );
-      showToast(`Promoted stack ${stack.name}`, "success");
-      load();
-    } catch (err: any) {
-      showToast(err.message, "error");
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   const stackDestroy = async (stack: StackData) => {
     if (!(await confirm(
@@ -307,9 +279,6 @@ export function DashboardPage() {
     const memberBusy = memberApps.some((a) => !!appBusyKind(a.id));
     const stackKind = stackBusyKind(stack.id);
     const busy = !!stackKind || memberBusy;
-    const promoting =
-      actionLoading === `stack-promote-${stack.id}` || stackKind === "promote_stack";
-    const stagingSiblings = stack.staging_sibling_count ?? 0;
     const destroying =
       actionLoading === `stack-delete-${stack.id}` || stackKind === "destroy_stack";
     const total = memberApps.length;
@@ -341,21 +310,6 @@ export function DashboardPage() {
           <div className="flex shrink-0 items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <StatusBadge status={stack.status} />
             <div className="flex items-center gap-0.5">
-              {/* Only shown when there is something to promote — a stack with no
-                  staging siblings has no use for the button at all. */}
-              {stagingSiblings > 0 && (
-              <PermissionGate permission="stacks.promote" environmentId={stack.environment_id}>
-                <Btn
-                  variant="ghost"
-                  title={`Promote staging → production for ${stagingSiblings} member(s)`}
-                  loading={promoting}
-                  disabled={busy}
-                  onClick={() => stackPromote(stack)}
-                >
-                  <ArrowUpFromLine size={15} />
-                </Btn>
-              </PermissionGate>
-              )}
               <PermissionGate permission="stacks.destroy" environmentId={stack.environment_id}>
                 <Btn variant="ghost" title="Destroy stack" loading={destroying} disabled={busy} onClick={() => stackDestroy(stack)}>
                   <Trash2 size={15} />
@@ -505,7 +459,6 @@ export function DashboardPage() {
           {selectedStack && (
             <>
               <MobileSheetAction icon={<Settings2 size={19} />} label="Open stack" detail="Members, configuration and logs" primary onClick={() => closeAnd(() => { window.location.hash = `#/stacks/${selectedStack.id}`; })} />
-              {(selectedStack.staging_sibling_count ?? 0) > 0 && <PermissionGate permission="stacks.promote" environmentId={selectedStack.environment_id}><MobileSheetAction icon={<ArrowUpFromLine size={19} />} label="Promote staging" disabled={!!stackBusyKind(selectedStack.id)} onClick={() => closeAnd(() => stackPromote(selectedStack))} /></PermissionGate>}
               <PermissionGate permission="stacks.destroy" environmentId={selectedStack.environment_id}><MobileSheetAction icon={<Trash2 size={19} />} label="Destroy stack" danger disabled={!!stackBusyKind(selectedStack.id)} onClick={() => closeAnd(() => stackDestroy(selectedStack))} /></PermissionGate>
             </>
           )}

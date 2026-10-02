@@ -6,27 +6,18 @@ import * as db from "../db.ts";
 import {
   INTERNAL_PORT_BASE,
   INTERNAL_PORT_COUNT,
-  PUBLIC_TCP_PORT_BASE,
-  PUBLIC_TCP_PORT_COUNT,
-  PUBLIC_UDP_PORT_BASE,
-  PUBLIC_UDP_PORT_COUNT,
   vipFromIndex,
-  type PublicProtocol,
 } from "./apps.ts";
 
 const IMAGE_REF = `ghcr.io/acme/test@sha256:${"a".repeat(64)}`;
 
-function makeApp(
-  name = `app-${randomSuffix()}`,
-  extra: { public_port?: number | "auto" | null; public_protocol?: PublicProtocol } = {},
-) {
+function makeApp(name = `app-${randomSuffix()}`) {
   return db.insertApp({
     name,
     domain: `${name}.example.com`,
     image_ref: IMAGE_REF,
     container_port: 3000,
     env_vars: '{"env":{},"outputs":{}}',
-    ...extra,
   });
 }
 
@@ -209,174 +200,5 @@ describe("virtual IP allocation", () => {
     expect(() => vipFromIndex(65535)).toThrow(/out of range/);
     expect(() => vipFromIndex(-1)).toThrow(/out of range/);
     expect(() => vipFromIndex(1.5)).toThrow(/out of range/);
-  });
-});
-
-describe("public port allocation (raw TCP/UDP exposure)", () => {
-  function lowestFreePublicPort(protocol: PublicProtocol): number {
-    const base = protocol === "udp" ? PUBLIC_UDP_PORT_BASE : PUBLIC_TCP_PORT_BASE;
-    const used = new Set(db.getApps().map((a) => a.public_port));
-    for (let p = base; ; p++) if (!used.has(p)) return p;
-  }
-
-  test("apps are unexposed by default", () => {
-    const a = makeApp();
-    expect(a.public_port).toBeNull();
-    expect(a.public_protocol).toBe("tcp");
-    db.deleteApp(a.id);
-  });
-
-  test('"auto" allocates the lowest free port in the protocol\'s block', () => {
-    const expectedTcp = lowestFreePublicPort("tcp");
-    const a = makeApp(undefined, { public_port: "auto" });
-    expect(a.public_port).toBe(expectedTcp);
-    expect(a.public_protocol).toBe("tcp");
-
-    const expectedUdp = lowestFreePublicPort("udp");
-    const b = makeApp(undefined, { public_port: "auto", public_protocol: "udp" });
-    expect(b.public_port).toBe(expectedUdp);
-    expect(b.public_protocol).toBe("udp");
-    expect(b.public_port).toBeGreaterThanOrEqual(PUBLIC_UDP_PORT_BASE);
-    expect(b.public_port!).toBeLessThan(PUBLIC_UDP_PORT_BASE + PUBLIC_UDP_PORT_COUNT);
-
-    // Deleting an app frees its port for the next allocation.
-    db.deleteApp(a.id);
-    const c = makeApp(undefined, { public_port: "auto" });
-    expect(c.public_port).toBe(expectedTcp);
-    db.deleteApp(b.id);
-    db.deleteApp(c.id);
-  });
-
-  test("a specific port must be free and inside the protocol's range", () => {
-    const port = lowestFreePublicPort("tcp");
-    const a = makeApp(undefined, { public_port: port });
-    expect(a.public_port).toBe(port);
-    // Conflict with an existing app.
-    expect(() => makeApp(undefined, { public_port: port })).toThrow(/already taken/);
-    // Out of range for the protocol (UDP port in the TCP block and vice versa).
-    expect(() => makeApp(undefined, { public_port: PUBLIC_UDP_PORT_BASE })).toThrow(/ports are/);
-    expect(() =>
-      makeApp(undefined, { public_port: PUBLIC_TCP_PORT_BASE, public_protocol: "udp" }),
-    ).toThrow(/ports are/);
-    expect(() => makeApp(undefined, { public_port: 8080 })).toThrow(/ports are/);
-    db.deleteApp(a.id);
-  });
-
-  test("updateAppPublicExposure exposes and unexposes post-insert", () => {
-    const a = makeApp();
-    const port = lowestFreePublicPort("udp");
-    db.updateAppPublicExposure(a.id, port, "udp");
-    const exposed = db.getApp(a.id)!;
-    expect(exposed.public_port).toBe(port);
-    expect(exposed.public_protocol).toBe("udp");
-    expect(db.getAppByPublicPort(port)?.id).toBe(a.id);
-
-    db.updateAppPublicExposure(a.id, null, "udp");
-    expect(db.getApp(a.id)!.public_port).toBeNull();
-    expect(db.getAppByPublicPort(port)).toBeNull();
-    db.deleteApp(a.id);
-  });
-
-  test("the partial unique index rejects duplicate public_port writes", () => {
-    const port = lowestFreePublicPort("tcp");
-    const a = makeApp(undefined, { public_port: port });
-    const b = makeApp();
-    expect(() => db.updateAppPublicExposure(b.id, port, "tcp")).toThrow();
-    db.deleteApp(a.id);
-    db.deleteApp(b.id);
-  });
-
-  test("allocation exhausts with a clear error when the block is full", () => {
-    // Claim every UDP port not already taken, then expect a clear failure.
-    const fillers: number[] = [];
-    try {
-      for (;;) {
-        const next = lowestFreePublicPort("udp");
-        if (next >= PUBLIC_UDP_PORT_BASE + PUBLIC_UDP_PORT_COUNT) break;
-        fillers.push(makeApp(undefined, { public_port: next, public_protocol: "udp" }).id);
-      }
-      expect(() => makeApp(undefined, { public_port: "auto", public_protocol: "udp" }))
-        .toThrow(/public UDP ports .* are taken/);
-    } finally {
-      for (const id of fillers) db.deleteApp(id);
-    }
-  });
-});
-
-describe("parseExtraVolumes", () => {
-  test("parses a JSON array of host:container specs", () => {
-    expect(db.parseExtraVolumes('["/home/deploy/apps/x/v:/data","/mnt/ocd-y:/y"]'))
-      .toEqual(["/home/deploy/apps/x/v:/data", "/mnt/ocd-y:/y"]);
-  });
-
-  test("returns [] for empty / null / undefined", () => {
-    expect(db.parseExtraVolumes("")).toEqual([]);
-    expect(db.parseExtraVolumes(null)).toEqual([]);
-    expect(db.parseExtraVolumes(undefined)).toEqual([]);
-  });
-
-  test("returns [] for malformed JSON", () => {
-    expect(db.parseExtraVolumes("not json")).toEqual([]);
-    expect(db.parseExtraVolumes("{}")).toEqual([]); // object, not array
-  });
-
-  test("filters out non-string entries", () => {
-    expect(db.parseExtraVolumes('["/a:/a", 42, null, {"x":1}, "/b:/b"]'))
-      .toEqual(["/a:/a", "/b:/b"]);
-  });
-});
-
-describe("deploy targets: setAppTarget / getAppTargets", () => {
-  test("insertApp stores target/target_of; defaults are ''/null", () => {
-    const parent = makeApp();
-    expect(parent.target).toBe("");
-    expect(parent.target_of).toBeNull();
-
-    const name = `t-${randomSuffix()}`;
-    const child = db.insertApp({
-      name,
-      domain: "",
-      image_ref: IMAGE_REF,
-      container_port: 3000,
-      env_vars: '{"env":{},"outputs":{}}',
-      target: "staging",
-      target_of: parent.id,
-    });
-    expect(child.target).toBe("staging");
-    expect(child.target_of).toBe(parent.id);
-  });
-
-  test("setAppTarget round-trips through getAppTargets and clears with null", () => {
-    const parent = makeApp();
-    const child = makeApp();
-    expect(db.getAppTargets(parent.id)).toEqual([]);
-
-    db.setAppTarget(child.id, parent.id, "staging");
-    const targets = db.getAppTargets(parent.id);
-    expect(targets.map((t) => t.id)).toEqual([child.id]);
-    expect(targets[0].target).toBe("staging");
-    expect(targets[0].target_of).toBe(parent.id);
-    // The row itself reflects the write.
-    const row = db.getApp(child.id)!;
-    expect(row.target).toBe("staging");
-    expect(row.target_of).toBe(parent.id);
-
-    // Clearing detaches the child.
-    db.setAppTarget(child.id, null, "");
-    expect(db.getAppTargets(parent.id)).toEqual([]);
-    expect(db.getApp(child.id)!.target).toBe("");
-    expect(db.getApp(child.id)!.target_of).toBeNull();
-  });
-
-  test("getAppTargets only returns children of the requested parent", () => {
-    const parentA = makeApp();
-    const parentB = makeApp();
-    const childA = makeApp();
-    const childB = makeApp();
-    db.setAppTarget(childA.id, parentA.id, "staging");
-    db.setAppTarget(childB.id, parentB.id, "dev");
-
-    expect(db.getAppTargets(parentA.id).map((t) => t.id)).toEqual([childA.id]);
-    expect(db.getAppTargets(parentB.id).map((t) => t.id)).toEqual([childB.id]);
   });
 });

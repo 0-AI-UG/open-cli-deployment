@@ -6,8 +6,7 @@ and alias supported by that command.
 ## Build and delivery
 
 ```text
-ocd deploy [manifest] [--auth-password-env=KEY]
-    [--dry-run] [--config-only] [--app=EXISTING_APP]
+ocd deploy [manifest] [--dry-run] [--config-only] [--app=EXISTING_APP]
     [--commit=sha] [--allow-unknown]
 ocd deploy stack [manifest] [--only=web,worker] [--with-dependents]
     [--changed | --all] [--config-only] [--commit=sha]
@@ -37,7 +36,6 @@ required account.
 
 ```text
 ocd runners ls
-ocd runners bootstrap
 ocd runners install --server=<name|id> [--name=X]
     [--removal-token-env=GITHUB_RUNNER_REMOVE_TOKEN]
 ocd runners sources
@@ -59,14 +57,12 @@ ocd app deployments <app>
 ocd app replicas <app>
 ocd app metrics <app> [--since=SEC]
 ocd app availability <app>
-ocd app scaling-events <app>
-ocd app staging <app>
+ocd app events <app>
 ocd app reload-env <app> --force
 ocd app redeploy <app>
 ocd logs <app> [--tail=N]
 ocd restart <app>
 ocd rollback <app> [--deployment=<id>]
-ocd promote --from=<source-app> --to=<destination-app>
 ocd pause <app>
 ocd unpause <app>
 ocd move <app> --to <server> [--from <server>]

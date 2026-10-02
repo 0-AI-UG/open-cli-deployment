@@ -258,7 +258,6 @@ describe("destroyApp: servers are never auto-deleted", () => {
 
     for (const server of [s1, s2]) {
       expect(db.getServer(server.id)).toBeTruthy();
-      expect(db.getServer(server.id)?.gc_requested_at).toBeNull();
     }
     expect(compute._mocks.deleteServer).not.toHaveBeenCalled();
   });

@@ -10,9 +10,8 @@ import { ArrowLeft, ExternalLink, Play, Pause, RotateCcw, Server as ServerIcon, 
 import { OverviewTab, type AppStorageData } from "./overview-tab.tsx";
 import { LogsTab } from "./logs-tab.tsx";
 import { DeploymentsTab } from "./deployments-tab.tsx";
-import { ScalingTab } from "./scaling-tab.tsx";
-import { PromotionTab } from "./promotion-tab.tsx";
-import type { AppData, ServerData, ReplicaData, MetricSample, ScalingEvent, DeploymentRecord } from "../../types.ts";
+import { PlacementTab } from "./placement-tab.tsx";
+import type { AppData, ServerData, ReplicaData, MetricSample, ReplicaEvent, DeploymentRecord } from "../../types.ts";
 import { useMobileLayout } from "../../hooks/use-mobile-layout.ts";
 import { MobileActionSheet, MobileSheetAction } from "../../components/mobile-action-sheet.tsx";
 import { MoreHorizontal } from "lucide-react";
@@ -25,12 +24,12 @@ export function AppDetailPage({ appId }: { appId: number }) {
   const [app, setApp] = useState<AppData | null>(null);
   const [server, setServer] = useState<ServerData | null>(null);
   const [storage, setStorage] = useState<AppStorageData | null>(null);
-  const [tab, setTab] = useState<"overview" | "logs" | "deployments" | "scaling" | "promotion">("overview");
+  const [tab, setTab] = useState<"overview" | "logs" | "deployments" | "placement">("overview");
   const [logs, setLogs] = useState("");
   const [deployments, setDeployments] = useState<DeploymentRecord[]>([]);
   const [replicas, setReplicas] = useState<ReplicaData[]>([]);
   const [metricsHistory, setMetricsHistory] = useState<MetricSample[]>([]);
-  const [scalingEvents, setScalingEvents] = useState<ScalingEvent[]>([]);
+  const [replicaEvents, setReplicaEvents] = useState<ReplicaEvent[]>([]);
   const [allServers, setAllServers] = useState<ServerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -82,12 +81,12 @@ export function AppDetailPage({ appId }: { appId: number }) {
       const [reps, hist, events, servers] = await Promise.all([
         get(`/api/apps/${appId}/replicas`),
         get(`/api/apps/${appId}/metrics/history?since=3600`),
-        get(`/api/apps/${appId}/scaling-events`).catch(() => []),
+        get(`/api/apps/${appId}/events`).catch(() => []),
         get(`/api/servers`).catch(() => []),
       ]);
       setReplicas(reps);
       setMetricsHistory(hist.samples || []);
-      setScalingEvents(events || []);
+      setReplicaEvents(events || []);
       setAllServers(servers || []);
     } catch (err) {
       console.error("Failed to load replicas/metrics:", err);
@@ -97,7 +96,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
   useEffect(() => {
     if (tab === "logs") { loadReplicas(); loadLogs(); }
     if (tab === "deployments") loadDeployments();
-    if (tab === "overview" || tab === "scaling") loadReplicas();
+    if (tab === "overview" || tab === "placement") loadReplicas();
   }, [tab, app]);
 
   useEffect(() => {
@@ -132,8 +131,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
     { key: "overview", label: "Overview" },
     { key: "logs", label: "Logs" },
     { key: "deployments", label: "Deployments" },
-    { key: "scaling", label: "Scaling" },
-    { key: "promotion", label: "Promotion" },
+    { key: "placement", label: "Placement" },
   ] as const;
 
   return (
@@ -242,7 +240,6 @@ export function AppDetailPage({ appId }: { appId: number }) {
           metricsHistory={metricsHistory}
           allServers={allServers}
           setReplicas={setReplicas}
-          ops={ops}
         />
       )}
 
@@ -267,20 +264,15 @@ export function AppDetailPage({ appId }: { appId: number }) {
         />
       )}
 
-      {tab === "scaling" && (
-        <ScalingTab
-          app={app}
-          replicas={replicas}
-          scalingEvents={scalingEvents}
-        />
-      )}
-
-      {tab === "promotion" && (
-        <PromotionTab
+      {tab === "placement" && (
+        <PlacementTab
           app={app}
           appId={appId}
-          action={action}
+          replicas={replicas}
+          replicaEvents={replicaEvents}
+          allServers={allServers}
           ops={ops}
+          onMoved={load}
         />
       )}
 

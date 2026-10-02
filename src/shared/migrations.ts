@@ -2819,6 +2819,64 @@ export const migrations: Migration[] = [
         END`);
     },
   },
+  {
+    version: 125,
+    description: "Remove public raw ports, basic auth, sticky sessions, IP allowlists, host bind mounts, promotion, and other dead columns",
+    up: (db) => {
+      // Marker-freshness readiness has one mode now; periodic_job behaved identically.
+      db.run("UPDATE apps SET health_check_mode = 'heartbeat' WHERE health_check_mode = 'periodic_job'");
+      db.run("DELETE FROM user_permissions WHERE permission IN ('apps.promote', 'stacks.promote')");
+
+      const drops: Record<string, string[]> = {
+        apps: [
+          "auth_password_hash", "sticky", "ip_allowlist", "public_port", "public_protocol",
+          "extra_volumes", "target", "target_of", "compose_file", "compose_web_service",
+          "deploy_mode", "userns", "env_projection",
+        ],
+        replicas: ["stopped_at"],
+        servers: ["gc_requested_at"],
+        stacks: ["staging_environment_id", "staging_env_keys"],
+      };
+      // SQLite refuses to drop a column a trigger or an index references.
+      db.run("DROP TRIGGER IF EXISTS apps_bump_config_revision");
+      db.run("DROP INDEX IF EXISTS idx_apps_public_port");
+      for (const [table, columns] of Object.entries(drops)) {
+        const dropping = new Set(columns);
+        const indexes = db.query(`PRAGMA index_list(${table})`).all() as Array<{ name: string; origin: string }>;
+        for (const index of indexes) {
+          if (index.origin !== "c") continue;
+          const indexed = db.query(`PRAGMA index_info(${index.name})`).all() as Array<{ name: string | null }>;
+          if (indexed.some((c) => c.name !== null && dropping.has(c.name))) db.run(`DROP INDEX ${index.name}`);
+        }
+        const existing = new Set((db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name));
+        for (const column of columns) {
+          if (existing.has(column)) db.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+        }
+      }
+
+      db.run(`CREATE TRIGGER apps_bump_config_revision
+        AFTER UPDATE OF
+          domain, image_ref, container_port,
+          environment_id, public, health_check,
+          health_check_mode, health_check_command, health_check_file,
+          health_check_max_age_seconds, health_check_expected_statuses,
+          internal_protocol, rate_limit_rps,
+          health_check_path, compress,
+          placement,
+          desired_volume_id, desired_volume_size, desired_volume_path,
+          memory_mb, cpu_limit
+        ON apps
+        BEGIN
+          UPDATE apps SET
+            config_revision = config_revision + 1,
+            rollout_requested_revision = CASE
+              WHEN rollout_requested_revision > 0 THEN config_revision + 1
+              ELSE 0
+            END
+          WHERE id = NEW.id;
+        END`);
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

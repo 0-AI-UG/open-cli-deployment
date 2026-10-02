@@ -343,22 +343,18 @@ d(
       10 * 60_000,
     );
 
-    // ---- 14. migrate -------------------------------------------------------
+    // ---- 14. move -----------------------------------------------------------
     appTest(
-      "14. migrate: fails cleanly when source == target server (no second server available)",
+      "14. move: fails cleanly when source == target server (no second server available)",
       async () => {
         expect(ctx).not.toBeNull();
-        const db = await import("../shared/db.ts");
-
-        const replicas = db.getReplicas(ctx!.appId);
-        const firstReplica = replicas[0];
 
         const result = await enqueueAndWait(
-          "migrate",
+          "move",
           {
             appId: ctx!.appId,
-            replicaId: firstReplica.id,
-            targetServerId: ctx!.serverId,
+            fromServerId: ctx!.serverId,
+            toServerId: ctx!.serverId,
           },
           { timeoutMs: 60_000 },
         );
@@ -366,28 +362,5 @@ d(
       },
       90_000,
     );
-
-    // ---- 16. basic auth ----------------------------------------------------
-    appTest(
-      "16. basic auth: setting the app password persists the htpasswd hash",
-      async () => {
-        expect(ctx).not.toBeNull();
-        const db = await import("../shared/db.ts");
-        const { syncAppIngress } = await import("../engine/scale/traefik-manager.ts");
-
-        // Password protection is pure ingress config now (no rebuild): store the
-        // hash and re-sync the ingress, mirroring PUT /api/apps/:id/config.
-        db.updateAppAuthPassword(ctx!.appId, "itest-secret");
-        await syncAppIngress(ctx!.appId);
-
-        const app = db.getApp(ctx!.appId);
-        expect(Bun.password.verifySync("itest-secret", app!.auth_password_hash)).toBe(true);
-        console.log(
-          `[itest:engine-ops] basicAuth set; verify manually at ${app!.domain} (user "admin")`,
-        );
-      },
-      10 * 60_000,
-    );
-
   },
 );

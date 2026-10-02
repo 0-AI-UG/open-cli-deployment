@@ -43,7 +43,6 @@ type PriorContainerSnapshot = {
   containerPort: number;
   bindAddr: string;
   volumeMount: string | null;
-  extraVolumes: string[];
   memoryMb: number | null;
   cpus: number | null;
   command: string[];
@@ -121,7 +120,6 @@ const snapshotCurrentRevision: Step<{ appId: number }, PriorContainerSnapshot | 
       containerPort: current.app.container_port,
       bindAddr: replicaBindHost(current.server),
       volumeMount: current.app.volume_mount || null,
-      extraVolumes: db.parseExtraVolumes(current.app.extra_volumes),
       memoryMb: current.app.memory_mb ?? null,
       cpus: current.app.cpu_limit ?? null,
       command: db.parseAppCommand(current.app),
@@ -144,7 +142,6 @@ const snapshotCurrentRevision: Step<{ appId: number }, PriorContainerSnapshot | 
       containerPort: current.app.container_port,
       bindAddr: replicaBindHost(current.server),
       volumeMount: current.app.volume_mount || null,
-      extraVolumes: db.parseExtraVolumes(current.app.extra_volumes),
       memoryMb: current.app.memory_mb ?? null,
       cpus: current.app.cpu_limit ?? null,
       command: db.parseAppCommand(current.app),
@@ -179,7 +176,6 @@ const snapshotCurrentRevision: Step<{ appId: number }, PriorContainerSnapshot | 
       containerPort: snap.containerPort,
       envFilePath: snap.remote.envFilePath || undefined,
       volumeMount: snap.volumeMount || undefined,
-      extraVolumes: snap.extraVolumes,
       memoryMb: snap.memoryMb ?? undefined,
       cpus: snap.cpus ?? undefined,
       command: snap.command,
@@ -203,12 +199,6 @@ const snapshotCurrentRevision: Step<{ appId: number }, PriorContainerSnapshot | 
   },
 };
 
-// Reused by the promote op. These steps mutate the DEST/target app purely from
-// its `load_target_deployment` prior output (a TargetOut carrying the app id,
-// first replica/server, optional commit provenance, and the pre-op status), so
-// they only need `{ appId }` on the input — the promote op supplies its own
-// first step producing the same `load_target_deployment` shape. Runtime
-// behaviour is identical to before; only the input type param was widened.
 const prepareEnvironment: Step<{ appId: number }, EnvironmentOut> = {
   name: "prepare_environment",
   label: "Prepare target environment",
@@ -284,7 +274,6 @@ const swapContainer: Step<{ appId: number }, SwapOut> = {
       containerPort: app.container_port,
       envFilePath: prepared.envFilePath || undefined,
       volumeMount: app.volume_mount || undefined,
-      extraVolumes: db.parseExtraVolumes(app.extra_volumes),
       memoryMb: app.memory_mb || undefined,
       cpus: app.cpu_limit || undefined,
       command: db.parseAppCommand(app),
@@ -382,7 +371,7 @@ const recordRollback: Step<RollbackInput, { deploymentId: number }> = {
       image_size_bytes: sourceDeployment?.image_size_bytes,
       archive_size_bytes: sourceDeployment?.archive_size_bytes,
       transfer_size_bytes: sourceDeployment?.transfer_size_bytes,
-      // Keep revision identity usable by later rollback/promotion operations;
+      // Keep revision identity usable by later rollback operations;
       // provenance belongs in `source`, not in the Git SHA field.
       git_commit: target.gitCommit,
       config_revision: db.getApp(target.appId)?.config_revision ?? 1,
@@ -431,16 +420,4 @@ const rollbackOp: OpKindDefinition<RollbackInput> = {
 registerOp(rollbackOp as OpKindDefinition<any>);
 
 export default rollbackOp;
-export type { RollbackInput, TargetOut };
-// Shared with ops/promote.ts, which supplies its own `load_target_deployment`
-// step (producing a TargetOut for the destination app pinned to the source
-// artifact) and reuses these to pull / swap / sync / health-check it.
-export {
-  snapshotCurrentRevision,
-  prepareEnvironment,
-  pullTargetImage,
-  swapContainer,
-  syncIngressStep,
-  healthCheckStep,
-  discardRevisionSnapshot,
-};
+export type { RollbackInput };

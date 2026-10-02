@@ -197,7 +197,7 @@ export async function handleCliActionRun(request: Request): Promise<Response> {
             cwd,
             env: {
               // Never expose the panel process environment to a user-authored
-              // manifest (for example through auth.password_env). The CLI only
+              // manifest. The CLI only
               // needs its executable search path, locale, temp dir and its
               // short-lived, user-scoped API credentials.
               PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",

@@ -22,10 +22,8 @@ type DbReplica = {
 
 /**
  * Aggregated view used by the dashboard and /api/servers. Per-server listing
- * of apps, enriched with host_port + the
- * username of whoever originally deployed each app.
- *
- * Kept here for legacy callers; safe to move if this file shrinks further.
+ * of apps, enriched with host_port + the username of whoever originally
+ * deployed each app, plus whether the server is a dedicated build worker.
  */
 export function getServersWithApps(): any[] {
   const servers = db.getServers() as Server[];
@@ -33,6 +31,7 @@ export function getServersWithApps(): any[] {
     const apps = db.getApps(s.id) as DbApp[];
     return {
       ...s,
+      build_worker: !!db.getBuildWorkerByServerId(s.id),
       apps: apps.map((a) => {
         const reps = db.getReplicas(a.id) as DbReplica[];
         const first = reps[0];

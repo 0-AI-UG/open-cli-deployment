@@ -15,7 +15,7 @@ describe("web CLI command catalog", () => {
     const represented = new Set(WEB_CLI_COMMANDS.map((item) => item.args[0]));
     for (const name of [
       "login", "apps", "status", "logs", "deploy", "delete", "restart",
-      "rollback", "promote", "pause", "unpause", "envs", "stack",
+      "rollback", "pause", "unpause", "envs", "stack",
       "ops", "servers", "ssh", "skill", "app", "move", "resources", "volumes", "buckets",
       "release", "manifest", "gc", "runners", "doctor", "registry", "source",
     ]) {

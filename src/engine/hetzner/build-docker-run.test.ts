@@ -84,10 +84,8 @@ describe("buildDockerRunArgs", () => {
       image: "myapp:latest",
       appName: "myapp",
       volumeMount: "/mnt/ocd-myapp-data:/data",
-      extraVolumes: ["/home/deploy/apps/myapp/volumes/cache:/cache"],
     });
     expect(cmd).toContain("-v /mnt/ocd-myapp-data:/data");
-    expect(cmd).toContain("-v /home/deploy/apps/myapp/volumes/cache:/cache");
   });
 
   test("rejects volume outside allowlist (defense in depth)", () => {
@@ -96,7 +94,7 @@ describe("buildDockerRunArgs", () => {
         name: "myapp",
         image: "myapp:latest",
         appName: "myapp",
-        extraVolumes: ["/etc:/etc"],
+        volumeMount: "/etc:/etc",
       }),
     ).toThrow(/allowlist/);
   });

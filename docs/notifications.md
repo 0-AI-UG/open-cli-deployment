@@ -60,8 +60,7 @@ Add `notifications` to an app's `.ocd-deploy.json` and deploy through the OCD CL
 
 Bindings require the global `apps.notifications.bind` permission and **Allow hosted app
 notification bindings**. Each app, binding, and credential generation receives
-an isolated private topic and native ntfy credential. Production and staging
-apps have separate identities. Apps cannot publish platform alerts or access
+an isolated private topic and native ntfy credential. Apps cannot publish platform alerts or access
 another app's topics. There are no administrator credentials in app environments.
 
 The primary binding injects `OCD_NTFY_URL` (server origin), `OCD_NTFY_TOPIC`,

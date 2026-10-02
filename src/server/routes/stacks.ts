@@ -182,14 +182,6 @@ export async function handleGetStacks(request: Request): Promise<Response> {
         resource_status_reason: resourceState.reason,
         ...operationFields(s, resourceState),
         app_count: apps.length,
-        // How many members `promote_stack` would actually promote. This applies
-        // the same artifact-target rule as planPromotions so the dashboard button and the
-        // CLI pre-check can't offer a promote the op then rejects.
-        staging_sibling_count: apps.filter((a) => {
-          if (a.target_of != null) return false;
-          const sibling = db.getStagingSibling(a.id);
-          return sibling != null && db.getLastSuccessfulDeployment(sibling.id)?.image_digest?.includes("@sha256:") === true;
-        }).length,
       };
     });
     return Response.json(result, { headers: corsHeaders });
@@ -301,16 +293,12 @@ export async function handleGetStackMemberLogs(request: Request, stackId: number
     }
     const tail = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get("tail") || "100", 10) || 100, 1), 1000);
 
-    // Staging siblings follow their production app and are not members in their
-    // own right — the same rule the detail page's member list uses.
-    //
     // Container output is gated per member: `apps.logs` scoped to each member app.
     // A member the caller may not read is
     // dropped from the response instead of 403-ing the request, so a user with a
     // narrow grant still sees the members they were given.
     const apps = db
       .getAppsByStackId(stackId)
-      .filter((a) => a.target_of == null)
       .filter((a) => db.hasPermission(payload.userId, "apps.logs", appScope(a.id)));
 
     const fetchApp = async (app: { id: number; name: string }) => {
@@ -354,36 +342,6 @@ export async function handleDestroyStack(request: Request, stackId: number): Pro
       kind: "destroy_stack",
       resourceKeys: stackLockKeys(stack),
       input: { stackId },
-      trigger: payload.client === "cli" ? "cli" : "ui",
-      triggeredBy: payload.userId,
-    });
-    return Response.json({ op_id: opId }, { headers: corsHeaders });
-  } catch (error) {
-    return handleError(error);
-  }
-}
-
-// Promote every stack member that has an explicit staging sibling holding a
-// deployed artifact. Fans out to the per-app `promote` op; member selection (and
-// the "nothing to promote" error) lives in the promote_stack op itself so the
-// CLI and the UI get identical behaviour.
-export async function handlePromoteStack(request: Request, stackId: number): Promise<Response> {
-  try {
-    const payload = await requirePermission(request, "stacks.promote", stackScope(stackId));
-    const stack = db.getStack(stackId);
-    if (!stack) {
-      return Response.json({ ok: false, error: "Stack not found" }, { status: 404, headers: corsHeaders });
-    }
-    await enforceConfirmation(request, payload, "promote_stack", "stack", String(stackId));
-    const { opId } = enqueue({
-      kind: "promote_stack",
-      // Both key shapes on purpose: `stack:<id>` serializes against
-      // destroy_stack, `stack:<name>` against deploy_stack (which keys on the
-      // name). Without the name key a concurrent stack deploy would enqueue a
-      // `redeploy` on the same member as our `promote`, and if the redeploy
-      // landed last production would no longer match the promoted artifact.
-      resourceKeys: stackLockKeys(stack),
-      input: { stackId, userId: payload.userId },
       trigger: payload.client === "cli" ? "cli" : "ui",
       triggeredBy: payload.userId,
     });

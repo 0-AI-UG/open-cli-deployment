@@ -187,14 +187,13 @@ const attachToApp: Step<AttachVolumeInput, AttachToAppOut> = {
     // app returns to its pre-op running state (the cloud volume is deleted by
     // create_volume's compensate, which runs after this one).
     try { db.updateAppVolume(ctx.input.appId, "", ""); } catch (err) { ctx.log(`clear volume failed: ${err}`); }
-    const app = db.getApp(ctx.input.appId);
-    if (!app) return;
+    if (!db.getApp(ctx.input.appId)) return;
     // Do NOT swallow a failed recreate: leaving the app with no serving
     // container behind a clean `compensated` is the silent-rollback bug we're
     // fixing. Let it propagate so a dead app surfaces as `compensation_failed`
     // (reconciler retries, operators see it). recreateAppContainer is
     // idempotent, so re-running the compensate is safe.
-    const result = await recreateAppContainer(ctx.input.appId, undefined, db.parseExtraVolumes(app.extra_volumes));
+    const result = await recreateAppContainer(ctx.input.appId, undefined);
     if (!result.ok) throw new Error(result.error || "Failed to recreate volume-less container during rollback");
   },
 };
@@ -204,13 +203,8 @@ const recreateContainer: Step<AttachVolumeInput, { ok: true }> = {
   label: "Recreate container with volume",
   async run(ctx, prior) {
     const att = prior["attach_to_app"] as AttachToAppOut;
-    const app = db.getApp(ctx.input.appId);
-    if (!app) throw new Error("App not found");
-    const result = await recreateAppContainer(
-      ctx.input.appId,
-      att.volumeMount,
-      db.parseExtraVolumes(app.extra_volumes),
-    );
+    if (!db.getApp(ctx.input.appId)) throw new Error("App not found");
+    const result = await recreateAppContainer(ctx.input.appId, att.volumeMount);
     if (!result.ok) throw new Error(result.error || "Failed to recreate container");
     return { ok: true };
   },

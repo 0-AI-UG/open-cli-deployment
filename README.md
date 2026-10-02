@@ -23,8 +23,8 @@ recovery operations in one place.
 - **Immutable releases:** deployments and rollbacks use digest-qualified images.
 - **Git-based configuration:** keep single-app or multi-app manifests beside the
   code they deploy.
-- **Operational controls:** inspect logs, open a shell, copy files, pause, scale,
-  promote, roll back, and recover failed operations from the CLI.
+- **Operational controls:** inspect logs, open a shell, copy files, pause, move,
+  roll back, and recover failed operations from the CLI.
 - **Portable integrations:** use HTTPS Git hosts and OCI registries rather
   than a closed hosting ecosystem.
 

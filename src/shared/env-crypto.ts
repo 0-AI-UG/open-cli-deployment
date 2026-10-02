@@ -177,25 +177,25 @@ export async function processIncomingEnvVars(
  *  (the VIP mirrors the app's own port). The proxy also listens on the legacy
  *  internal_port so already-deployed apps' baked env keeps working.
  *  User-defined OCD_INTERNAL_* values retain their legacy override behavior.
- *  OCD_DEPLOY_TARGET is platform-owned and is re-applied after user env merge. */
+ *  OCD_DEPLOY_TARGET is always "production"; it is platform-owned and is
+ *  re-applied after user env merge. */
 export function platformEnvVars(
-  app: Pick<AppRow, "name" | "internal_protocol" | "container_port"> & { target?: string },
+  app: Pick<AppRow, "name" | "internal_protocol" | "container_port">,
 ): Record<string, string> {
   const host = `${app.name}.ocd.internal`;
-  const deployTarget = app.target === "staging" ? "staging" : "production";
   if (app.internal_protocol === "tcp") {
     return {
       OCD_INTERNAL_URL: `tcp://${host}:${app.container_port}`,
       OCD_INTERNAL_HOST: host,
       OCD_INTERNAL_PORT: String(app.container_port),
-      OCD_DEPLOY_TARGET: deployTarget,
+      OCD_DEPLOY_TARGET: "production",
     };
   }
   return {
     OCD_INTERNAL_URL: `http://${host}`,
     OCD_INTERNAL_HOST: host,
     OCD_INTERNAL_PORT: "80",
-    OCD_DEPLOY_TARGET: deployTarget,
+    OCD_DEPLOY_TARGET: "production",
   };
 }
 
@@ -205,10 +205,7 @@ export function platformEnvVars(
  *  reconciler; the first-deploy path (ops/deploy.ts buildAndRunContainer)
  *  merges platformEnvVars manually because it resolves env vars before the
  *  app row exists.
- *
- *  Staging siblings are no different from any other app here: they link to an
- *  environment the user selected explicitly and resolve only that env. User vars win over the
- *  sibling's own platform vars (its OCD_INTERNAL_* point at itself). */
+ */
 export async function resolveAppEnvVars(app: AppRow): Promise<Record<string, string>> {
   const { resolveRuntimeEnv } = await import("./runtime-env.ts");
   const ownVars = await resolveRuntimeEnv(app);
@@ -219,8 +216,7 @@ export async function resolveAppEnvVars(app: AppRow): Promise<Record<string, str
     ...ownVars,
     ...await appStorageEnv(app.id),
     ...await appNtfyEnv(app.id),
-    // A staging fail-closed guard must not be bypassable by an environment
-    // copied from production or by a manifest value.
+    // Platform-owned: never overridable by an environment or manifest value.
     OCD_DEPLOY_TARGET: platform.OCD_DEPLOY_TARGET,
   };
 }

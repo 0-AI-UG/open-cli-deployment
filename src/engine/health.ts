@@ -51,13 +51,13 @@ async function recreateReplica(
 
 /**
  * Statuses that mean a container is intentionally not serving traffic. A
- * pause/stop op can land while a health check is already in flight
+ * pause op can land while a health check is already in flight
  * (ticks snapshot replicas before ops mutate them), so check results must be
  * re-validated against the live row before any status write or restart —
  * otherwise the reconciler clobbers the paused status and auto-restarts a
  * deliberately paused container.
  */
-export const HEALTH_EXEMPT_STATUSES = new Set(["paused", "stopped"]);
+export const HEALTH_EXEMPT_STATUSES = new Set(["paused"]);
 
 export async function checkReplicaHealth(
   replica: ReplicaRow,
@@ -82,7 +82,7 @@ export async function checkReplicaHealth(
     const current = db.getReplica(replica.id);
     if (!current || HEALTH_EXEMPT_STATUSES.has(current.status)) return;
     // Never fight an in-flight engine op holding this app's lock. A deploy /
-    // rolling / migrate / scale-down op puts replicas through transient states
+    // rolling / move op puts replicas through transient states
     // (draining, deploying, a container it's about to remove) that a health
     // check would misread as unhealthy and "recover" — restarting or recreating
     // the very container the op is tearing down. The op owns the app; defer.
@@ -115,7 +115,7 @@ export async function checkReplicaHealth(
         try {
           await restartContainer(server.ipv4, replica.container_name, hostKey);
           db.resetUnhealthyTicks(replica.id);
-          db.insertScalingEvent({
+          db.insertReplicaEvent({
             app_id: replica.app_id,
             event_type: "auto_restart",
             from_count: 0,
@@ -129,7 +129,7 @@ export async function checkReplicaHealth(
           try {
             await recreateReplica(server, app, replica, hostKey);
             db.resetUnhealthyTicks(replica.id);
-            db.insertScalingEvent({
+            db.insertReplicaEvent({
               app_id: replica.app_id,
               event_type: "auto_recreate",
               from_count: 0,

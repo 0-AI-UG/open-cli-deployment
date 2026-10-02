@@ -49,7 +49,8 @@ create the A/AAAA records OCD displays at your DNS provider.
 
 ## Dedicated build capacity
 
-An empty server can be reserved as an OCD BuildKit worker. OCD excludes it
-from app placement and prevents deletion until the worker is removed. See
+Install an OCD BuildKit worker on an empty server explicitly with
+`ocd runners install --server=<name>`. OCD then rejects that server in app
+placements and prevents its deletion until the worker is removed. See
 [Build workers and webhooks](build-workers-and-webhooks.md) for the trust
 boundary and commands.

@@ -13,7 +13,6 @@
 // All emitted "YAML" is JSON (JSON is valid YAML) — no serializer dependency.
 
 import * as db from "../../shared/db.ts";
-import { BASIC_AUTH_USER } from "./traefik-constants.ts";
 
 /** Return an object with keys inserted in sorted order — JSON.stringify then
  *  emits them deterministically, which the content-hash sync cache relies on. */
@@ -46,36 +45,18 @@ export type DesiredApp = {
    *  (loadBalancer.healthCheck), NOT the routing protocol. */
   httpProbe: boolean;
   isPublic: boolean;
-  /** htpasswd bcrypt hash for the basicAuth middleware; "" when the app has
-   *  no password. Persisted at set-time (apps.auth_password_hash) so renders
-   *  are deterministic — hashing per render would salt differently every
-   *  time and defeat the content-hash sync cache. */
-  authHash: string;
-  /** Sticky sessions: cookie-pinned replica affinity on the HTTP service. */
-  sticky: boolean;
   /** Public-router rate limit in req/s; 0 = off. */
   rateLimitRps: number;
-  /** IPs/CIDRs allowed through the public router; empty = open. Parsed from
-   *  the validated comma-separated apps.ip_allowlist. */
-  ipAllowlist: string[];
   /** Active HTTP health-check path (HTTP apps only); "" = off. */
   healthCheckPath: string;
   /** Response compression on the public router. */
   compress: boolean;
-  /** Public raw TCP/UDP port on the panel IP; null = not exposed. */
-  publicPort: number | null;
-  publicProtocol: "tcp" | "udp";
   /** `<private-ip>:<port>` dial strings, sorted. */
   upstreams: string[];
 };
 
 export type DesiredState = {
   apps: DesiredApp[];
-  /** The panel server's PUBLIC IPv4 — the DNAT `daddr` the VIP proxy keys the
-   *  public raw path on, so the fleet-wide-identical proxy config only
-   *  intercepts 30000-30099 on the panel. Null until a panel server exists.
-   *  Consumed by the ocd-proxy renderer only; Traefik rendering ignores it. */
-  panelPublicIpv4: string | null;
 };
 
 /**
@@ -124,24 +105,14 @@ export function collectDesiredState(): DesiredState {
       internalProtocol: app.internal_protocol === "tcp" ? "tcp" as const : "http" as const,
       httpProbe: !!app.health_check,
       isPublic: !!app.public,
-      authHash: app.auth_password_hash || "",
-      sticky: !!app.sticky,
       rateLimitRps: app.rate_limit_rps || 0,
-      ipAllowlist: app.ip_allowlist.split(",").map((e) => e.trim()).filter(Boolean),
       healthCheckPath: app.health_check_path || "",
       compress: !!app.compress,
-      publicPort: app.public_port ?? null,
-      publicProtocol: app.public_protocol === "udp" ? "udp" as const : "tcp" as const,
       upstreams: buildUpstreams(app.id),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const panel = db.getPanel();
-  const panelServer = panel ? db.getServer(panel.server_id) : null;
-  return {
-    apps,
-    panelPublicIpv4: panelServer?.ipv4 || null,
-  };
+  return { apps };
 }
 
 // --- Dynamic config render -----------------------------------------------------
@@ -162,24 +133,14 @@ export function publicTls(domain: string): TlsConfig {
 }
 
 /**
- * The app's HTTP service loadBalancer. Per-app ingress options that live on
- * the service rather than a router go here:
- *
- *   - sticky sessions — Traefik only supports stickiness at the service
- *     level; each app has exactly ONE HTTP service (its public router's).
- *   - active HTTP health check — failing replicas leave rotation between
- *     reconciler ticks instead of relying on retry-based failover. Gated on
- *     the health_check probe flag.
+ * The app's HTTP service loadBalancer. The active HTTP health check lets
+ * failing replicas leave rotation between reconciler ticks instead of relying
+ * on retry-based failover. Gated on the health_check probe flag.
  */
 function httpLoadBalancer(app: DesiredApp): Record<string, unknown> {
   const lb: Record<string, unknown> = {
     servers: app.upstreams.map((u) => ({ url: `http://${u}` })),
   };
-  if (app.sticky) {
-    lb.sticky = {
-      cookie: { name: "ocd_sticky", httpOnly: true, secure: true, sameSite: "lax" },
-    };
-  }
   if (app.httpProbe && app.healthCheckPath) {
     lb.healthCheck = { path: app.healthCheckPath, interval: "10s", timeout: "3s" };
   }
@@ -189,9 +150,8 @@ function httpLoadBalancer(app: DesiredApp): Record<string, unknown> {
 /**
  * Render /etc/traefik/dynamic/ocd.yml from a desired-state snapshot.
  *
- * Traefik now carries public HTTP ingress only — internal app-to-app traffic
- * AND the public raw TCP/UDP pool (30000-30099) are both owned by the per-host
- * VIP proxy (src/proxy/). Only the panel (`isPanel`) renders routers: public
+ * Traefik carries public HTTP ingress only — internal app-to-app traffic is
+ * owned by the per-host VIP proxy (src/proxy/). Only the panel (`isPanel`) renders routers: public
  * app domains and the global web→websecure redirect.
  * Workers get an empty config.
  *
@@ -213,36 +173,17 @@ export function renderDynamicConfig(
     const svcName = `app-${app.name}`;
     const hasUpstreams = app.upstreams.length > 0;
 
-    // NOTE: public raw TCP/UDP exposure (apps.public_port, the 30000-30099
-    // pool) no longer routes through Traefik — the per-host VIP proxy owns it
-    // now (a dedicated auth-free public listener plus panel-scoped nftables
-    // DNAT; see src/proxy/ and proxy-render.ts).
-
     // Public route: panel only, public apps with a domain and a servable pool.
     if (!opts.isPanel || !app.isPublic || !app.domain || !hasUpstreams) continue;
 
-    // Public middleware chain, cheapest rejection first: the IP allowlist
-    // and rate limit turn unwanted traffic away before basicAuth spends bcrypt
-    // CPU verifying it (an unauthenticated flood must not become a hashing
-    // DoS); compress and sec-headers only shape responses that made it through.
+    // Public middleware chain: the rate limit turns unwanted traffic away
+    // first; compress and sec-headers only shape responses that made it through.
     const pubMiddlewares: string[] = [];
-    if (app.ipAllowlist.length > 0) {
-      httpMiddlewares[`allowlist-${app.name}`] = {
-        ipAllowList: { sourceRange: app.ipAllowlist },
-      };
-      pubMiddlewares.push(`allowlist-${app.name}`);
-    }
     if (app.rateLimitRps > 0) {
       httpMiddlewares[`ratelimit-${app.name}`] = {
         rateLimit: { average: app.rateLimitRps, burst: app.rateLimitRps * 2 },
       };
       pubMiddlewares.push(`ratelimit-${app.name}`);
-    }
-    if (app.authHash) {
-      httpMiddlewares[`auth-${app.name}`] = {
-        basicAuth: { users: [`${BASIC_AUTH_USER}:${app.authHash}`] },
-      };
-      pubMiddlewares.push(`auth-${app.name}`);
     }
     if (app.compress) {
       httpMiddlewares[`compress-${app.name}`] = { compress: {} };

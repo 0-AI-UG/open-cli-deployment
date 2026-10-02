@@ -12,18 +12,7 @@
  */
 export const PROXY_LISTEN_PORT = 18790;
 
-/**
- * The one TCP/UDP port the proxy binds per VIP for PUBLIC raw ingress (the
- * 30000-30099 pool, DNATed here — see nat.ts). Distinct from the internal
- * PROXY_LISTEN_PORT so a single VIP can host both paths at once: the internal
- * listener fail-closes password-protected apps, but the public raw path is
- * deliberately auth-free (Traefik served it unauthenticated), and after DNAT
- * the original port is gone — the two listen ports are the only thing that
- * still distinguishes public from internal.
- */
-export const PROXY_PUBLIC_LISTEN_PORT = 18789;
-
-export type ProxyListener = { port: number; protocol: "tcp" | "udp" };
+export type ProxyListener = { port: number; protocol: "tcp" };
 
 export type ProxyApp = {
   appId: number;
@@ -32,25 +21,12 @@ export type ProxyApp = {
   /** User-visible ports on the VIP (80/container_port/internal_port…) — DNATed to the listen port, never bound. */
   frontPorts: number[];
   backends: string[];
-  /** App requires credentials the L4 proxy cannot check — fail closed (destroy accepted connections). */
-  authProtected?: boolean;
-  /** Public raw port on the panel's public IP (30000-30099); DNATed to the
-   *  public listen port. Absent when the app is not raw-exposed. */
-  publicPort?: number;
-  /** Pool for publicPort (default "tcp"). */
-  publicProtocol?: "tcp" | "udp";
 };
 
 export type ProxyConfig = {
   version: 1;
-  /** The panel's public IPv4 — DNAT `daddr` for the public raw path, so the
-   *  byte-identical config only intercepts public traffic on the panel. Null
-   *  until the panel's IP is known; the public rules are then omitted. */
-  publicIngressIp?: string | null;
-  /** Test seam: per-VIP internal listen port override (default PROXY_LISTEN_PORT). The renderer never sets it. */
+  /** Test seam: per-VIP listen port override (default PROXY_LISTEN_PORT). The renderer never sets it. */
   listenPort?: number;
-  /** Test seam: per-VIP public listen port override (default PROXY_PUBLIC_LISTEN_PORT). The renderer never sets it. */
-  publicListenPort?: number;
   apps: ProxyApp[];
 };
 
@@ -71,7 +47,7 @@ function validatePort(v: unknown, where: string): number {
 function validateApp(raw: unknown, index: number): ProxyApp {
   const where = `apps[${index}]`;
   if (!isRecord(raw)) fail(`${where}: must be an object`);
-  const { appId, name, vip, frontPorts, backends, authProtected, publicPort, publicProtocol } = raw;
+  const { appId, name, vip, frontPorts, backends } = raw;
   if (typeof appId !== "number" || !Number.isInteger(appId)) fail(`${where}: appId must be an integer`);
   if (typeof name !== "string" || name.length === 0) fail(`${where}: name must be a non-empty string`);
   if (typeof vip !== "string" || vip.length === 0) fail(`${where}: vip must be a non-empty string`);
@@ -80,20 +56,12 @@ function validateApp(raw: unknown, index: number): ProxyApp {
   for (const b of backends) {
     if (typeof b !== "string" || !/^.+:\d+$/.test(b)) fail(`${where}: backend ${JSON.stringify(b)} must be "host:port"`);
   }
-  if (authProtected !== undefined && typeof authProtected !== "boolean")
-    fail(`${where}: authProtected must be a boolean`);
-  if (publicPort !== undefined) validatePort(publicPort, `${where}.publicPort`);
-  if (publicProtocol !== undefined && publicProtocol !== "tcp" && publicProtocol !== "udp")
-    fail(`${where}: publicProtocol must be "tcp" or "udp"`);
   return {
     appId,
     name,
     vip,
     frontPorts: frontPorts.map((p, i) => validatePort(p, `${where}.frontPorts[${i}]`)),
     backends: backends as string[],
-    ...(authProtected !== undefined ? { authProtected } : {}),
-    ...(publicPort !== undefined ? { publicPort: publicPort as number } : {}),
-    ...(publicProtocol !== undefined ? { publicProtocol: publicProtocol as "tcp" | "udp" } : {}),
   };
 }
 
@@ -106,16 +74,11 @@ export function parseConfig(text: string): ProxyConfig {
   }
   if (!isRecord(raw)) fail("root must be an object");
   if (raw.version !== 1) fail(`unknown version ${JSON.stringify(raw.version)} (expected 1)`);
-  if (raw.publicIngressIp !== undefined && raw.publicIngressIp !== null && typeof raw.publicIngressIp !== "string")
-    fail("publicIngressIp must be a string or null");
   if (raw.listenPort !== undefined) validatePort(raw.listenPort, "listenPort");
-  if (raw.publicListenPort !== undefined) validatePort(raw.publicListenPort, "publicListenPort");
   if (!Array.isArray(raw.apps)) fail("apps must be an array");
   return {
     version: 1,
-    ...(raw.publicIngressIp !== undefined ? { publicIngressIp: raw.publicIngressIp as string | null } : {}),
     ...(raw.listenPort !== undefined ? { listenPort: raw.listenPort as number } : {}),
-    ...(raw.publicListenPort !== undefined ? { publicListenPort: raw.publicListenPort as number } : {}),
     apps: raw.apps.map(validateApp),
   };
 }

@@ -32,11 +32,11 @@ Read permissions:
 App permissions:
 
 - `apps.deploy`, `apps.rollback`, `apps.restart`, `apps.pause`, `apps.destroy`,
-  `apps.logs`, `apps.promote`, `apps.storage.bind`, `apps.notifications.bind`.
+  `apps.logs`, `apps.storage.bind`, `apps.notifications.bind`.
 
 Stack/environment:
 
-- `stacks.view`, `stacks.deploy`, `stacks.promote`, `stacks.destroy`;
+- `stacks.view`, `stacks.deploy`, `stacks.destroy`;
 - `environments.manage`, `environments.secrets`.
 
 Scaling/infrastructure:
@@ -114,11 +114,11 @@ Hetzner volume ID before the server marks the confirmation approved.
 |---|---|---|---|---|
 | Delete app | Web UI always | retained | detached/retained | containers and ingress removed; DNS cleanup shown as manual |
 | Delete server | Web UI always | retained | workload volumes retained | cascades through assigned workloads, then deletes the Hetzner server |
-| Delete stack | Web UI always | production and staging retained | member volumes detached/retained | all recorded apps destroyed |
+| Delete stack | Web UI always | retained | member volumes detached/retained | all recorded apps destroyed |
 | Delete environment | Web UI always | explicitly deleted only if unused | n/a | fails while apps link it |
 | Cancel operation | Web UI always once compensation is possible | compensation depends on provisional ownership | compensation may detach created volume | runs operation rollback |
 | Delete Hetzner volume | Web UI + typed volume ID | n/a | volume data destroyed | irreversible; verify backup/ownership |
-| Create server capacity | Web UI always | n/a | n/a | creates one or more billable Hetzner resources; automatic deploy capacity uses the same gate |
+| Create server capacity | Web UI always | n/a | n/a | creates one or more billable Hetzner resources |
 
 ## App deletion
 
@@ -143,7 +143,7 @@ Stack deletion:
 2. enqueues a durable stack-wide destroy operation;
 3. enqueues child destroy operations for every app;
 4. waits for children;
-5. logs retention of production/staging environments;
+5. logs retention of the stack's environment;
 6. deletes only the stack row.
 
 Confirmation text explicitly states environment and volume retention.

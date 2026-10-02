@@ -20,7 +20,7 @@ export function __resetBindImplForTest() {
 }
 
 // Shared helpers for the volume-management ops (attach / attach-existing /
-// detach / reattach). These mirror the exact host-mount + precondition
+// detach). These mirror the exact host-mount + precondition
 // conventions the old HTTP handlers used, so the behaviour is preserved
 // byte-for-byte — only the orchestration (steps + compensation) is new.
 
@@ -51,7 +51,7 @@ export function loadSingleReplicaTarget(
   const reps = db.getReplicas(appId);
   if (reps.length === 0) throw new Error("App has no replicas");
   if (reps.length > 1) {
-    throw new Error("Cannot attach a volume to an app with more than 1 replica. Scale down to 1 first.");
+    throw new Error("Cannot attach a volume to an app with more than 1 replica. Declare a placement with a single replica first.");
   }
   const server = db.getServer(reps[0].server_id);
   if (!server) throw new Error("Server not found");

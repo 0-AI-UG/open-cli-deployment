@@ -21,7 +21,7 @@ const RUNTIME_CONFIG_FIELDS = new Set([
   "notifications", "storage", "container_port", "environment_id", "env", "outputs", "memory_mb", "cpu_limit",
   "health_check", "health_check_mode", "health_check_command", "health_check_file",
   "health_check_max_age_seconds", "health_check_expected_statuses", "internal_protocol",
-  "extra_volumes", "desired_volume_id", "desired_volume_size", "desired_volume_path", "desired_volume_driver",
+  "desired_volume_id", "desired_volume_size", "desired_volume_path", "desired_volume_driver",
   "command", "cap_add", "post_start_command",
 ]);
 
@@ -144,7 +144,6 @@ export function mergeDeployRequestWithExistingApp(
     public: publicApp,
     memory_mb: supplied.memory_mb ?? 0,
     cpu_limit: supplied.cpu_limit ?? 0,
-    auth_password: supplied.auth_password ?? "",
     health_check: supplied.health_check ?? true,
     health_check_mode: supplied.health_check_mode ??
       (supplied.health_check !== undefined
@@ -157,19 +156,10 @@ export function mergeDeployRequestWithExistingApp(
     environment: supplied.environment,
     environment_id: supplied.environment_id ?? null,
     internal_protocol: supplied.internal_protocol ?? "http",
-    sticky: supplied.sticky ?? false,
     rate_limit_rps: supplied.rate_limit_rps ?? 0,
-    ip_allowlist: supplied.ip_allowlist ?? "",
     health_check_path: supplied.health_check_path ?? "",
     compress: supplied.compress ?? false,
-    public_port: supplied.public_port !== undefined
-      ? supplied.public_port
-      : null,
-    public_protocol: supplied.public_protocol ?? "tcp",
     placement: supplied.placement,
-    extra_volumes: supplied.extra_volumes ?? [],
-    target: supplied.target ?? app.target,
-    target_of: supplied.target_of ?? app.target_of ?? undefined,
     volume_id: supplied.volume_id ?? "",
     volume_driver: supplied.volume_driver ?? app.desired_volume_driver ?? undefined,
     volume_size: supplied.volume_size ?? 0,
@@ -203,15 +193,10 @@ function normalizedSpec(req: DeployRequest) {
     health_check_max_age_seconds: req.health_check_max_age_seconds ?? 0,
     health_check_expected_statuses: req.health_check_expected_statuses ?? [200],
     internal_protocol: req.internal_protocol ?? "http",
-    sticky: req.sticky ?? false,
     rate_limit_rps: req.rate_limit_rps ?? 0,
-    ip_allowlist: req.ip_allowlist ?? "",
     health_check_path: req.health_check_path ?? "",
     compress: req.compress ?? false,
-    public_port: req.public_port ?? null,
-    public_protocol: req.public_protocol ?? "tcp",
     placement: resolveRequestPlacement(req),
-    extra_volumes: (req.extra_volumes ?? []).map((v) => `${v.host_path}:${v.container_path}`),
     desired_volume_id: req.volume_id ?? "",
     desired_volume_size: req.volume_size ?? 0,
     desired_volume_path: req.volume_path ?? "/data",
@@ -246,15 +231,10 @@ function comparableApp(app: AppRow) {
       } catch { return [200]; }
     })(),
     internal_protocol: app.internal_protocol || "http",
-    sticky: !!app.sticky,
     rate_limit_rps: app.rate_limit_rps ?? 0,
-    ip_allowlist: app.ip_allowlist || "",
     health_check_path: app.health_check_path || "",
     compress: !!app.compress,
-    public_port: app.public_port,
-    public_protocol: app.public_protocol || "tcp",
     placement: parsePlacement(app.placement),
-    extra_volumes: db.parseExtraVolumes(app.extra_volumes),
     desired_volume_id: app.desired_volume_id || "",
     desired_volume_size: app.desired_volume_size ?? 0,
     desired_volume_path: app.desired_volume_path || "/data",
@@ -290,18 +270,10 @@ export function deployRequestFromApp(app: AppRow): DeployRequest {
     health_check_max_age_seconds: current.health_check_max_age_seconds,
     health_check_expected_statuses: current.health_check_expected_statuses,
     internal_protocol: current.internal_protocol as DeployRequest["internal_protocol"],
-    sticky: current.sticky,
     rate_limit_rps: current.rate_limit_rps,
-    ip_allowlist: current.ip_allowlist,
     health_check_path: current.health_check_path,
     compress: current.compress,
-    public_port: current.public_port,
-    public_protocol: current.public_protocol as DeployRequest["public_protocol"],
     placement: current.placement,
-    extra_volumes: db.parseExtraVolumes(app.extra_volumes).map((entry) => {
-      const separator = entry.indexOf(":");
-      return { host_path: entry.slice(0, separator), container_path: entry.slice(separator + 1) };
-    }),
     volume_id: app.desired_volume_id,
     volume_size: app.desired_volume_size,
     volume_path: app.desired_volume_path,
@@ -410,35 +382,14 @@ export async function applyAppConfig(
   if (changed.has("memory_mb")) db.updateAppMemory(app.id, desired.memory_mb);
   if (changed.has("cpu_limit")) db.updateAppCpu(app.id, desired.cpu_limit);
   if (changed.has("internal_protocol")) db.updateAppInternalProtocol(app.id, desired.internal_protocol);
-  if (["sticky", "rate_limit_rps", "ip_allowlist", "health_check_path", "compress", "health_check"].some((f) => changed.has(f))) {
+  if (["rate_limit_rps", "health_check_path", "compress", "health_check"].some((f) => changed.has(f))) {
     db.updateAppIngressSettings(app.id, {
-      sticky: desired.sticky,
       rate_limit_rps: desired.rate_limit_rps,
-      ip_allowlist: desired.ip_allowlist,
       health_check_path: desired.health_check_path,
       compress: desired.compress,
       health_check: desired.health_check,
     });
   }
-  if (effective.auth_password !== undefined && (effective.auth_password !== "" || app.auth_password_hash !== "")) {
-    db.updateAppAuthPassword(app.id, effective.auth_password);
-  }
-  if (changed.has("public_port") || changed.has("public_protocol")) {
-    if (desired.public_port == null) {
-      db.updateAppPublicExposure(app.id, null, desired.public_protocol);
-    } else if (desired.public_port === "auto") {
-      const current = db.getApp(app.id)!;
-      const port = current.public_port != null && current.public_protocol === desired.public_protocol
-        ? current.public_port
-        : db.allocatePublicPort(desired.public_protocol);
-      db.updateAppPublicExposure(app.id, port, desired.public_protocol);
-    } else {
-      const holder = db.getAppByPublicPort(desired.public_port);
-      if (holder && holder.id !== app.id) throw new Error(`Port ${desired.public_port} is already used by "${holder.name}"`);
-      db.updateAppPublicExposure(app.id, desired.public_port, desired.public_protocol);
-    }
-  }
-  if (changed.has("extra_volumes")) db.updateAppExtraVolumes(app.id, desired.extra_volumes);
   if (["command", "cap_add", "post_start_command"].some((f) => changed.has(f))) {
     db.updateAppRuntimeOptions(app.id, {
       command: desired.command,

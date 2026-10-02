@@ -31,8 +31,7 @@ Manifest links use environment names, not IDs:
 ocd envs list
 ```
 
-Correct the manifest `environment`, then rerun deploy. Staging is an explicit
-app with its own manifest and environment.
+Correct the manifest `environment`, then rerun deploy.
 
 ## Deploy rejects the placement
 

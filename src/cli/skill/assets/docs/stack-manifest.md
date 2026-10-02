@@ -16,8 +16,7 @@ Stack `blog`, app key `api` becomes `blog-api`; app key `database` becomes
 | `name` | Required stack identifier and resource prefix. |
 | `description` | Optional human metadata. |
 | `release_order` | Optional integer ordering stacks within a repository release (default zero). |
-| `environment` | Existing shared production environment name. |
-| `staging_environment` | Optional existing shared staging environment name; `null` clears the link. It does not create an environment or app. |
+| `environment` | Existing shared environment name. |
 | `apps` | Required non-empty app map. |
 
 App entries support:
@@ -49,13 +48,6 @@ References infer dependency ordering. Keep `needs` for dependencies that have
 no variable reference. Missing members, missing output names, and cycles fail
 preflight. Dependencies become healthy before consumers; independent members
 can proceed concurrently. Secret metadata propagates through derived outputs.
-
-Treat staging as a separate delivery target. `ocd deploy stack` reconciles the
-declared production app members; it does not synthesize staging siblings.
-Create staging apps separately with their own manifests, environment, and
-domain, then release their exact digests explicitly. Promote between explicit
-app names only after validation; see
-[Releases, promotion, and rollback](releases-promotion-and-rollback.md).
 
 ## Reconciliation
 

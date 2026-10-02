@@ -15,10 +15,10 @@ export async function handleGetReplicas(request: Request, appId: number): Promis
   }
 }
 
-export async function handleGetScalingEvents(request: Request, appId: number): Promise<Response> {
+export async function handleGetReplicaEvents(request: Request, appId: number): Promise<Response> {
   try {
     await requirePermission(request, "metrics.view", appScope(appId));
-    const events = db.getScalingEvents(appId);
+    const events = db.getReplicaEvents(appId);
     return Response.json(events, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);

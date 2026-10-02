@@ -116,7 +116,6 @@ export function assessOperationResources(op: OperationRow): ResourceAssessment {
   const input = inputOf(op);
   switch (op.kind) {
     case "deploy_stack":
-    case "promote_stack":
       return assessStack(op);
     case "destroy_stack": {
       const gone = !db.getStack(Number(input.stackId));
@@ -142,10 +141,9 @@ export function assessOperationResources(op: OperationRow): ResourceAssessment {
     case "restart_app":
     case "reload_app":
     case "rollback":
-    case "promote":
     case "pause_app":
     case "unpause_app":
-      return assessApp(Number(input.appId ?? input.destAppId));
+      return assessApp(Number(input.appId));
     default:
       return {
         safeToFinalizeDone: false,
@@ -161,7 +159,7 @@ export function applyOperationResourceStatus(
 ): ResourceAssessment {
   const assessment = assessOperationResources(op);
   const input = inputOf(op);
-  if (op.kind === "deploy_stack" || op.kind === "promote_stack") {
+  if (op.kind === "deploy_stack") {
     const stack = typeof input.name === "string"
       ? db.getStackByName(input.name)
       : db.getStack(Number(input.stackId));
@@ -171,7 +169,7 @@ export function applyOperationResourceStatus(
 }
 
 export type StackResourceState = {
-  status: "running" | "degraded" | "empty";
+  status: "running" | "deploying" | "degraded" | "empty";
   reason: string;
   lastOperationId: number | null;
   lastOperationStatus: OperationStatus | null;
@@ -262,9 +260,12 @@ export function reconcileStaleAppStates(): HealedAppState[] {
 }
 
 /** Stack health is derived from current members. Operation outcome remains a
- * separate diagnostic signal and never overwrites a healthy reality. */
+ * separate diagnostic signal and never overwrites a healthy reality. Members
+ * that are not ready while an operation still holds them (a webhook or manual
+ * rollout in flight) make the stack `deploying`, not `degraded`: the gap is
+ * expected and the rollout will either converge or fail on its own. */
 export function deriveStackResourceState(stack: db.StackRow): StackResourceState {
-  const apps = db.getAppsByStackId(stack.id).filter((app) => app.target_of == null);
+  const apps = db.getAppsByStackId(stack.id);
   const unhealthy = [
     ...apps.filter((app) => !APP_READY.has(app.status)).map((app) => `${app.name}:${app.status}`),
     ...apps.filter((app) => app.public && app.public_endpoint_status === "degraded")
@@ -276,13 +277,14 @@ export function deriveStackResourceState(stack: db.StackRow): StackResourceState
     .all() as OperationRow[];
   const latest = rows.find((op) => operationHasStackKey(op, stack.id, stack.name)) ?? null;
   const empty = apps.length === 0;
+  const rollingOut = unhealthy.length > 0 && apps.some((app) => appHasActiveOperation(app));
   return {
-    status: empty ? "empty" : unhealthy.length === 0 ? "running" : "degraded",
+    status: empty ? "empty" : unhealthy.length === 0 ? "running" : rollingOut ? "deploying" : "degraded",
     reason: empty
       ? "stack has no materialized members"
       : unhealthy.length === 0
         ? `all ${apps.length} app(s) are ready`
-        : `not ready: ${unhealthy.join(", ")}`,
+        : `${rollingOut ? "rolling out" : "not ready"}: ${unhealthy.join(", ")}`,
     lastOperationId: latest?.id ?? null,
     lastOperationStatus: latest?.status ?? null,
     lastOperationFailed: !!latest && ["failed", "compensated", "compensation_failed"].includes(latest.status),

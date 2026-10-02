@@ -10,7 +10,6 @@ type ValidateOut = {
   previousMount: string;
   nextMount: string;
   volumeAttached: boolean;
-  extraVolumes: string;
 };
 
 const validate: Step<RemountVolumeInput, ValidateOut> = {
@@ -27,7 +26,6 @@ const validate: Step<RemountVolumeInput, ValidateOut> = {
       previousMount: app.volume_mount,
       nextMount: `${hostPath}:${ctx.input.mountPath}`,
       volumeAttached: !!app.volume_attached,
-      extraVolumes: app.extra_volumes,
     };
   },
 };
@@ -60,11 +58,7 @@ const updateMount: Step<RemountVolumeInput, { ok: true }> = {
     const v = prior["validate"] as ValidateOut | undefined;
     if (!v) return;
     db.updateAppVolume(ctx.input.appId, v.volumeId, v.previousMount, v.volumeAttached);
-    const result = await recreateAppContainer(
-      ctx.input.appId,
-      v.previousMount,
-      db.parseExtraVolumes(v.extraVolumes),
-    );
+    const result = await recreateAppContainer(ctx.input.appId, v.previousMount);
     if (!result.ok) throw new Error(result.error || "Failed to restore previous volume mount path");
   },
 };
@@ -77,11 +71,7 @@ const recreateContainer: Step<RemountVolumeInput, { ok: true }> = {
   label: "Recreate container with new mount path",
   async run(ctx, prior) {
     const v = prior["validate"] as ValidateOut;
-    const result = await recreateAppContainer(
-      ctx.input.appId,
-      v.nextMount,
-      db.parseExtraVolumes(v.extraVolumes),
-    );
+    const result = await recreateAppContainer(ctx.input.appId, v.nextMount);
     if (!result.ok) throw new Error(result.error || "Failed to recreate container with the manifest volume path");
     return { ok: true };
   },

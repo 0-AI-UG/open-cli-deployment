@@ -25,24 +25,16 @@ export type App = {
   host_port: number;
   env_vars: string;
   status: string;
-  /** Whether HTTP basic auth is on (derived from the password hash server-side).
-   *  The password and its hash are secrets and never leave the server. */
-  auth_enabled: boolean;
   /** Declared placement, one entry per server. */
   placement: PlacementEntry[];
   volume_id: string;
   volume_mount: string;
   volume_driver: string;
-  extra_volumes: string; // JSON array of "host:container" strings
   health_check: number; // 1 = HTTP probe (default); 0 = only verify the container is running
   internal_protocol: string; // 'http' | 'tcp' — internal routing protocol (independent of health_check)
-  sticky: number; // 1 = sticky sessions (cookie-based) on the app's ingress service
   rate_limit_rps: number; // public-router rate limit in req/s; 0 = unlimited
-  ip_allowlist: string; // comma-separated IPs/CIDRs gating the public router; "" = open
   health_check_path: string; // active HTTP health-check path; "" = off
   compress: number; // 1 = response compression on the public router
-  public_port: number | null; // public raw TCP/UDP port on the panel IP; null = not exposed
-  public_protocol: string; // 'tcp' | 'udp'
   created_at: string;
 };
 
@@ -59,7 +51,7 @@ export type Replica = {
   created_at: string;
 };
 
-export type ScalingEvent = {
+export type ReplicaEvent = {
   id: number;
   app_id: number;
   event_type: string;
@@ -123,19 +115,17 @@ export type DeployRequest = {
   volume_size?: number; // Desired GB; 0 = explicitly no primary volume
   volume_path?: string; // Container mount path, defaults to /data
   volume_driver?: string; // Storage driver id; omitted selects the target server's default
-  auth_password?: string; // If set, the ingress enforces HTTP basic auth (username "admin"). Requires internal_protocol 'http' (the default)
   /** Explicit placement: server name or numeric id -> replica count. OCD
    * never chooses servers or replica counts on its own. */
   placement: Record<string, number>;
   public?: boolean; // Whether the app is publicly accessible (default true)
-  extra_volumes?: Array<{ host_path: string; container_path: string }>; // Additional volume mounts
   memory_mb?: number; // Per-container memory ceiling in MB. Omit / 0 → platform default
   cpu_limit?: number; // Per-container CPU ceiling in cores (fractional allowed). Omit / 0 → platform default
   command?: string[]; // Optional argv appended after the OCI image
   cap_add?: string[]; // Explicit Linux capabilities restored after cap-drop=ALL
   post_start_command?: string; // Idempotent command executed after a healthy rollout
   health_check?: boolean; // Default true; false = skip the HTTP probe, only verify the container is running
-  health_check_mode?: "http" | "container" | "exec" | "heartbeat" | "periodic_job";
+  health_check_mode?: "http" | "container" | "exec" | "heartbeat";
   health_check_command?: string;
   health_check_file?: string;
   health_check_max_age_seconds?: number;
@@ -146,19 +136,9 @@ export type DeployRequest = {
   /** Optional source provenance supplied by external CI. Never fetched by OCD. */
   git_commit?: string;
   internal_protocol?: "http" | "tcp"; // Internal routing protocol (independent of health_check); omit → "http". Raw-TCP apps must set "tcp".
-  sticky?: boolean; // Sticky sessions (cookie-based) on the app's ingress service
   rate_limit_rps?: number; // Public-router rate limit in req/s; omit / 0 = unlimited
-  ip_allowlist?: string; // Comma-separated IPs/CIDRs gating the public router; omit / "" = open
   health_check_path?: string; // Active HTTP health-check path (e.g. /healthz); omit / "" = off. Requires health_check !== false
   compress?: boolean; // Response compression on the public router
-  public_port?: number | "auto" | null; // Public raw TCP/UDP exposure: "auto" = lowest free pool port, number = specific pool port, omit = none
-  public_protocol?: "tcp" | "udp"; // Pool for public_port (default "tcp"): 30000-30049 tcp, 30050-30099 udp
-  target?: string; // deploy target tag: "" | "production" | "staging" | "dev"
-  target_of?: number; // app id this is a staging/dev target of; omit = standalone
-  /** @deprecated Legacy wire name for `target` (pre-rename clients). Honored only when `target` is absent. */
-  env_label?: string;
-  /** @deprecated Legacy wire name for `target_of` (pre-rename clients). Honored only when `target_of` is absent. */
-  sibling_of?: number;
   /** Client-computed provenance for an explicitly applied manifest. These are
    * metadata only; the normalized fields above remain the desired spec. */
   manifest_path?: string;
@@ -171,22 +151,6 @@ export type ReleaseRequest = {
   image: string;
   /** Optional source revision for audit/provenance only. */
   commit?: string;
-};
-
-export type PromoteRequest = {
-  source_app: string; // app name to promote FROM (e.g. "myapp-staging")
-  dest_app: string; // app name to promote TO (e.g. "myapp")
-};
-
-export type AppStagingResponse = {
-  /** Whether an explicit staging target exists. */
-  staging_enabled: boolean;
-  /** The staging target's environment, or null when absent. */
-  staging_environment_id: number | null;
-  /** Git commit of production's most recent successful deployment, or null. */
-  prod_commit: string | null;
-  /** The explicit <name>-staging target, once deployed. */
-  sibling: { id: number; name: string; status: string; domain: string; commit: string | null } | null;
 };
 
 export type PanelInfo = {
@@ -233,7 +197,6 @@ export type StackDeployRequest = {
   /** Apply desired configuration without changing the released artifact. */
   config_only?: boolean;
   environment_id?: number | null;
-  staging_environment_id?: number | null;
   /** Stack members resolved to immutable artifacts before runtime deployment. */
   apps: Array<Omit<DeployRequest, "environment_id"> & {
     key: string;

@@ -103,5 +103,4 @@ Deleting an app revokes its managed grants. External-reader grants have an
 independent lifecycle and must be explicitly revoked when the external service
 stops using them.
 
-Bindings do not copy objects. Staging must select a separate explicit
-bucket/prefix scope.
+Bindings do not copy objects.

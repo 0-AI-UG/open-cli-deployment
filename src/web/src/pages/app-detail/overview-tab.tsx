@@ -1,14 +1,11 @@
 import { StorageMounts } from "../../components/storage-mounts.tsx";
 import type { StorageMount } from "../../../../shared/storage-display.ts";
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import { createPortal } from "react-dom";
+import { useState, useEffect } from "react";
 import { get } from "../../api/client.ts";
-import { runCliAction } from "../../api/cli-actions.ts";
-import { Badge, Card, CardHeader, DataRow, EmptyState, Stat, Btn, StatusBadge, showToast, Table, CopyButton, portalAnchorRect } from "../../components/ui.tsx";
+import { Badge, Card, CardHeader, DataRow, EmptyState, Stat, Btn, StatusBadge, showToast, Table, CopyButton } from "../../components/ui.tsx";
 import { PermissionGate } from "../../components/permission-gate.tsx";
-import { RefreshCw, ExternalLink, Server as ServerIcon, Terminal, ArrowRightLeft, Settings2, Globe, Database, Bell, HardDrive, Layers, Lock } from "lucide-react";
+import { RefreshCw, ExternalLink, Server as ServerIcon, Terminal, Settings2, Globe, Database, Bell, HardDrive, Layers } from "lucide-react";
 import { Sparkline, InfoTip, CpuUsage, MemUsage } from "./shared.tsx";
-import { type ResourceOpsResult } from "../../hooks/useOperation.ts";
 import type { AppData, ReplicaData, MetricSample, ServerData } from "../../types.ts";
 import { DnsInstructionView } from "../../components/dns-instruction.tsx";
 
@@ -20,7 +17,6 @@ interface OverviewTabProps {
   metricsHistory: MetricSample[];
   allServers: ServerData[];
   setReplicas: (r: ReplicaData[]) => void;
-  ops: ResourceOpsResult;
 }
 
 export type AppStorageData = {
@@ -31,11 +27,10 @@ export type AppStorageData = {
   caveat: string;
 };
 
-export function OverviewTab({ app, appId, storage, replicas, metricsHistory, allServers, setReplicas, ops }: OverviewTabProps) {
+export function OverviewTab({ app, appId, storage, replicas, metricsHistory, allServers, setReplicas }: OverviewTabProps) {
   const internalUrl = app.internal_protocol === "tcp"
     ? `tcp://${app.name}.ocd.internal:${app.container_port}`
     : `http://${app.name}.ocd.internal`;
-  const [movingFrom, setMovingFrom] = useState<number | null>(null);
   const [availability, setAvailability] = useState<{ uptimePct: number | null; mttrSeconds: number | null; sampleCount: number; current: { running: number; desired: number; meetsTarget: boolean } } | null>(null);
   useEffect(() => {
     get(`/api/apps/${appId}/availability?window=86400`)
@@ -46,23 +41,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
   const bytes = (value?: number | null) => typeof value === "number" && value > 0
     ? `${(value / 1024 / 1024).toFixed(1)} MiB`
     : "—";
-
-  const handleMove = async (sourceId: number, targetId: string) => {
-    if (!targetId) { showToast("Select a target server", "error"); return; }
-    setMovingFrom(sourceId);
-    try {
-      await runCliAction("app.move", {
-        app: String(appId),
-        source: String(sourceId),
-        target: targetId,
-      });
-      setReplicas(await get(`/api/apps/${appId}/metrics`));
-    } catch (err: any) {
-      showToast(err.message, "error");
-    } finally {
-      setMovingFrom(null);
-    }
-  };
 
   const manifestDiffers = (app.last_manifest_config_revision ?? 0) !== (app.config_revision ?? 1);
   const meetsTarget = availability?.current.meetsTarget ?? true;
@@ -142,7 +120,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
                 ? <span className="break-all text-right font-mono text-xs">{app.volume_id} · {app.volume_mount}</span>
                 : <span className="text-muted">none</span>}
             </DataRow>
-            {app.auth_enabled && <DataRow label="Auth"><Badge tone="warning"><Lock size={11} /> Password protected</Badge></DataRow>}
             {app.deployed_by_username && <DataRow label="Last deployed by">{app.deployed_by_username}</DataRow>}
             {app.environment_name && <DataRow label="Environment"><a href="#/environments" className="font-medium text-fg hover:underline">{app.environment_name}</a></DataRow>}
           </div>
@@ -214,21 +191,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
                           <Terminal size={12} /> Shell
                         </Btn>
                       </PermissionGate>
-                      {allServers.length >= 2 && (
-                        <PermissionGate permission="scaling.migrate" appId={appId} environmentId={app.environment_id}>
-                          <MoveMenu
-                            targets={allServers.filter((s) => s.id !== r.server_id)}
-                            loading={
-                              movingFrom === r.server_id ||
-                              ops.active.some(
-                                (o) => o.kind === "move" && (o.input as { fromServerId?: number })?.fromServerId === r.server_id,
-                              )
-                            }
-                            disabled={ops.isBusy}
-                            onPick={(targetId) => handleMove(r.server_id, targetId)}
-                          />
-                        </PermissionGate>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -298,87 +260,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
           ) : <p className="px-4 py-3 text-sm text-muted">Storage inventory unavailable</p>}
         </Card>
       </div>
-    </div>
-  );
-}
-
-function MoveMenu({ targets, loading, disabled, onPick }: {
-  targets: ServerData[];
-  loading: boolean;
-  disabled: boolean;
-  onPick: (targetId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const update = () => {
-      if (!triggerRef.current) return;
-      const r = portalAnchorRect(triggerRef.current);
-      setPos({ top: r.bottom + 4, left: r.right });
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (triggerRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
-
-  return (
-    <div ref={triggerRef} className="inline-block">
-      <Btn
-        size="xs"
-        variant="ghost"
-        loading={loading}
-        disabled={disabled}
-        title="Move every replica on this server to another server and update the placement"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <ArrowRightLeft size={12} /> Move
-      </Btn>
-      {open && !disabled && pos && createPortal(
-        <div
-          ref={menuRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-100%)" }}
-          className="z-50 min-w-44 animate-pop-in rounded-lg border bg-surface p-1 shadow-pop"
-        >
-          <div className="px-2.5 pb-1 pt-1.5 text-xs text-muted">Move to server</div>
-          {targets.length === 0 ? (
-            <div className="px-2.5 py-1.5 text-sm text-fg-dim">
-              No other servers
-            </div>
-          ) : (
-            targets.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => { setOpen(false); onPick(String(s.id)); }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-fg transition-colors hover:bg-subtle"
-              >
-                <ServerIcon size={14} className="shrink-0 text-muted" />
-                {s.name.replace(/^ocd-/, "")}
-              </button>
-            ))
-          )}
-        </div>,
-        document.body,
-      )}
     </div>
   );
 }

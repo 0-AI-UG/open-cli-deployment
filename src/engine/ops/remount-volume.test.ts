@@ -62,7 +62,7 @@ describe("remount_volume", () => {
     expect(recreateAppContainer).not.toHaveBeenCalled();
 
     await stepByName("recreate_container").run(ctx, prior);
-    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, (v as any).nextMount, expect.anything());
+    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, (v as any).nextMount);
     expect(remountVolumeOp.steps.map((s) => s.name)).toEqual(["validate", "update_mount", "recreate_container"]);
     expect(stepByName("recreate_container").probe).toBeUndefined();
   });
@@ -92,7 +92,7 @@ describe("remount_volume", () => {
     const restored = db.getApp(app.id)!;
     expect(restored.volume_mount).toBe(v.previousMount);
     expect(!!restored.volume_attached).toBe(true);
-    expect(recreateAppContainer).toHaveBeenLastCalledWith(app.id, v.previousMount, expect.anything());
+    expect(recreateAppContainer).toHaveBeenLastCalledWith(app.id, v.previousMount);
   });
 
   test("compensation reruns container restore after a crash instead of trusting DB alone", async () => {
@@ -103,6 +103,6 @@ describe("remount_volume", () => {
     db.updateAppVolume(app.id, v.volumeId, v.previousMount, v.volumeAttached);
     expect(stepByName("update_mount").probeCompensated).toBeUndefined();
     await stepByName("update_mount").compensate!(ctx, { ok: true }, prior);
-    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, v.previousMount, expect.anything());
+    expect(recreateAppContainer).toHaveBeenCalledWith(app.id, v.previousMount);
   });
 });

@@ -14,8 +14,8 @@ trigger integration; GitHub Actions is not part of app delivery.
 
 - Inspect before mutating live resources.
 - Use `ocd deploy --dry-run` before material configuration changes.
-- Keep plaintext secrets out of manifests and logs. Use explicit environment references,
-  `--auth-password-env`, and panel Settings.
+- Keep plaintext secrets out of manifests and logs. Use explicit environment
+  references and panel Settings.
 - Every runtime rollout still uses `repository@sha256:<digest>`. Mutable build
   tags are temporary transport only and never become desired runtime state.
 - Webhook delivery checks out the exact pushed commit and reconciles the
@@ -25,7 +25,7 @@ trigger integration; GitHub Actions is not part of app delivery.
   and ensure the release commit contains the features running in production.
 - For persistent data, inspect the actual driver and mount; a local directory
   is not a separately billed Hetzner volume or an enforced size reservation.
-- Do not delete, purge, rollback, migrate, promote, or recover resources
+- Do not delete, purge, rollback, migrate, or recover resources
   without explicit user intent.
 
 ## Core model
@@ -91,8 +91,7 @@ OCD without GitHub Actions minutes.
 ```text
 ocd bootstrap [--domain=HOSTNAME] [--app-domain=SUFFIX]
     [--server-type=TYPE] [--location=LOCATION]
-ocd deploy [manifest] [--auth-password-env=KEY]
-    [--commit=sha] [--app=EXISTING_APP]
+ocd deploy [manifest] [--commit=sha] [--app=EXISTING_APP]
     [--dry-run] [--config-only]
 ocd deploy stack [manifest] [--config-only] [--commit=sha]
 ocd release <app> --image <repository@sha256:digest> [--commit <sha>]
@@ -100,7 +99,6 @@ ocd doctor [manifest]
 ocd registry <status|login|logout>
 ocd source <status|login|logout>
 ocd runners ls
-ocd runners bootstrap
 ocd runners install --server=<name|id> [--name=X]
 ocd runners sources
 ocd runners webhook-secret <source-id>
@@ -112,7 +110,6 @@ ocd app replicas <app>
 ocd logs <app> [--tail=N]
 ocd restart <app>
 ocd rollback <app> [--deployment=<id>]
-ocd promote --from=<source-app> --to=<destination-app>
 ocd pause <app>
 ocd unpause <app>
 ocd envs <list|show|create|copy|rename|set|unset|deleted|restore|remove|purge>
@@ -143,11 +140,11 @@ OCD injects topic-scoped publish/subscribe tokens; use
 - [Stack manifest](docs/stack-manifest.md)
 - [Build workers and webhooks](docs/build-workers-and-webhooks.md)
 - [Immutable images and health](docs/immutable-images-and-health.md)
-- [Releases, promotion, and rollback](docs/releases-promotion-and-rollback.md)
+- [Releases and rollback](docs/releases-and-rollback.md)
 - [CLI reference](docs/cli-reference.md)
 - [Environments and secrets](docs/environments-and-secrets.md)
 - [Networking and ingress](docs/networking-and-ingress.md)
-- [Hetzner infrastructure](docs/infrastructure-and-enrollment.md)
+- [Hetzner infrastructure](docs/hetzner-infrastructure.md)
 - [Scaling, storage, and placement](docs/scaling-storage-and-placement.md)
 - [Operations, database recovery, and panel backups](docs/operations-and-recovery.md)
 - [Security and deletion](docs/security-and-deletion.md)

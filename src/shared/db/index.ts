@@ -67,7 +67,7 @@ export {
   markOlderBuildSourceDeliveriesSuperseded,
   compactBuildSourceDeliveries,
 } from "./build-source-deliveries.ts";
-export type { AppRow, AppIngressSettings, PublicProtocol, InternalProtocol } from "./apps.ts";
+export type { AppRow, AppIngressSettings, InternalProtocol } from "./apps.ts";
 export {
   getApps,
   getApp,
@@ -76,7 +76,6 @@ export {
   insertApp,
   insertAppWithFirstReplica,
   getServersForApp,
-  hasRunningReplicas,
   updateAppStatus,
   requestAppRollout,
   clearAppRolloutRequest,
@@ -98,22 +97,16 @@ export {
   updateAppDomain,
   updateAppVolume,
   updateAppDesiredVolume,
-  updateAppExtraVolumes,
-  parseExtraVolumes,
   parseAppCommand,
   parseAppCapabilities,
   updateAppRuntimeOptions,
   updateAppMemory,
   updateAppCpu,
-  updateAppAuthPassword,
   updateAppPublic,
   updateAppInternalProtocol,
   updateAppPlacement,
-  setAppTarget,
   setAppStackNeeds,
   parseStackNeeds,
-  getAppTargets,
-  getStagingSibling,
   updateAppIngressSettings,
   updateAppEnvironment,
   getAppsByEnvironmentId,
@@ -126,14 +119,6 @@ export {
   allocateInternalPort,
   INTERNAL_PORT_BASE,
   INTERNAL_PORT_COUNT,
-  allocatePublicPort,
-  getAppByPublicPort,
-  updateAppPublicExposure,
-  publicPortRange,
-  PUBLIC_TCP_PORT_BASE,
-  PUBLIC_TCP_PORT_COUNT,
-  PUBLIC_UDP_PORT_BASE,
-  PUBLIC_UDP_PORT_COUNT,
 } from "./apps.ts";
 export type { RetiredVolumeRow } from "./retired-volumes.ts";
 export {
@@ -144,7 +129,7 @@ export {
 } from "./retired-volumes.ts";
 export type { VolumeDeletionAuditRow } from "./volume-audit.ts";
 export { beginVolumeDeletionAudit, finishVolumeDeletionAudit, getVolumeDeletionAudit } from "./volume-audit.ts";
-export type { ReplicaRow, MetricSampleRow, ScalingEventRow } from "./replicas.ts";
+export type { ReplicaRow, MetricSampleRow, ReplicaEventRow } from "./replicas.ts";
 export {
   insertReplica,
   getReplicas,
@@ -163,8 +148,8 @@ export {
   getRecentAppMetrics,
   getRecentMetricsByReplicas,
   pruneOldMetrics,
-  insertScalingEvent,
-  getScalingEvents,
+  insertReplicaEvent,
+  getReplicaEvents,
 } from "./replicas.ts";
 export {
   reserveHostPort,
@@ -255,8 +240,6 @@ export {
   getStackByName,
   getStacks,
   updateStackStatus,
-  updateStackStagingEnvironment,
-  updateStackStagingEnvKeys,
   appendStackLog,
   getStackLog,
   deleteStack,

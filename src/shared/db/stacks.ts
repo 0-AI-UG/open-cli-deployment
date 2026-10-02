@@ -5,11 +5,6 @@ export type StackRow = {
   id: number;
   name: string;
   environment_id: number | null;
-  /** The stack's explicitly selected staging environment. NULL = none. */
-  staging_environment_id: number | null;
-  /** JSON string array of keys explicitly applied through stack staging_env.
-   * Copied production keys are intentionally absent. */
-  staging_env_keys: string;
   status: string;
   deploy_log: string;
   created_at: string;
@@ -18,23 +13,11 @@ export type StackRow = {
 export function insertStack(data: {
   name: string;
   environment_id: number | null;
-  staging_environment_id?: number | null;
 }): StackRow {
   const result = db.query(
-    "INSERT INTO stacks (name, environment_id, staging_environment_id) VALUES (?, ?, ?) RETURNING *"
-  ).get(data.name, data.environment_id, data.staging_environment_id ?? null) as StackRow;
+    "INSERT INTO stacks (name, environment_id) VALUES (?, ?) RETURNING *"
+  ).get(data.name, data.environment_id) as StackRow;
   return result;
-}
-
-/** Set (or clear, with null) the stack's shared staging environment. Members are
- *  re-pointed at it on the next stack deploy. */
-export function updateStackStagingEnvironment(id: number, environmentId: number | null): void {
-  db.query("UPDATE stacks SET staging_environment_id = ? WHERE id = ?").run(environmentId, id);
-}
-
-export function updateStackStagingEnvKeys(id: number, keys: string[]): void {
-  db.query("UPDATE stacks SET staging_env_keys = ? WHERE id = ?")
-    .run(JSON.stringify([...new Set(keys)].sort()), id);
 }
 
 export function getStack(id: number): StackRow | null {

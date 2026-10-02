@@ -64,24 +64,14 @@ For source builds, `build` contains:
 Paths must not be absolute, contain `..`, or use backslashes. Credentials never
 belong in this object.
 
-## Manifest catalogs
-
-A catalog is an ordinary version-controlled directory of app manifests, not an
-OCD resource or API. Deploy a catalog entry directly with `ocd deploy
-path/to/.ocd-deploy.json`, or reference it from `apps.<key>.manifest` in an
-`ocd-stack.json`. PostgreSQL, Redis, and similar infrastructure use the same app
-lifecycle as every other manifest.
-
 ## Other top-level fields
 
 `$schema`, `$llm`, `name`, `description`, `icon`, `build`, `image`,
 `container_port`, `env`, `outputs`, `storage`, `command`, `cap_add`, `post_start`,
 `environment`, required `volume` (`null` for none),
-`suggested_app_name`, `domain`, `auth`, `placement`,
-`public`, `extra_volumes`, `memory_mb`, `cpu_limit`,
-`health_check`, `internal_protocol`, `sticky`, `rate_limit_rps`,
-`ip_allowlist`, `compress`, `public_port`, and `public_protocol` retain their
-normal complete-desired-state semantics.
+`suggested_app_name`, `domain`, `placement`, `public`, `memory_mb`,
+`cpu_limit`, `health_check`, `internal_protocol`, `rate_limit_rps`, and
+`compress` retain their normal complete-desired-state semantics.
 
 The `env` object maps variable names to literal strings or `{ "from":
 "environment.KEY" }` / `{ "from": "apps.MEMBER.outputs.KEY" }` references.
@@ -110,7 +100,6 @@ and `OCD_STORAGE_URL`; `media` injects `OCD_MEDIA_STORAGE_TOKEN` and
 read-only. Use the OCD storage client, not a standard S3 SDK with this token.
 Increment `generation` to rotate. Old grants are retired after replicas attest
 to the new configuration. Removing `storage` removes the app's bindings.
-Staging manifests must select their own explicit bucket/prefix scope.
 
 ## Notifications
 
@@ -137,7 +126,7 @@ independent build repositories must vendor the source until it is published.
 The native ntfy
 API also works with the injected bearer token. These are managed topic-scoped
 grants; there is no separate manual notification grant/revoke CLI.
-Each app has isolated topics, including staging targets. Increment `generation`
+Each app has isolated topics. Increment `generation`
 to rotate credentials; old credentials retire after rollout attestation.
 Removing `notifications` removes the bindings. Admin → Panel → Shared notifications configures
 personal platform alerts independently of application messages.

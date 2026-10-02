@@ -20,7 +20,6 @@ type ValidateOut = {
   hostMountPath: string;
   serverId: number | null;
   hasServer: boolean;
-  extraVolumes: string;
   appName: string;
 };
 
@@ -42,7 +41,6 @@ const validate: Step<DetachVolumeInput, ValidateOut> = {
       hostMountPath,
       serverId: server?.id ?? null,
       hasServer: !!server,
-      extraVolumes: app.extra_volumes,
       appName: app.name,
     };
   },
@@ -107,14 +105,9 @@ const clearAppVolume: Step<DetachVolumeInput, { ok: true }> = {
 const recreateContainer: Step<DetachVolumeInput, { ok: boolean }> = {
   name: "recreate_container",
   label: "Recreate container without volume",
-  async run(ctx, prior) {
-    const v = prior["validate"] as ValidateOut;
+  async run(ctx) {
     const r = await softStep(ctx, "recreate_container", async () => {
-      const result = await recreateAppContainer(
-        ctx.input.appId,
-        undefined,
-        db.parseExtraVolumes(v.extraVolumes),
-      );
+      const result = await recreateAppContainer(ctx.input.appId, undefined);
       if (!result.ok) throw new Error(result.error || "Failed to recreate container");
     });
     return { ok: r.ok };

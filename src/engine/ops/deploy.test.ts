@@ -64,7 +64,6 @@ import * as db from "../../shared/db.ts";
 import deployOp, { appVolumeName, resolveAppDomain } from "./deploy.ts";
 import redeployOp from "./redeploy.ts";
 import rollbackOp from "./rollback.ts";
-import promoteOp from "./promote.ts";
 
 // Synthetic op context. Steps that don't call park/unpark can use this shape.
 function makeCtx(input: any) {
@@ -737,7 +736,7 @@ describe("deploy op: structure", () => {
   });
 
   test("revision-changing operations complete a reversible snapshot before mutation", () => {
-    for (const op of [redeployOp, rollbackOp, promoteOp]) {
+    for (const op of [redeployOp, rollbackOp]) {
       const names = op.steps.map((step) => step.name);
       const snapshotIndex = names.indexOf("snapshot_current_revision");
       expect(snapshotIndex).toBeGreaterThan(0);
@@ -754,10 +753,8 @@ describe("deploy op: structure", () => {
   test("a failing artifact rollout or swap is restored by the prior completed snapshot step", () => {
     const redeployArtifact = redeployOp.steps.find((step) => step.name === "pull_and_run_candidate");
     const rollbackSwap = rollbackOp.steps.find((step) => step.name === "swap_container");
-    const promoteSwap = promoteOp.steps.find((step) => step.name === "swap_container");
     expect(redeployArtifact?.compensate).toBeUndefined();
     expect(rollbackSwap?.compensate).toBeUndefined();
-    expect(promoteSwap?.compensate).toBeUndefined();
   });
 
   test("has the expected step sequence", () => {
@@ -781,9 +778,9 @@ describe("deploy op: structure", () => {
   });
 });
 
-// --- Deploy targets: isolated environments -----------------------------------
+// --- Environments -------------------------------------------------------------
 
-describe("deploy step: insert_app_row deploy targets", () => {
+describe("deploy step: insert_app_row environments", () => {
   function makeReadyServer() {
     return db.insertServer({
       name: `srv-${randomSuffix()}`,
@@ -808,46 +805,21 @@ describe("deploy step: insert_app_row deploy targets", () => {
     create_volume: null,
   });
 
-  /** Parent production app with a linked environment. */
-  async function makeParentWithEnvironment() {
-    const { serializeEnvVars } = await import("../../shared/env-crypto.ts");
-    const parentName = `prod-${randomSuffix()}`;
-    const parentEnv = db.insertEnvironment(
-      parentName,
-      serializeEnvVars([{ key: "DATABASE_URL", value: "postgres://prod-db", secret: false, updated_at: "t" }]),
-    );
-    const parent = db.insertApp({
-      name: parentName,
-      domain: `${parentName}.example.com`,
-      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      container_port: 3000,
-      env_vars: "{}",
-      environment_id: parentEnv.id,
-      target: "production",
-    });
-    return { parent, parentEnv, parentName };
-  }
-
-  test("non-production target deploys with its explicitly selected environment; no live inheritance", async () => {
+  test("deploys with its explicitly selected environment and resolves only its vars", async () => {
     const { serializeEnvVars } = await import("../../shared/env-crypto.ts");
     const server = makeReadyServer();
-    const { parent, parentName } = await makeParentWithEnvironment();
-    const stagingName = `${parentName}-staging`;
-    // The user duplicated production's environment and tweaked it — staging is
-    // deployed with THIS explicit env, nothing inherited from the parent.
-    const stagingEnv = db.insertEnvironment(
-      stagingName,
-      serializeEnvVars([{ key: "DATABASE_URL", value: "postgres://staging-db", secret: false, updated_at: "t" }]),
+    const name = `explicit-${randomSuffix()}`;
+    const env = db.insertEnvironment(
+      `${name}-env`,
+      serializeEnvVars([{ key: "DATABASE_URL", value: "postgres://db", secret: false, updated_at: "t" }]),
     );
 
     const step = stepByName("insert_app_row");
     const { ctx } = makeCtx({
-      app_name: stagingName,
+      app_name: name,
       image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       container_port: 3000,
-      target: "staging",
-      target_of: parent.id,
-      environment_id: stagingEnv.id,
+      environment_id: env.id,
       env: {DATABASE_URL:{from:"environment.DATABASE_URL"}},
       placement: { [server.name]: 1 },
     });
@@ -857,82 +829,24 @@ describe("deploy step: insert_app_row deploy targets", () => {
       flatEnvVars: Record<string, string>;
     };
 
-    // App row carries the target tag, parent link, and resolved placement.
     const app = db.getApp(out.appId)!;
-    expect(app.target).toBe("staging");
-    expect(app.target_of).toBe(parent.id);
     expect(JSON.parse(app.placement!)).toEqual({ [String(server.id)]: 1 });
-
-    // Links to the selected env and resolves ONLY its vars — the parent's
-    // DATABASE_URL does not leak in (no inheritance).
-    expect(out.environmentId).toBe(stagingEnv.id);
-    expect(out.flatEnvVars).toEqual({ DATABASE_URL: "postgres://staging-db" });
-
+    expect(out.environmentId).toBe(env.id);
+    expect(out.flatEnvVars).toEqual({ DATABASE_URL: "postgres://db" });
+    expect(db.getEnvironments().some((e) => e.name === name)).toBe(false);
   });
 
-  test("an explicit environment_id is used as-is (no isolated-environment creation)", async () => {
-    const { serializeEnvVars } = await import("../../shared/env-crypto.ts");
+  test("no selected environment creates none and resolves an empty env", async () => {
     const server = makeReadyServer();
-    const { parent, parentName } = await makeParentWithEnvironment();
-    const linked = db.insertEnvironment(`explicit-${randomSuffix()}`, serializeEnvVars([]));
-    const devName = `${parentName}-dev`;
-
-    const step = stepByName("insert_app_row");
-    const { ctx } = makeCtx({
-      app_name: devName,
-      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      container_port: 3000,
-      target: "dev",
-      target_of: parent.id,
-      environment_id: linked.id,
-    });
-    const out = (await step.run(ctx, serverPrior(server))) as { environmentId: number | null };
-    expect(out.environmentId).toBe(linked.id);
-    // No "<app_name>" environment was created.
-    expect(db.getEnvironments().some((e) => e.name === devName)).toBe(false);
-  });
-
-  test("production target creates no isolated environment", async () => {
-    const server = makeReadyServer();
-    const name = `prod-only-${randomSuffix()}`;
+    const name = `bare-${randomSuffix()}`;
     const step = stepByName("insert_app_row");
     const { ctx } = makeCtx({
       app_name: name,
       image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       container_port: 3000,
-      target: "production",
-    });
-    const out = (await step.run(ctx, serverPrior(server))) as { appId: number; environmentId: number | null };
-    const app = db.getApp(out.appId)!;
-    expect(app.target).toBe("production");
-    expect(app.target_of).toBeNull();
-    expect(out.environmentId).toBeNull();
-    expect(db.getEnvironments().some((e) => e.name === name)).toBe(false);
-  });
-
-  test("non-production target with no selected environment creates none and resolves an empty env", async () => {
-    const server = makeReadyServer();
-    const parentName = `bare-${randomSuffix()}`;
-    const parent = db.insertApp({
-      name: parentName,
-      domain: `${parentName}.example.com`,
-      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      container_port: 3000,
-      env_vars: "{}",
-    });
-    const stagingName = `${parentName}-staging`;
-    const step = stepByName("insert_app_row");
-    const { ctx } = makeCtx({
-      app_name: stagingName,
-      image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      container_port: 3000,
-      target: "staging",
-      target_of: parent.id,
     });
     const out = (await step.run(ctx, serverPrior(server))) as { environmentId: number | null; flatEnvVars: Record<string, string> };
-    // No env is auto-created and none is linked; the container just gets no
-    // user env vars (staging without a selected environment).
-    expect(db.getEnvironments().some((e) => e.name === stagingName)).toBe(false);
+    expect(db.getEnvironments().some((e) => e.name === name)).toBe(false);
     expect(out.environmentId).toBeNull();
     expect(out.flatEnvVars).toEqual({});
   });

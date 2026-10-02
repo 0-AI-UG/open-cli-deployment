@@ -156,7 +156,7 @@ describe("startAppReplica", () => {
         bindAddr: "10.0.0.1",
         hostPort: 8083,
         containerPort: 3000,
-        extraVolumes: ["/etc:/etc"],
+        volumeMount: "/etc:/etc",
       }),
     ).rejects.toThrow(/allowlist/);
   });

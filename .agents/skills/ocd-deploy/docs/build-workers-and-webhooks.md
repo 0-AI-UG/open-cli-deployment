@@ -20,7 +20,7 @@ For each build OCD:
    cache stays warm until worker disk free space falls below 16 GiB, when it is
    trimmed to 4 GiB.
 
-The immutable digest remains the deployment-history, rollback, promotion, and
+The immutable digest remains the deployment-history, rollback, and
 runtime-attestation boundary.
 
 Worker installation provisions a dedicated `ocd-worker` BuildKit container
@@ -36,19 +36,13 @@ verification.
 
 ## Install a worker
 
-Deploying a `build` manifest checks readiness first. When no worker exists it can reserve
-an empty server and install a dedicated worker before resuming the deploy. It
-never creates servers: when no empty server exists, create one with
-`ocd servers create` first. This can also be run explicitly:
+Deploying a `build` manifest checks readiness first and stops when no worker is
+online. OCD never picks or creates a build server for you: choose a dedicated
+server (create one with `ocd servers create` if needed) and install the worker
+on it explicitly. The server must be ready and contain no panel or app:
 
 ```bash
 ocd doctor
-ocd runners bootstrap
-```
-
-For manual placement, the server must be ready and contain no panel or app:
-
-```bash
 ocd runners install --server=ocd-build-1 --name=ocd-build-1
 ocd runners ls
 ```

@@ -71,7 +71,7 @@ describe("embedded OCD skill", () => {
     for (const link of overviewLinks) {
       expect(files[link]).toBeDefined();
     }
-    expect(files["docs/infrastructure-and-enrollment.md"]).toContain("Hetzner Object Storage");
+    expect(files["docs/hetzner-infrastructure.md"]).toContain("Hetzner Object Storage");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("consumes no Actions minutes");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("untrusted forks");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("X-Hub-Signature-256");
@@ -88,29 +88,29 @@ describe("embedded OCD skill", () => {
     );
     const cli = files["docs/cli-reference.md"];
     for (const command of [
-      "deploy", "release", "apps", "logs", "restart", "rollback", "promote", "pause",
+      "deploy", "release", "apps", "logs", "restart", "rollback", "pause",
       "unpause", "envs", "stack", "ops", "servers",
       "ssh", "app", "move", "resources", "volumes", "buckets", "runners",
     ]) {
       expect(cli).toContain(`ocd ${command}`);
     }
     for (const flag of [
-      "--dry-run", "--config-only", "--auth-password-env", "--to",
+      "--dry-run", "--config-only", "--to",
       "--tail", "--since", "--app",
     ]) {
       expect(cli).toContain(flag);
     }
     for (const removed of [
       "ocd config", "ocd redeploy", "ocd envs attach", "ocd envs detach",
-      "ocd scale policy set", "ocd app webhook enable",
+      "ocd scale ", "ocd app webhook enable",
       "ocd app webhook set", "ocd app webhook disable",
       "ocd webhook plan", "ocd deploy --image", "--image=MEMBER",
-      "ocd service", "managed service",
+      "ocd service", "managed service", "ocd promote", "ocd app staging", "staging_environment",
+      "--auth-password-env",
     ]) {
       expect(cli).not.toContain(removed);
     }
     expect(cli).toContain("ocd release <app> --image <repository@sha256:digest>");
-    expect(cli).toContain("ocd promote --from=<source-app> --to=<destination-app>");
     expect(cli).toContain("ocd rollback <app> [--deployment=<id>]");
     expect(cli).toContain("ocd runners webhook-secret <source-id>");
     expect(cli).toContain("ocd app redeploy <app>");
@@ -134,7 +134,7 @@ describe("embedded OCD skill", () => {
     expect(files.find((file) => file.path === "docs/build-workers-and-webhooks.md")?.contents).toContain("docker buildx");
   });
 
-  test("documents private pull credentials and explicit staging boundaries", () => {
+  test("documents private pull credentials", () => {
     const files = Object.fromEntries(
       renderSkillFiles("https://panel.example.com").map((file) => [
         file.path,
@@ -142,16 +142,11 @@ describe("embedded OCD skill", () => {
       ]),
     );
     const images = files["docs/immutable-images-and-health.md"];
-    const releases = files["docs/releases-promotion-and-rollback.md"];
-    const stack = files["docs/stack-manifest.md"];
 
     expect(images).toContain("Admin Settings");
     expect(images).toContain("OCI credential");
     expect(images).toContain("runtime pulls");
-    expect(releases).toContain("Staging is a separately deployed app");
-    expect(releases).toContain("ocd promote --from=api-staging --to=api");
-    expect(stack).toContain("does not synthesize staging siblings");
-    expect(stack).toContain("Create staging apps separately");
+    expect(files["docs/stack-manifest.md"]).not.toContain("staging_environment");
   });
 
   test("has no broken local markdown links", () => {

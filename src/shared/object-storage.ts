@@ -54,18 +54,6 @@ function methodsFor(permissions: StorageBindings[string]["permissions"]): Storag
 /** Prepare replacement grants before a rollout; current grants stay usable until all replicas attest. */
 export async function prepareStorageBindings(app: { id: number; name: string }, bindings: StorageBindings): Promise<void> {
   if (Object.keys(bindings).length) storageAuthorizationUrl();
-  const owner = db.getApp(app.id);
-  if (owner) {
-    const family = db.getApps().filter(other => other.id !== owner.id &&
-      (other.id === owner.target_of || other.target_of === owner.id || (owner.target_of && other.target_of === owner.target_of)) &&
-      (other.target || "production") !== (owner.target || "production"));
-    for (const relative of family) for (const destination of Object.values(getAppStorage(relative.id))) {
-      if (Object.values(bindings).some(b => b.bucket === destination.bucket &&
-        (b.prefix.startsWith(destination.prefix) || destination.prefix.startsWith(b.prefix)))) {
-        throw new Error(`Storage scope overlaps ${relative.name}; select a separate bucket or prefix for each deploy target`);
-      }
-    }
-  }
   for (const [name, spec] of Object.entries(bindings)) {
     const location = storageLocation();
     const current = getStorageGrants().find(g => g.appId === app.id && g.binding === name && g.specKey === specKey(spec));

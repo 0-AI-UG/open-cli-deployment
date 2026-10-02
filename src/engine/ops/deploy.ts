@@ -24,7 +24,7 @@ import {
 } from "../../shared/remote/index.ts";
 import { syncAppIngress, syncAllTraefik } from "../scale/traefik-manager.ts";
 import { replicaBindHost } from "../scale/types.ts";
-import { validateDeployRequest, assertSafeHostPath } from "../../shared/validate.ts";
+import { validateDeployRequest } from "../../shared/validate.ts";
 import { createMasker } from "../../shared/mask.ts";
 import { platformEnvVars } from "../../shared/env-crypto.ts";
 import { serializeRuntimeConfig, resolveRuntimeEnv, runtimeAppFromRequest, preflightRuntimeEnv } from "../../shared/runtime-env.ts";
@@ -153,12 +153,6 @@ const resolvePlacementStep: Step<DeployInput, ServerOut> = {
       throw new Error(
         "Fleet limit of 200 apps reached (internal port block 20000-20199 is full). Destroy an app before deploying a new one.",
       );
-    }
-
-    // Reject unsafe volume host paths early so the user sees a clear error
-    // rather than a deploy that fails deep inside docker run.
-    for (const v of req.extra_volumes || []) {
-      assertSafeHostPath(v.host_path, req.app_name);
     }
 
     // The declared placement is the whole truth: every named server must
@@ -380,17 +374,11 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
     const useInternalTls = useDomain.endsWith(".nip.io");
 
     const environmentId = req.environment_id ?? null;
-    const targetTag = req.target;
-    const targetOf = req.target_of;
     const flatEnvVars = await resolveRuntimeEnv(runtimeAppFromRequest(req, req.stack_id ?? null));
-
-    const extraVolumes = (req.extra_volumes || []).map(
-      (v) => `${v.host_path}:${v.container_path}`,
-    );
 
     // Single atomic commit: app row + first replica + volume intent.
     // metadata. Without the transaction a mid-step crash could leave the DB
-    // with an app but no DNS / volume / extra-volume rows.
+    // with an app but no DNS / volume rows.
     const { app, replica } = dbInstance.transaction(() => {
       const result = db.insertAppWithFirstReplica(
         {
@@ -399,7 +387,6 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
           image_ref: req.image_ref!,
           container_port: req.container_port,
           env_vars: serializeRuntimeConfig(req),
-          auth_password: req.auth_password,
           environment_id: environmentId ?? undefined,
           public: req.public,
           health_check: req.health_check,
@@ -409,16 +396,10 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
           health_check_max_age_seconds: req.health_check_max_age_seconds,
           health_check_expected_statuses: req.health_check_expected_statuses,
           internal_protocol: req.internal_protocol,
-          sticky: req.sticky,
           rate_limit_rps: req.rate_limit_rps,
-          ip_allowlist: req.ip_allowlist,
           health_check_path: req.health_check_path,
           compress: req.compress,
-          public_port: req.public_port,
-          public_protocol: req.public_protocol,
           placement: server.placement,
-          target: targetTag,
-          target_of: targetOf,
           desired_volume_id: req.volume_id ?? "",
           desired_volume_size: req.volume_size ?? 0,
           desired_volume_path: req.volume_path ?? "/data",
@@ -433,9 +414,6 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
       if (volume) {
         db.updateAppVolume(result.app.id, volume.volumeId, volume.volumeMount, volume.attached, volume.driverId);
         if (volume.attached) db.deleteRetiredVolume(volume.volumeId);
-      }
-      if (extraVolumes.length > 0) {
-        db.updateAppExtraVolumes(result.app.id, extraVolumes);
       }
       if (typeof req.memory_mb === "number" && req.memory_mb > 0) {
         db.updateAppMemory(result.app.id, req.memory_mb);
@@ -625,7 +603,6 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
         hostPort: appOut.hostPort,
         envVars,
         volumeMount: volume?.volumeMount,
-        extraVolumes: (req.extra_volumes || []).map((v) => `${v.host_path}:${v.container_path}`),
         bindAddr: containerBindAddr,
         memoryMb: req.memory_mb || undefined,
         cpus: req.cpu_limit || undefined,

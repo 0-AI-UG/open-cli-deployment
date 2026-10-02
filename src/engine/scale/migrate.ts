@@ -445,7 +445,6 @@ async function restartSourceReplica(
     configRevision: app.config_revision,
     envHash: hashEnvironment(envVars),
     volumeMount: rb.originalVolumeMount || undefined,
-    extraVolumes: db.parseExtraVolumes(app.extra_volumes),
     memoryMb: app.memory_mb || undefined,
     cpus: app.cpu_limit || undefined,
     command: db.parseAppCommand(app),

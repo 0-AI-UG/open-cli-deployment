@@ -7,7 +7,6 @@ import { webConfirm, withWebConfirmation } from "../confirm.ts";
 import {
   manifestRepoLocation,
   readManifest,
-  resolveAuthPassword,
   manifestHash,
   localGitCommit,
 } from "../manifest.ts";
@@ -29,8 +28,6 @@ interface StackListItem {
   created_at: string;
   app_count: number;
   environment_id?: number | null;
-  /** The stack's shared staging environment, remembered across re-ups. */
-  staging_environment_id?: number | null;
   last_operation_id?: number | null;
   last_operation_status?: string | null;
   last_operation_failed?: boolean;
@@ -159,8 +156,7 @@ ${BOLD}Options:${RESET}
                              reuse the current immutable images
   --allow-unknown            Compatibility escape hatch for newer manifest keys
 
-Select shared production and staging environments with the stack manifest's
-\`environment\` and \`staging_environment\` fields.`);
+Select the shared environment with the stack manifest's \`environment\` field.`);
 }
 
 export function expandAppDependents(
@@ -195,18 +191,14 @@ function clientVisibleConfigDiff(existing: Record<string, unknown>, desired: App
     health_check_file: desired.health_check_file ?? "",
     health_check_max_age_seconds: desired.health_check_max_age_seconds ?? 0,
     internal_protocol: desired.internal_protocol ?? "http",
-    sticky: desired.sticky ?? false,
     rate_limit_rps: desired.rate_limit_rps ?? 0,
-    ip_allowlist: desired.ip_allowlist ?? "",
     compress: desired.compress ?? false,
-    public_port: desired.public_port ?? null,
-    public_protocol: desired.public_protocol ?? "tcp",
     desired_volume_id: desired.volume_id ?? "",
     desired_volume_size: desired.volume_size ?? 0,
     desired_volume_path: desired.volume_path ?? "/data",
   };
   const booleanFields = new Set([
-    "public", "sticky", "compress",
+    "public", "compress",
   ]);
   const changed: string[] = [];
   for (const [field, wanted] of Object.entries(desiredValues)) {
@@ -253,7 +245,7 @@ async function resolveEnvironment(nameOrId: string): Promise<ResolvedEnv> {
 }
 
 /** The already-created stack row for this manifest (the server remembers its
- *  linked environment and staging environment across re-ups), or undefined when
+ *  linked environment across re-ups), or undefined when
  *  the stack doesn't exist yet. */
 async function findStackByName(name: string): Promise<StackListItem | undefined> {
   const list = await fetchStackList();
@@ -318,8 +310,6 @@ export async function stackUp(args: string[]): Promise<void> {
       childManifestPath,
     );
     appElement.git_commit = commit;
-    const authPassword = await resolveAuthPassword(appManifest.auth);
-    if (authPassword !== undefined) appElement.auth_password = authPassword;
     apps.push(appElement);
   }
 
@@ -327,16 +317,11 @@ export async function stackUp(args: string[]): Promise<void> {
   const dependencyApps = Object.fromEntries(apps.map((app) => [app.key, { ...manifest.apps[app.key], needs: app.needs }]));
   const existingStack = await findStackByName(manifest.name);
   const reused = manifest.environment ? await resolveEnvironment(manifest.environment) : undefined;
-  const stagingEnvironment = manifest.staging_environment
-    ? await resolveEnvironment(manifest.staging_environment) : undefined;
-  const stagingEnvId = stagingEnvironment?.id ?? null;
-  const stagingEnvName = stagingEnvironment?.name;
 
   const body: StackDeployRequest = {
     name: manifest.name,
     stack_manifest_path: stackLocation.path,
     environment_id: reused?.id ?? null,
-    staging_environment_id: stagingEnvId,
     apps,
   };
 
@@ -499,8 +484,6 @@ export async function stackUp(args: string[]): Promise<void> {
       `${DIM}Env:${RESET}   reusing environment ${reused.name}`.replace("  ", " "),
     );
   }
-  if (stagingEnvName) console.log(`${DIM}Staging:${RESET} ${stagingEnvName}`);
-  else if (stagingEnvId === null) console.log(`${DIM}Staging:${RESET} (cleared)`);
 
   const { op_id, attached } = await withWebConfirmation((headers) =>
     post<{ op_id: number; attached?: boolean }>("/api/stacks", body, headers)

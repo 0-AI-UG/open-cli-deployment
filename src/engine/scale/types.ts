@@ -51,7 +51,6 @@ export function appReplicaRunOpts(
     configRevision: app.config_revision,
     envHash: opts.envVars ? hashEnvironment(opts.envVars) : undefined,
     volumeMount: app.volume_mount || undefined,
-    extraVolumes: db.parseExtraVolumes(app.extra_volumes),
     memoryMb: app.memory_mb || undefined,
     cpus: app.cpu_limit || undefined,
     command: db.parseAppCommand(app),

@@ -129,7 +129,6 @@ export type StartAppReplicaOpts = {
   /** Override internal app aliases. */
   extraHosts?: Array<{ hostname: string; address: string }>;
   volumeMount?: string;
-  extraVolumes?: string[];
   memoryMb?: number;
   /** Per-container CPU ceiling in cores. Omit / 0 → platform default. */
   cpus?: number;
@@ -250,7 +249,6 @@ export async function startAppReplicaWithSsh(
     publish: { bindAddr: opts.bindAddr, hostPort: opts.hostPort, containerPort: opts.containerPort },
     envFilePath,
     volumeMount: opts.volumeMount,
-    extraVolumes: opts.extraVolumes,
     memoryMb: opts.memoryMb,
     cpus: opts.cpus,
     command: opts.command,

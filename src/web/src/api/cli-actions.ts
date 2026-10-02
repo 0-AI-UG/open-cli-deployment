@@ -25,9 +25,7 @@ export type ConfirmableCliAction =
   | "cancel_operation"
   | "create_server"
   | "create_bucket"
-  | "delete_bucket"
-  | "promote_app"
-  | "promote_stack";
+  | "delete_bucket";
 
 type Confirmation = { confirm_code: string; user_code: string };
 
