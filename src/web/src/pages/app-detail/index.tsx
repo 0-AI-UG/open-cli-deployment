@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { get } from "../../api/client.ts";
 import { runCliAction, runConfirmedCliAction } from "../../api/cli-actions.ts";
-import { Btn, StatusBadge, showToast, confirm, PageShell, PageState } from "../../components/ui.tsx";
+import { Btn, StatusBadge, showToast, confirm, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
 import { PermissionGate } from "../../components/permission-gate.tsx";
 import { TabBar } from "../../components/tab-bar.tsx";
 import { PausedBanner } from "../../components/paused-banner.tsx";
 import { trackOperationInToast, useResourceOperations } from "../../hooks/useOperation.ts";
-import { ArrowLeft, Play, Pause, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Play, Pause, RotateCcw, Server as ServerIcon, Trash2 } from "lucide-react";
 import { OverviewTab, type AppStorageData } from "./overview-tab.tsx";
 import { LogsTab } from "./logs-tab.tsx";
 import { DeploymentsTab } from "./deployments-tab.tsx";
@@ -126,7 +126,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
   };
 
   if (loading) return <PageState title="Loading app" />;
-  if (!app) return <PageState kind="empty" title="App not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}>Back to dashboard</Btn>} />;
+  if (!app) return <PageState kind="empty" title="App not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}>Back to overview</Btn>} />;
 
   // Cold-start ETA sub-label for the state badge. Scale-to-zero is a
   // `docker stop` on the tenant host, so wake is always ~1s.
@@ -148,78 +148,93 @@ export function AppDetailPage({ appId }: { appId: number }) {
   return (
     <PageShell className={isMobile ? "!pb-5 !pt-4" : ""}>
       {isMobile ? (
-        <div className="mb-5">
+        <header>
           <div className="flex items-start gap-3">
-            <button onClick={() => { window.location.hash = "#/"; }} aria-label="Back to dashboard" className="grid h-11 w-11 shrink-0 place-items-center border-2 border-fg bg-bg-raised shadow-neo-sm active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"><ArrowLeft size={18} /></button>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-muted">App</p>
-              <h1 className="mt-0.5 truncate font-mono text-lg font-bold uppercase text-fg">{app.name}</h1>
+            <button onClick={() => { window.location.hash = "#/"; }} aria-label="Back to overview" className="grid h-11 w-11 shrink-0 place-items-center rounded-full border bg-surface text-fg shadow-xs transition-colors active:bg-subtle"><ArrowLeft size={18} /></button>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted">App</p>
+              <h1 className="truncate text-2xl font-semibold tracking-tight text-fg">{app.name}</h1>
               <div className="mt-1"><StatusBadge status={app.status} subLabel={app.environment_stale ? "stale environment" : badgeSubLabel} /></div>
             </div>
-            <button onClick={() => setMobileActionsOpen(true)} aria-label="App actions" className="grid h-11 w-11 shrink-0 place-items-center rounded-full active:bg-alt"><MoreHorizontal size={23} /></button>
+            <button onClick={() => setMobileActionsOpen(true)} aria-label="App actions" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted transition-colors active:bg-subtle"><MoreHorizontal size={20} /></button>
           </div>
-          {server && <p className="ml-14 mt-2 truncate font-mono text-[9px] text-muted">{server.name} · {server.ipv4}</p>}
-        </div>
+          {server && (
+            <p className="ml-14 mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted">
+              <ServerIcon size={12} className="shrink-0" />
+              <span className="truncate">{server.name}</span>
+              <span className="truncate font-mono">{server.ipv4}</span>
+            </p>
+          )}
+        </header>
       ) : (
-      <div className="flex items-center gap-3 mb-6">
-        <Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}><ArrowLeft size={14} /></Btn>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="font-mono font-bold text-sm text-fg uppercase">{app.name}</h1>
+        <PageHeader
+          backHref="#/"
+          backLabel="Overview"
+          eyebrow="App"
+          title={app.name}
+          meta={<>
             <StatusBadge
               status={app.status}
               subLabel={app.environment_stale ? "stale environment" : badgeSubLabel}
             />
-          </div>
-          {server && (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="font-mono text-[9px] text-muted">{server.name} ({server.ipv4})</span>
-            </div>
-          )}
-        </div>
-        <div className="flex gap-1">
-          <PermissionGate permission="apps.restart" appId={appId} environmentId={app.environment_id}>
-            <Btn size="xs" loading={actionLoading === "restart" || ops.isBusyWith("restart_app")} disabled={ops.isBusy} onClick={() => action("restart", () => runCliAction("app.restart", { app: String(appId) }))}>
-              <RotateCcw size={12} /> Restart
-            </Btn>
-          </PermissionGate>
-          <PermissionGate permission="apps.pause" appId={appId} environmentId={app.environment_id}>
-            {app.status === "paused" ? (
-              <Btn size="xs" loading={actionLoading === "unpause" || ops.isBusyWith("unpause_app")} disabled={ops.isBusy} onClick={() => action("unpause", () => runCliAction("app.unpause", { app: String(appId) }))}>
-                <Play size={12} /> Unpause
-              </Btn>
-            ) : (
-              <Btn size="xs" loading={actionLoading === "pause" || ops.isBusyWith("pause_app")} disabled={ops.isBusy} onClick={() => action("pause", () => runCliAction("app.pause", { app: String(appId) }))}>
-                <Pause size={12} /> Pause
-              </Btn>
+            {server && (
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <ServerIcon size={13} className="shrink-0" />
+                <span className="text-fg-dim">{server.name}</span>
+                <span className="font-mono text-xs">{server.ipv4}</span>
+              </span>
             )}
-          </PermissionGate>
-          <PermissionGate permission="apps.destroy" appId={appId} environmentId={app.environment_id}>
-            <Btn
-              size="xs" variant="danger"
-              loading={actionLoading === "destroy" || ops.isBusyWith("destroy_app")}
-              disabled={ops.isBusy}
-              onClick={async () => {
-                if (await confirm("Destroy App", `Permanently destroy "${app.name}"?`, true)) {
-                  await action("destroy", () => runConfirmedCliAction(
-                    "app.delete",
-                    { app: String(appId) },
-                    { action: "delete_app", resourceType: "app", resourceId: appId },
-                  ));
-                  window.location.hash = "#/";
-                }
-              }}
-            ><Trash2 size={12} /> Destroy</Btn>
-          </PermissionGate>
-        </div>
-      </div>
+            {app.domain && !!app.public && (
+              <a href={`https://${app.domain}`} target="_blank" rel="noopener" className="inline-flex min-w-0 items-center gap-1 transition-colors hover:text-fg">
+                <span className="truncate font-mono text-xs">{app.domain}</span>
+                <ExternalLink size={12} className="shrink-0" />
+              </a>
+            )}
+          </>}
+          actions={<>
+            <PermissionGate permission="apps.restart" appId={appId} environmentId={app.environment_id}>
+              <Btn loading={actionLoading === "restart" || ops.isBusyWith("restart_app")} disabled={ops.isBusy} onClick={() => action("restart", () => runCliAction("app.restart", { app: String(appId) }))}>
+                <RotateCcw size={14} /> Restart
+              </Btn>
+            </PermissionGate>
+            <PermissionGate permission="apps.pause" appId={appId} environmentId={app.environment_id}>
+              {app.status === "paused" ? (
+                <Btn loading={actionLoading === "unpause" || ops.isBusyWith("unpause_app")} disabled={ops.isBusy} onClick={() => action("unpause", () => runCliAction("app.unpause", { app: String(appId) }))}>
+                  <Play size={14} /> Unpause
+                </Btn>
+              ) : (
+                <Btn loading={actionLoading === "pause" || ops.isBusyWith("pause_app")} disabled={ops.isBusy} onClick={() => action("pause", () => runCliAction("app.pause", { app: String(appId) }))}>
+                  <Pause size={14} /> Pause
+                </Btn>
+              )}
+            </PermissionGate>
+            <PermissionGate permission="apps.destroy" appId={appId} environmentId={app.environment_id}>
+              <Btn
+                variant="ghost"
+                className="hover:!bg-danger/10 hover:!text-danger"
+                loading={actionLoading === "destroy" || ops.isBusyWith("destroy_app")}
+                disabled={ops.isBusy}
+                onClick={async () => {
+                  if (await confirm("Destroy app", `Permanently destroy "${app.name}"?`, true)) {
+                    await action("destroy", () => runConfirmedCliAction(
+                      "app.delete",
+                      { app: String(appId) },
+                      { action: "delete_app", resourceType: "app", resourceId: appId },
+                    ));
+                    window.location.hash = "#/";
+                  }
+                }}
+              ><Trash2 size={14} /> Destroy</Btn>
+            </PermissionGate>
+          </>}
+        />
       )}
 
       {app.status === "paused" && (
         <PausedBanner message="App is paused; containers are frozen and not serving traffic">
           <PermissionGate permission="apps.pause" appId={appId} environmentId={app.environment_id}>
             <Btn size="xs" loading={actionLoading === "unpause" || ops.isBusyWith("unpause_app")} disabled={ops.isBusy} onClick={() => action("unpause", () => runCliAction("app.unpause", { app: String(appId) }))}>
-              <Play size={12} /> Unpause
+              <Play size={13} /> Unpause
             </Btn>
           </PermissionGate>
         </PausedBanner>
@@ -291,7 +306,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
         </PermissionGate>
         <PermissionGate permission="apps.destroy" appId={appId} environmentId={app.environment_id}>
           <MobileSheetAction icon={<Trash2 size={19} />} label="Destroy app" detail="Remove containers; DNS stays manual" danger loading={actionLoading === "destroy" || ops.isBusyWith("destroy_app")} disabled={ops.isBusy} onClick={async () => {
-            if (await confirm("Destroy App", `Permanently destroy "${app.name}"?`, true)) {
+            if (await confirm("Destroy app", `Permanently destroy "${app.name}"?`, true)) {
               setMobileActionsOpen(false);
               await action("destroy", () => runConfirmedCliAction(
                 "app.delete",

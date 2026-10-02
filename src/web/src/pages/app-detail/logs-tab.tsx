@@ -1,4 +1,4 @@
-import { Card, Btn } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn } from "../../components/ui.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { LogViewer } from "../../components/log-viewer.tsx";
 import { ScrollText, RefreshCw } from "lucide-react";
@@ -17,15 +17,15 @@ interface LogsTabProps {
 export function LogsTab({ logs, tail, setTail, loadLogs, replicas, selectedReplicaId, setSelectedReplicaId }: LogsTabProps) {
   const showReplicaSelect = replicas.length > 1;
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <ScrollText size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Container Logs</h3>
-        </div>
-        <div className="flex items-center gap-2">
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="Container logs"
+        icon={<ScrollText size={15} />}
+        description={`Last ${tail} lines`}
+        className="flex-wrap"
+        actions={<>
           {showReplicaSelect && (
-            <div className="w-40">
+            <div className="w-44">
               <NeoSelect
                 value={selectedReplicaId != null ? String(selectedReplicaId) : String(replicas[0].id)}
                 onChange={(v) => setSelectedReplicaId(parseInt(v))}
@@ -34,7 +34,7 @@ export function LogsTab({ logs, tail, setTail, loadLogs, replicas, selectedRepli
               />
             </div>
           )}
-          <div className="w-24">
+          <div className="w-28">
             <NeoSelect
               value={String(tail)}
               onChange={(v) => setTail(parseInt(v))}
@@ -43,9 +43,11 @@ export function LogsTab({ logs, tail, setTail, loadLogs, replicas, selectedRepli
             />
           </div>
           <Btn size="xs" onClick={loadLogs}><RefreshCw size={12} /> Refresh</Btn>
-        </div>
+        </>}
+      />
+      <div className="p-3">
+        <LogViewer logs={logs} />
       </div>
-      <LogViewer logs={logs} />
     </Card>
   );
 }

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { post } from "../api/client.ts";
 import { setTempToken } from "../stores/auth.ts";
-import { showToast, Card, Field, Btn, AuthShell } from "../components/ui.tsx";
-import { Terminal, ArrowRight, Key } from "lucide-react";
+import { showToast, Card, Btn, AuthShell } from "../components/ui.tsx";
+import { ArrowRight } from "lucide-react";
 
 export function SetupPage() {
   const [loading, setLoading] = useState(false);
@@ -32,32 +32,44 @@ export function SetupPage() {
     }
   };
 
+  const fieldLabel = "block text-sm font-medium text-fg";
+
   return (
-    <AuthShell icon={<Terminal size={32} />} title="Initial Setup" description="Create the administrator account" width="lg">
-        <Card className="p-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Key size={16} className="text-fg" />
-              <h3 className="font-mono font-bold text-sm text-fg uppercase">Admin Account</h3>
-            </div>
-            <Field label="Username"><input type="text" value={form.username} onChange={set("username")} placeholder="admin" autoFocus /></Field>
-            <Field label="Password"><input type="password" value={form.password} onChange={set("password")} placeholder="Min 8 characters" /></Field>
-            <Field label="Confirm Password"><input type="password" value={form.confirmPassword} onChange={set("confirmPassword")} placeholder="Confirm password" /></Field>
-            <Field
-              label="Default Domain Suffix"
-              align="start"
-              hint="Optional. OCD only shows the DNS records you should create; it never changes DNS."
-            >
-              <input type="text" value={form.default_domain_suffix} onChange={set("default_domain_suffix")} placeholder="apps.example.com" />
-            </Field>
-            <p className="text-[9px] font-mono text-muted uppercase tracking-wider">
-              Cloud credentials are optional and can be configured later. You can also connect an existing server.
+    <AuthShell title="Initial setup" description="Create the administrator account for this panel." width="md">
+      <Card className="p-6">
+        <div className="space-y-4">
+          <label className="block space-y-1.5">
+            <span className={fieldLabel}>Username</span>
+            <input type="text" value={form.username} onChange={set("username")} placeholder="admin" autoFocus />
+          </label>
+          <label className="block space-y-1.5">
+            <span className={fieldLabel}>Password</span>
+            <input type="password" value={form.password} onChange={set("password")} placeholder="Min 8 characters" />
+          </label>
+          <label className="block space-y-1.5">
+            <span className={fieldLabel}>Confirm password</span>
+            <input type="password" value={form.confirmPassword} onChange={set("confirmPassword")} placeholder="Confirm password" />
+          </label>
+          <div className="border-t pt-4">
+            <label className="block space-y-1.5">
+              <span className="flex items-baseline justify-between gap-2">
+                <span className={fieldLabel}>Default domain suffix</span>
+                <span className="text-xs text-muted">Optional</span>
+              </span>
+              <input type="text" value={form.default_domain_suffix} onChange={set("default_domain_suffix")} placeholder="apps.example.com" className="font-mono" />
+            </label>
+            <p className="mt-1.5 text-xs text-muted">
+              OCD only shows the DNS records you should create; it never changes DNS.
             </p>
-            <Btn onClick={handleSubmit} variant="primary" size="md" loading={loading} className="w-full justify-center">
-              <span>Complete Setup</span><ArrowRight size={14} />
-            </Btn>
           </div>
-        </Card>
+          <Btn onClick={handleSubmit} variant="primary" size="md" loading={loading} className="w-full">
+            <span>Complete setup</span><ArrowRight size={14} />
+          </Btn>
+        </div>
+      </Card>
+      <p className="mt-4 text-center text-xs text-muted">
+        Cloud credentials are optional and can be configured later. You can also connect an existing server.
+      </p>
     </AuthShell>
   );
 }

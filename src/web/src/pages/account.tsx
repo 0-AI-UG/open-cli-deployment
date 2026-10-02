@@ -1,8 +1,8 @@
 import { UserNtfySettings } from "../components/ntfy-settings.tsx";
 import { useState, useEffect } from "react";
 import { get, post } from "../api/client.ts";
-import { Card, Btn, Spinner, showToast, PageShell, PageHeader } from "../components/ui.tsx";
-import { User, Shield, Fingerprint, Trash2, LogOut, GitBranch, LinkIcon, Unlink } from "lucide-react";
+import { Badge, Card, CardHeader, Btn, Spinner, showToast, PageShell, PageHeader } from "../components/ui.tsx";
+import { User, Shield, Fingerprint, Trash2, LogOut, GitBranch, LinkIcon, Unlink, Plus } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { logout, useAuth, updateUser } from "../stores/auth.ts";
 
@@ -54,68 +54,67 @@ function SecuritySection() {
     }
   };
 
-  if (loading) return <Card className="p-5 mt-6"><div className="flex justify-center"><Spinner /></div></Card>;
+  if (loading) return <Card className="flex justify-center p-6"><Spinner /></Card>;
 
   return (
-    <Card className="p-5 space-y-4">
-      <div className="flex items-center gap-2">
-        <Shield size={14} className="text-fg" />
-        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Security</h3>
-      </div>
+    <Card className="overflow-hidden">
+      <CardHeader icon={<Shield size={15} />} title="Security" description="Passkeys and password sign-in" />
 
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Fingerprint size={14} className="text-muted" />
-            <span className="font-mono text-[11px] text-fg font-bold">Passkeys</span>
-          </div>
-          {supportsWebAuthn && (
-            <Btn size="xs" loading={busy} onClick={addPasskey}>
-              + Add Passkey
-            </Btn>
-          )}
+      <div className="flex items-center justify-between gap-4 px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-fg">Passkeys</div>
+          <p className="text-xs text-muted">
+            {supportsWebAuthn ? "Used for two-factor sign-in and password resets." : "Your browser does not support passkeys."}
+          </p>
         </div>
-        {passkeys.length === 0 ? (
-          <p className="font-mono text-[10px] text-muted">No passkeys registered.</p>
-        ) : (
-          <div className="space-y-1">
-            {passkeys.map((pk) => (
-              <div key={pk.id} className="flex items-center justify-between bg-alt border-2 border-fg px-3 py-2">
-                <div>
-                  <span className="font-mono text-[10px] text-fg font-bold">{pk.name}</span>
-                  <span className="font-mono text-[9px] text-muted ml-2">
-                    {pk.backedUp ? "Synced" : pk.deviceType === "singleDevice" ? "Device-bound" : ""}
-                  </span>
-                  <span className="font-mono text-[9px] text-muted ml-2">
-                    {new Date(pk.createdAt + "Z").toLocaleDateString()}
-                  </span>
-                </div>
-                <button
-                  onClick={() => deletePasskey(pk.id, pk.name)}
-                  disabled={busy}
-                  className="text-muted hover:text-accent-red transition-colors disabled:opacity-35"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        {!supportsWebAuthn && (
-          <p className="font-mono text-[9px] text-muted mt-1">Your browser does not support passkeys.</p>
-        )}
-      </div>
-
-      <div className="border-t-2 border-fg pt-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="font-mono text-[11px] text-fg font-bold">Password</span>
-            <p className="font-mono text-[9px] text-muted mt-0.5">You will be signed out and redirected to the password reset page.</p>
-          </div>
-          <Btn size="xs" onClick={() => { logout(); window.location.hash = "#/password-reset"; }}>
-            <LogOut size={11} /> Change Password
+        {supportsWebAuthn && (
+          <Btn loading={busy} onClick={addPasskey}>
+            <Plus size={14} /> Add passkey
           </Btn>
+        )}
+      </div>
+      {passkeys.length === 0 ? (
+        <div className="border-t px-4 py-3 text-sm text-muted">No passkeys registered.</div>
+      ) : (
+        <div className="divide-y border-t">
+          {passkeys.map((pk) => {
+            const kind = pk.backedUp ? "Synced" : pk.deviceType === "singleDevice" ? "Device-bound" : "";
+            return (
+              <div key={pk.id} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-subtle/50">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted">
+                  <Fingerprint size={15} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm font-medium text-fg">{pk.name}</span>
+                    {kind && <Badge>{kind}</Badge>}
+                  </div>
+                  <div className="text-xs text-muted">
+                    Added {new Date(pk.createdAt + "Z").toLocaleDateString()}
+                  </div>
+                </div>
+                <Btn
+                  variant="ghost"
+                  disabled={busy}
+                  title="Remove passkey"
+                  onClick={() => deletePasskey(pk.id, pk.name)}
+                >
+                  <Trash2 size={14} />
+                </Btn>
+              </div>
+            );
+          })}
         </div>
+      )}
+
+      <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-fg">Password</div>
+          <p className="text-xs text-muted">You will be signed out and redirected to the password reset page.</p>
+        </div>
+        <Btn onClick={() => { logout(); window.location.hash = "#/password-reset"; }}>
+          <LogOut size={14} /> Change password
+        </Btn>
       </div>
     </Card>
   );
@@ -185,37 +184,47 @@ function GitHubSection() {
     }
   };
 
-  if (loading) return <Card className="p-5 mt-6"><div className="flex justify-center"><Spinner /></div></Card>;
+  if (loading) return <Card className="flex justify-center p-6"><Spinner /></Card>;
 
   const linked = status?.linked || user?.githubLinked;
   const username = status?.githubUsername || user?.githubUsername || "";
   const avatar = status?.avatarUrl || user?.githubAvatarUrl || "";
 
   return (
-    <Card className="p-5 space-y-4">
-      <div className="flex items-center gap-2">
-        <GitBranch size={14} className="text-fg" />
-        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">GitHub</h3>
-      </div>
-
+    <Card className="overflow-hidden">
+      <CardHeader
+        icon={<GitBranch size={15} />}
+        title="GitHub"
+        description="Connected identity"
+        actions={linked ? <Badge tone="success">Linked</Badge> : undefined}
+      />
       {linked ? (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] text-fg font-bold">@{username}</span>
-            <span className="font-mono text-[9px] font-bold uppercase px-2 py-0.5 border-2 border-fg bg-accent/30">Linked</span>
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {avatar ? (
+              <img src={avatar} alt="" className="h-8 w-8 shrink-0 rounded-full border bg-subtle" />
+            ) : (
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-subtle text-muted">
+                <User size={15} />
+              </span>
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-fg">@{username}</div>
+              <p className="truncate font-mono text-xs text-muted">github.com/{username}</p>
+            </div>
           </div>
-          <Btn size="xs" loading={busy} onClick={unlinkGitHub}>
-            <Unlink size={11} /> Unlink
+          <Btn loading={busy} onClick={unlinkGitHub}>
+            <Unlink size={14} /> Unlink
           </Btn>
         </div>
       ) : (
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="font-mono text-[11px] text-fg font-bold">Not linked</span>
-            <p className="font-mono text-[9px] text-muted mt-0.5">Link your GitHub identity to your OCD account.</p>
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-fg">Not linked</div>
+            <p className="text-xs text-muted">Link your GitHub identity to your OCD account.</p>
           </div>
-          <Btn size="xs" loading={busy} onClick={linkGitHub}>
-            <LinkIcon size={11} /> Link GitHub
+          <Btn loading={busy} onClick={linkGitHub}>
+            <LinkIcon size={14} /> Link GitHub
           </Btn>
         </div>
       )}
@@ -225,7 +234,7 @@ function GitHubSection() {
 
 export function AccountPage() {
   return (
-    <PageShell>
+    <PageShell width="md">
       <PageHeader title="Account" description="Profile, connected identities, and sign-in security." />
 
       <GitHubSection />

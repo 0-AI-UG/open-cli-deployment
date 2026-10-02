@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Cloud, FileText, FileWarning, Folder, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
 import { PermissionGate } from "../components/permission-gate.tsx";
-import { Btn, Card, EmptyState, PageHeader, PageShell, PageState, Spinner, showToast } from "../components/ui.tsx";
+import { Btn, Card, CardHeader, CopyButton, DataRow, EmptyState, PageHeader, PageShell, PageState, Spinner, showToast } from "../components/ui.tsx";
 
 type BucketDetail = {
   name: string;
@@ -108,68 +108,75 @@ export function BucketDetailPage({ bucketName }: { bucketName: string }) {
 
   return (
     <PageShell>
-      <PageHeader backHref="#/resources" backLabel="Back to resources" eyebrow="S3 bucket" title={detail.name} />
+      <PageHeader
+        backHref="#/resources"
+        backLabel="Back to resources"
+        eyebrow="S3 bucket"
+        title={detail.name}
+        meta={<><span>Hetzner Object Storage</span><span className="font-mono text-xs">{detail.region}</span></>}
+      />
 
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Info label="Region" value={detail.region} />
-          <Info label="Endpoint" value={detail.endpoint} />
-        </div>
+      <Card>
+        <DataRow label="Region" mono>{detail.region}</DataRow>
+        <DataRow label="Endpoint" mono>
+          <span className="min-w-0 truncate" title={detail.endpoint}>{detail.endpoint}</span>
+          <CopyButton text={detail.endpoint} />
+        </DataRow>
       </Card>
 
       <PermissionGate
         permission="buckets.objects.read"
-        fallback={<Card className="p-6"><EmptyState message="Viewing bucket contents requires the buckets.objects.read permission." icon={FileWarning} /></Card>}
+        fallback={<Card><EmptyState message="Viewing bucket contents requires the buckets.objects.read permission." icon={FileWarning} /></Card>}
       >
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card className="p-3 md:col-span-2">
-            <div className="flex items-center gap-2 mb-3">
-              <Cloud size={13} className="text-fg" />
-              <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Objects</h3>
-              <Btn variant="ghost" size="xs" onClick={() => loadPrefix(prefix)} className="ml-auto" title="Refresh">
-                <RefreshCw size={11} />
-              </Btn>
-            </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+          <Card className="flex min-w-0 flex-col overflow-hidden md:col-span-2">
+            <CardHeader
+              title="Objects"
+              icon={<Cloud size={15} />}
+              actions={<Btn variant="ghost" size="xs" onClick={() => loadPrefix(prefix)} title="Refresh"><RefreshCw size={14} /></Btn>}
+            />
 
-            <div className="flex items-center flex-wrap gap-1 font-mono text-[10px] mb-2 px-1">
-              <button onClick={() => goToPrefix("")} className="text-accent-blue hover:underline">/</button>
+            <nav aria-label="Prefix" className="flex flex-wrap items-center gap-0.5 border-b bg-subtle/40 px-3 py-2 font-mono text-xs">
+              <button onClick={() => goToPrefix("")} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${crumbs.length ? "text-fg-dim" : "font-medium text-fg"}`}>/</button>
               {crumbs.map((crumb, index) => (
-                <span key={`${crumb}-${index}`} className="flex items-center gap-1">
-                  <ChevronRight size={10} className="text-muted" />
-                  <button onClick={() => goToPrefix(`${crumbs.slice(0, index + 1).join("/")}/`)} className="text-accent-blue hover:underline">{crumb}</button>
+                <span key={`${crumb}-${index}`} className="flex items-center gap-0.5">
+                  <ChevronRight size={12} className="text-muted" />
+                  <button onClick={() => goToPrefix(`${crumbs.slice(0, index + 1).join("/")}/`)} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${index === crumbs.length - 1 ? "font-medium text-fg" : "text-fg-dim"}`}>{crumb}</button>
                 </span>
               ))}
-            </div>
+            </nav>
 
             {listLoading && !page ? (
-              <div className="py-8 flex justify-center"><Spinner /></div>
+              <div className="flex justify-center py-10"><Spinner /></div>
             ) : listErr ? (
               <EmptyState message={listErr} icon={FileWarning} />
             ) : !entries.length ? (
-              <EmptyState message="Empty prefix" />
+              <EmptyState message="Empty prefix" icon={Folder} />
             ) : (
-              <div className="border-2 border-fg max-h-[60vh] overflow-y-auto">
+              <div className="max-h-[60vh] divide-y overflow-y-auto">
                 {prefix && (
-                  <button onClick={() => goToPrefix(crumbs.length > 1 ? `${crumbs.slice(0, -1).join("/")}/` : "")} className="w-full text-left flex items-center gap-2 px-2 py-1.5 font-mono text-[10px] hover:bg-alt border-b border-fg/15 text-fg-dim">
-                    <Folder size={11} /> ..
+                  <button onClick={() => goToPrefix(crumbs.length > 1 ? `${crumbs.slice(0, -1).join("/")}/` : "")} className="flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg">
+                    <Folder size={14} className="text-muted" /> ..
                   </button>
                 )}
                 {entries.map(entry => {
                   const active = entry.kind === "object" && objectKey === entry.value.key;
+                  const isPrefix = entry.kind === "prefix";
                   return (
                     <button
                       key={entry.kind === "prefix" ? entry.value : entry.value.key}
                       onClick={() => entry.kind === "prefix" ? goToPrefix(entry.value) : openObject(entry.value.key)}
-                      className={`w-full text-left flex items-center gap-2 px-2 py-1.5 font-mono text-[10px] border-b border-fg/10 last:border-b-0 ${active ? "bg-accent text-fg" : "hover:bg-alt"}`}
+                      aria-current={active ? "true" : undefined}
+                      className={`flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs transition-colors ${active ? "bg-subtle text-fg" : "text-fg-dim hover:bg-subtle/50 hover:text-fg"}`}
                     >
-                      {entry.kind === "prefix" ? <Folder size={11} className="text-fg" /> : <FileText size={11} className="text-fg-dim" />}
-                      <span className={`flex-1 truncate ${entry.kind === "prefix" ? "font-bold" : ""}`}>{entry.name}</span>
-                      <span className="text-muted text-[9px]">{entry.kind === "object" ? fmtSize(entry.value.size) : ""}</span>
+                      {isPrefix ? <Folder size={14} className="shrink-0 text-muted" /> : <FileText size={14} className="shrink-0 text-muted" />}
+                      <span className={`flex-1 truncate ${isPrefix || active ? "font-medium text-fg" : ""}`}>{entry.name}</span>
+                      <span className="shrink-0 tabular-nums text-muted">{entry.kind === "object" ? fmtSize(entry.value.size) : ""}</span>
                     </button>
                   );
                 })}
                 {page?.nextCursor && (
-                  <button onClick={() => loadPrefix(prefix, page.nextCursor || undefined)} disabled={listLoading} className="w-full px-2 py-2 font-mono text-[9px] font-bold uppercase hover:bg-alt disabled:opacity-50">
+                  <button onClick={() => loadPrefix(prefix, page.nextCursor || undefined)} disabled={listLoading} className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg disabled:opacity-50">
                     {listLoading ? "Loading…" : "Load more"}
                   </button>
                 )}
@@ -177,33 +184,26 @@ export function BucketDetailPage({ bucketName }: { bucketName: string }) {
             )}
           </Card>
 
-          <Card className="p-3 md:col-span-3">
-            <div className="flex items-center gap-2 mb-3">
-              <FileText size={13} className="text-fg" />
-              <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider truncate">{objectKey || "Select an object"}</h3>
-              {objectView && <span className="ml-auto font-mono text-[9px] text-muted uppercase whitespace-nowrap">{fmtSize(objectView.size)}{objectView.truncated ? ` · truncated @ ${fmtSize(objectView.maxBytes)}` : ""}</span>}
-            </div>
+          <Card className="min-w-0 overflow-hidden md:col-span-3">
+            <CardHeader
+              title={objectKey ? <span className="font-mono text-xs">{objectKey}</span> : "Select an object"}
+              icon={<FileText size={15} />}
+              actions={objectView ? <span className="whitespace-nowrap text-xs tabular-nums text-muted">{fmtSize(objectView.size)}{objectView.truncated ? ` · truncated @ ${fmtSize(objectView.maxBytes)}` : ""}</span> : undefined}
+            />
             {objectLoading ? (
-              <div className="py-8 flex justify-center"><Spinner /></div>
+              <div className="flex justify-center py-10"><Spinner /></div>
             ) : !objectKey ? (
-              <EmptyState message="Click an object on the left to view its contents" />
+              <EmptyState message="Click an object on the left to view its contents" icon={FileText} />
             ) : objectView?.binary ? (
               <EmptyState message={`Binary object (${objectView.contentType}): preview not available`} icon={FileWarning} />
             ) : (
-              <pre className="border-2 border-fg bg-alt/40 p-3 font-mono text-[11px] leading-relaxed max-h-[60vh] overflow-auto whitespace-pre-wrap break-all">{objectView?.content || ""}</pre>
+              <div className="p-4">
+                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-subtle/60 p-3 font-mono text-xs leading-relaxed text-fg">{objectView?.content || ""}</pre>
+              </div>
             )}
           </Card>
         </div>
       </PermissionGate>
     </PageShell>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-2 border-fg p-2 bg-alt">
-      <div className="font-mono text-[9px] text-muted uppercase tracking-wider mb-1">{label}</div>
-      <div className="font-mono text-xs font-bold text-fg truncate" title={value}>{value}</div>
-    </div>
   );
 }

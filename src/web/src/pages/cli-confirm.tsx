@@ -73,10 +73,12 @@ export function CliConfirmPage({ userCode }: { userCode: string }) {
   // --- done: confirmed ---
   if (done === "confirmed") {
     return (
-      <AuthShell icon={<Check size={32} />} title="Action Confirmed">
-          <Card className="p-8 text-center">
-            <p className="font-mono text-[11px] text-muted">You can close this page and return to your terminal.</p>
-          </Card>
+      <AuthShell title="Action confirmed" description="You can close this page and return to your terminal.">
+        <Card className="flex justify-center p-6">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-success/10 text-success">
+            <Check size={22} />
+          </span>
+        </Card>
       </AuthShell>
     );
   }
@@ -84,10 +86,12 @@ export function CliConfirmPage({ userCode }: { userCode: string }) {
   // --- done: denied ---
   if (done === "denied") {
     return (
-      <AuthShell icon={<Ban size={32} />} title="Action Cancelled">
-          <Card className="p-8 text-center">
-            <p className="font-mono text-[11px] text-muted">The action was cancelled. You can close this page.</p>
-          </Card>
+      <AuthShell title="Action cancelled" description="The action was cancelled. You can close this page.">
+        <Card className="flex justify-center p-6">
+          <span className="grid h-12 w-12 place-items-center rounded-full border bg-subtle text-muted">
+            <Ban size={22} />
+          </span>
+        </Card>
       </AuthShell>
     );
   }
@@ -95,10 +99,13 @@ export function CliConfirmPage({ userCode }: { userCode: string }) {
   // --- error ---
   if (error) {
     return (
-      <AuthShell icon={<AlertTriangle size={32} className="text-accent-red" />} title="Confirmation Unavailable">
-          <Card className="border-accent-red p-8 text-center">
-            <p className="font-mono text-[11px] text-muted">{error}</p>
-          </Card>
+      <AuthShell title="Confirmation unavailable">
+        <Card className="flex flex-col items-center gap-3 border-danger/30 p-6 text-center">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-danger/10 text-danger">
+            <AlertTriangle size={22} />
+          </span>
+          <p className="text-sm text-fg-dim">{error}</p>
+        </Card>
       </AuthShell>
     );
   }
@@ -116,61 +123,66 @@ export function CliConfirmPage({ userCode }: { userCode: string }) {
       : undefined;
   const typedResourceMatches = requiredTypedResource === undefined || typedResource.trim() === requiredTypedResource;
   const presentation = ACTION_PRESENTATION[item.action] ?? {
-    confirmLabel: "Confirm Action",
+    confirmLabel: "Confirm action",
     destructive: false,
   };
   const ConfirmationIcon = presentation.destructive ? Trash2 : Check;
 
   return (
-    <AuthShell icon={<ConfirmationIcon size={24} />} title="Confirm Action">
-        <Card className="p-6">
-          <p className="font-mono text-[11px] text-muted mb-4">
+    <AuthShell title="Confirm action" width="md">
+      <Card className={`space-y-5 p-6 ${presentation.destructive ? "border-danger/30" : ""}`}>
+        <div className="flex items-start gap-3">
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${presentation.destructive ? "bg-danger/10 text-danger" : "border bg-subtle text-muted"}`}>
+            <ConfirmationIcon size={16} />
+          </span>
+          <p className="text-sm text-fg-dim">
             A CLI command is requesting confirmation{presentation.destructive ? " for a destructive action" : ""}. Review the details below before continuing.
           </p>
-          <div className="border-2 border-fg bg-bg p-3 mb-5">
-            <p className="font-mono text-xs text-fg break-words">{item.summary}</p>
+        </div>
+        <div className="break-words rounded-lg border bg-subtle/60 p-3 font-mono text-xs text-fg">
+          {item.summary}
+        </div>
+        {requiredTypedResource !== undefined && (
+          <div className="space-y-1.5">
+            <label className="block text-sm text-fg-dim" htmlFor="resource-confirmation">
+              Type {item.action === "delete_volume" ? "volume ID" : item.action === "delete_bucket" ? "bucket name" : "environment name"}{" "}
+              <code className="select-all rounded bg-subtle px-1.5 py-0.5 font-mono text-xs text-fg">{requiredTypedResource}</code> to permanently delete it
+            </label>
+            <input
+              id="resource-confirmation"
+              type="text"
+              value={typedResource}
+              onChange={(event) => setTypedResource(event.target.value)}
+              autoComplete="off"
+              className="font-mono"
+            />
           </div>
-          {requiredTypedResource !== undefined && (
-            <div className="mb-5">
-              <label className="block font-mono text-[10px] font-bold text-fg mb-2" htmlFor="resource-confirmation">
-                Type {item.action === "delete_volume" ? "volume ID" : item.action === "delete_bucket" ? "bucket name" : "environment name"}{" "}
-                <span className="select-all">{requiredTypedResource}</span> to permanently delete it
-              </label>
-              <input
-                id="resource-confirmation"
-                type="text"
-                value={typedResource}
-                onChange={(event) => setTypedResource(event.target.value)}
-                autoComplete="off"
-                className="w-full border-2 border-fg bg-bg px-3 py-2 font-mono text-xs text-fg outline-none focus:shadow-neo-sm"
-              />
-            </div>
-          )}
-          <div className="space-y-2">
-            <Btn
-              type="button"
-              onClick={handleConfirm}
-              variant={presentation.destructive ? "danger" : "primary"}
-              size="md"
-              loading={submitting === "confirm"}
-              disabled={submitting !== null || !typedResourceMatches}
-              className="w-full justify-center"
-            >
-              {presentation.confirmLabel}
-            </Btn>
-            <Btn
-              type="button"
-              onClick={handleDeny}
-              variant="ghost"
-              size="md"
-              loading={submitting === "deny"}
-              disabled={submitting !== null}
-              className="w-full justify-center"
-            >
-              Cancel
-            </Btn>
-          </div>
-        </Card>
+        )}
+        <div className="space-y-2">
+          <Btn
+            type="button"
+            onClick={handleConfirm}
+            variant={presentation.destructive ? "danger" : "primary"}
+            size="md"
+            loading={submitting === "confirm"}
+            disabled={submitting !== null || !typedResourceMatches}
+            className="w-full"
+          >
+            {presentation.confirmLabel}
+          </Btn>
+          <Btn
+            type="button"
+            onClick={handleDeny}
+            variant="default"
+            size="md"
+            loading={submitting === "deny"}
+            disabled={submitting !== null}
+            className="w-full"
+          >
+            Cancel
+          </Btn>
+        </div>
+      </Card>
     </AuthShell>
   );
 }

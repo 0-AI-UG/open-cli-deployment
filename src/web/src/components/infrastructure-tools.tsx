@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { Hammer, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Eye, GitBranch, Hammer, HardDrive, KeyRound, RefreshCw, Trash2 } from "lucide-react";
 import { get } from "../api/client.ts";
 import { runCliAction } from "../api/cli-actions.ts";
-import { Btn, Card, CopyButton, Field, Table, confirm, showToast } from "./ui.tsx";
+import { Badge, Btn, Card, CardHeader, CopyButton, EmptyState, Field, InlineNotice, StatusBadge, Table, confirm, showToast } from "./ui.tsx";
 import { NeoSelect } from "./neo-select.tsx";
 import { PermissionGate } from "./permission-gate.tsx";
 
@@ -82,18 +82,68 @@ export function InfrastructureTools() {
     finally { setGcBusy(false); }
   };
 
+  const workerGate = (children: React.ReactNode) => <PermissionGate permission="servers.manage">{children}</PermissionGate>;
+
   return <div className="space-y-6">
-    <Card className="p-5 space-y-4">
-      <div className="flex items-center justify-between gap-3"><div><h2 className="font-mono text-[10px] font-bold uppercase tracking-wider flex items-center gap-2"><Hammer size={13} /> Build workers</h2><p className="mt-1 font-mono text-[9px] text-muted">Dedicated BuildKit capacity and GitHub push sources.</p></div><Btn size="xs" onClick={load}><RefreshCw size={11} /> Refresh</Btn></div>
-      {workers.length > 0 && <Table headers={["Worker", "Server", "Status", "Version", "Disk", ""]}>{workers.map((item) => <tr key={item.id}>
-        <td className="px-3 py-2 font-mono text-[10px] font-bold">{item.name}</td><td className="px-3 py-2 font-mono text-[10px]">{item.server?.name || "Missing"}</td><td className="px-3 py-2 font-mono text-[10px]">{item.status}{item.last_error && <div className="text-accent-red">{item.last_error}</div>}</td><td className="px-3 py-2 font-mono text-[10px]">{item.worker_version || "—"}<div className="text-muted">{item.architecture || "—"}</div></td><td className="px-3 py-2 font-mono text-[10px]">{item.disk_free_bytes ? `${(item.disk_free_bytes / 1024 ** 3).toFixed(1)} GB` : "—"}</td><td className="px-3 py-2"><PermissionGate permission="servers.manage"><Btn size="xs" variant="danger" disabled={workerBusy} onClick={() => removeWorker(item)}><Trash2 size={11} /></Btn></PermissionGate></td>
-      </tr>)}</Table>}
-      <PermissionGate permission="servers.manage"><div className="grid gap-3 md:grid-cols-3"><Field label="Dedicated server"><NeoSelect value={worker.server} onChange={(server) => setWorker((form) => ({ ...form, server }))} options={eligible.map((item) => ({ value: String(item.id), label: item.name }))} placeholder="Select empty server" /></Field><Field label="Worker name"><input value={worker.name} onChange={(e) => setWorker((form) => ({ ...form, name: e.target.value }))} placeholder="ocd-build-1" /></Field><Field label="Legacy removal token"><input type="password" value={worker.removalToken} onChange={(e) => setWorker((form) => ({ ...form, removalToken: e.target.value }))} placeholder="Only for conversion" /></Field></div><Btn size="sm" variant="primary" loading={workerBusy} disabled={!worker.server} onClick={installWorker}><Hammer size={12} /> Install worker</Btn></PermissionGate>
-      {sources.length > 0 && <><div className="border-t-2 border-fg/20 pt-4 font-mono text-[9px] font-bold uppercase">Repository webhooks</div><Table headers={["Repository", "Branch", "Status", "Webhook", ""]}>{sources.map((source) => <tr key={source.id}><td className="px-3 py-2 font-mono text-[10px] break-all">{source.repository}</td><td className="px-3 py-2 font-mono text-[10px]">{source.branch}</td><td className="px-3 py-2 font-mono text-[10px]">{source.last_status || "idle"}{source.last_error && <div className="text-accent-red">{source.last_error}</div>}</td><td className="px-3 py-2 font-mono text-[10px]">{source.webhook_secret_configured ? "ready" : "missing"}</td><td className="px-3 py-2"><PermissionGate permission="servers.manage"><Btn size="xs" onClick={() => rotateWebhook(source)}><KeyRound size={11} /> Rotate</Btn></PermissionGate></td></tr>)}</Table></>}
-      {webhook && <div className="border-2 border-fg bg-alt p-3 space-y-2"><div className="font-mono text-[9px] font-bold uppercase">Webhook secret — shown once</div><div className="flex items-center gap-1 font-mono text-[10px] break-all"><strong>URL:</strong> {webhook.url}<CopyButton text={webhook.url} /></div><div className="flex items-center gap-1 font-mono text-[10px] break-all"><strong>Secret:</strong> {webhook.secret}<CopyButton text={webhook.secret} /></div></div>}
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="Build workers"
+        icon={<Hammer size={15} />}
+        description="Dedicated BuildKit capacity and GitHub push sources."
+        actions={<Btn size="xs" onClick={load}><RefreshCw size={13} /> Refresh</Btn>}
+      />
+      {workers.length > 0 ? <div className="max-md:p-3"><Table headers={["Worker", "Server", "Status", "Version", "Disk", ""]}>{workers.map((item) => <tr key={item.id}>
+        <td className="font-mono text-xs font-medium text-fg">{item.name}</td>
+        <td className="font-mono text-xs text-fg-dim">{item.server?.name || "Missing"}</td>
+        <td><StatusBadge status={item.status} />{item.last_error && <div className="mt-0.5 text-xs text-danger">{item.last_error}</div>}</td>
+        <td className="font-mono text-xs text-fg-dim">{item.worker_version || "—"}<div className="text-muted">{item.architecture || "—"}</div></td>
+        <td className="whitespace-nowrap tabular-nums text-fg-dim">{item.disk_free_bytes ? `${(item.disk_free_bytes / 1024 ** 3).toFixed(1)} GB` : "—"}</td>
+        <td className="text-right">{workerGate(<Btn variant="ghost" title={`Remove ${item.name}`} disabled={workerBusy} onClick={() => removeWorker(item)}><Trash2 size={15} /></Btn>)}</td>
+      </tr>)}</Table></div> : <EmptyState message="No build workers" icon={Hammer} description="Install one on an empty, ready server to offload image builds." className="py-10" />}
+      {workerGate(<div className="border-t">
+        <div className="px-4 pt-3 text-sm font-semibold text-fg">Install a worker</div>
+        <div className="px-4 pb-1">
+          <Field label="Dedicated server" divider><NeoSelect value={worker.server} onChange={(server) => setWorker((form) => ({ ...form, server }))} options={eligible.map((item) => ({ value: String(item.id), label: item.name }))} placeholder="Select empty server" /></Field>
+          <Field label="Worker name" divider><input value={worker.name} onChange={(e) => setWorker((form) => ({ ...form, name: e.target.value }))} placeholder="ocd-build-1" className="font-mono" /></Field>
+          <Field label="Legacy removal token" divider><input type="password" value={worker.removalToken} onChange={(e) => setWorker((form) => ({ ...form, removalToken: e.target.value }))} placeholder="Only for conversion" /></Field>
+        </div>
+        <div className="flex justify-end gap-2 border-t bg-subtle/40 px-4 py-3"><Btn variant="primary" loading={workerBusy} disabled={!worker.server} onClick={installWorker}><Hammer size={14} /> Install worker</Btn></div>
+      </div>)}
     </Card>
 
-    <Card className="p-5 space-y-4"><div><h2 className="font-mono text-[10px] font-bold uppercase tracking-wider">Disk cleanup</h2><p className="mt-1 font-mono text-[9px] text-muted">Preview is mandatory; runtime and rollback images remain protected.</p></div><div className="flex flex-wrap items-center gap-2"><div className="w-full min-w-0 sm:w-auto sm:min-w-56"><Field label="Server" className="!py-0"><NeoSelect value={gcServer} onChange={(value) => { setGcServer(value); setPreviewKey(null); }} options={servers.map((item) => ({ value: String(item.id), label: item.name }))} placeholder="All servers" /></Field></div><Btn size="sm" loading={gcBusy} onClick={previewGc}>Preview</Btn><PermissionGate permission="servers.manage"><Btn size="sm" variant="danger" loading={gcBusy} disabled={!gcRows || previewKey !== (gcServer || "all")} onClick={executeGc}>Execute preview</Btn></PermissionGate></div>{gcRows && <Table headers={["Server", "Images", "OCD reclaimable", "Foreign reclaimable"]}>{gcRows.map((row) => <tr key={row.server.id}><td className="px-3 py-2 font-mono text-[10px] font-bold">{row.server.name}</td><td className="px-3 py-2 font-mono text-[10px]">{row.images.length}</td><td className="px-3 py-2 font-mono text-[10px]">{bytes(row.reclaimable_ocd_image_bytes)}</td><td className="px-3 py-2 font-mono text-[10px]">{bytes(row.reclaimable_foreign_image_bytes)}</td></tr>)}</Table>}
+    {(sources.length > 0 || webhook) && <Card className="overflow-hidden">
+      <CardHeader title="Repository webhooks" icon={<GitBranch size={15} />} description="GitHub push sources that trigger builds" />
+      {webhook && <div className="border-b p-4"><InlineNotice tone="warning" title="Webhook secret — shown once">
+        <div className="mt-1.5 space-y-1">
+          <div className="flex min-w-0 items-center gap-2"><span className="w-12 shrink-0 text-xs text-muted">URL</span><code className="min-w-0 break-all font-mono text-xs text-fg">{webhook.url}</code><CopyButton text={webhook.url} /></div>
+          <div className="flex min-w-0 items-center gap-2"><span className="w-12 shrink-0 text-xs text-muted">Secret</span><code className="min-w-0 break-all font-mono text-xs text-fg">{webhook.secret}</code><CopyButton text={webhook.secret} /></div>
+        </div>
+      </InlineNotice></div>}
+      {sources.length > 0 && <div className="max-md:p-3"><Table headers={["Repository", "Branch", "Status", "Webhook", ""]}>{sources.map((source) => <tr key={source.id}>
+        <td className="break-all font-mono text-xs font-medium text-fg">{source.repository}</td>
+        <td className="font-mono text-xs text-fg-dim">{source.branch}</td>
+        <td><StatusBadge status={source.last_status || "idle"} />{source.last_error && <div className="mt-0.5 text-xs text-danger">{source.last_error}</div>}</td>
+        <td>{source.webhook_secret_configured ? <Badge tone="success">Ready</Badge> : <Badge tone="warning">Missing</Badge>}</td>
+        <td className="text-right">{workerGate(<Btn size="xs" onClick={() => rotateWebhook(source)}><KeyRound size={13} /> Rotate</Btn>)}</td>
+      </tr>)}</Table></div>}
+    </Card>}
+
+    <Card className="overflow-hidden">
+      <CardHeader title="Disk cleanup" icon={<HardDrive size={15} />} description="Preview is mandatory; runtime and rollback images remain protected." />
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+        <span className="text-sm text-muted">Server</span>
+        <div className="w-full min-w-0 sm:w-56"><NeoSelect value={gcServer} onChange={(value) => { setGcServer(value); setPreviewKey(null); }} options={servers.map((item) => ({ value: String(item.id), label: item.name }))} placeholder="All servers" /></div>
+        <div className="flex gap-2 sm:ml-auto">
+          <Btn loading={gcBusy} onClick={previewGc}><Eye size={14} /> Preview</Btn>
+          {workerGate(<Btn variant="danger" loading={gcBusy} disabled={!gcRows || previewKey !== (gcServer || "all")} onClick={executeGc}>Execute preview</Btn>)}
+        </div>
+      </div>
+      {gcRows && <div className="border-t max-md:p-3"><Table headers={["Server", "Images", "OCD reclaimable", "Foreign reclaimable"]}>{gcRows.map((row) => <tr key={row.server.id}>
+        <td className="font-mono text-xs font-medium text-fg">{row.server.name}</td>
+        <td className="tabular-nums text-fg-dim">{row.images.length}</td>
+        <td className="tabular-nums text-fg-dim">{bytes(row.reclaimable_ocd_image_bytes)}</td>
+        <td className="tabular-nums text-fg-dim">{bytes(row.reclaimable_foreign_image_bytes)}</td>
+      </tr>)}</Table></div>}
     </Card>
   </div>;
 }

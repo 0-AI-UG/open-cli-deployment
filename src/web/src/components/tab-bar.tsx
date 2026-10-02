@@ -36,7 +36,7 @@ export function TabBar<K extends string>({
 
   if (isMobile) {
     return (
-      <div className="sticky top-[calc(52px+env(safe-area-inset-top))] z-30 -mx-4 mb-4 border-y-2 border-fg bg-bg/95 px-3 py-2 backdrop-blur">
+      <div className="sticky top-[calc(52px+env(safe-area-inset-top))] z-30 -mx-4 mb-4 border-b bg-canvas/90 px-4 py-2 backdrop-blur-md">
         <div ref={listRef} onKeyDown={onKeyDown} className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Page sections">
           {tabs.map((tab) => (
             <button
@@ -46,8 +46,8 @@ export function TabBar<K extends string>({
               role="tab"
               aria-selected={active === tab.key}
               tabIndex={active === tab.key ? 0 : -1}
-              className={`min-h-10 shrink-0 border-2 border-fg px-4 font-mono text-[10px] font-bold uppercase tracking-wide shadow-neo-sm ${
-                active === tab.key ? "bg-accent text-fg" : "bg-bg-raised text-muted"
+              className={`h-9 shrink-0 rounded-full px-4 text-sm font-medium transition-colors ${
+                active === tab.key ? "bg-primary text-primary-fg" : "bg-subtle text-fg-dim"
               }`}
             >
               {tab.label}
@@ -59,7 +59,7 @@ export function TabBar<K extends string>({
   }
 
   return (
-    <div ref={listRef} onKeyDown={onKeyDown} className="flex border-b-2 border-fg mb-4" role="tablist" aria-label="Page sections">
+    <div ref={listRef} onKeyDown={onKeyDown} className="mb-6 flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="Page sections">
       {tabs.map((t) => (
         <button
           key={t.key}
@@ -67,9 +67,9 @@ export function TabBar<K extends string>({
           role="tab"
           aria-selected={active === t.key}
           tabIndex={active === t.key ? 0 : -1}
-          className={`px-4 py-2 font-mono text-[10px] font-bold uppercase tracking-wider border-b-2 -mb-[2px] transition-all ${
+          className={`relative -mb-px shrink-0 border-b-2 px-3 pb-2.5 pt-1 text-sm font-medium transition-colors ${
             active === t.key
-              ? "border-fg text-fg bg-accent"
+              ? "border-primary text-fg"
               : "border-transparent text-muted hover:text-fg"
           }`}
         >{t.label}</button>

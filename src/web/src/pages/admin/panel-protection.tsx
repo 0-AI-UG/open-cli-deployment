@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { get, post, put } from "../../api/client.ts";
-import { Card, Btn, Field, Badge, Table, showToast } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, Field, Badge, Table, EmptyState, InlineNotice, Spinner, humanize, showToast } from "../../components/ui.tsx";
 
 import { NeoSelect } from "../../components/neo-select.tsx";
-import { AlertTriangle, Archive, Download, Settings2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Archive, Download, KeyRound, RefreshCw, Settings2, ShieldCheck } from "lucide-react";
 
 type Form = { backup_enabled: boolean; backup_bucket: string; backup_prefix: string; backup_retention: number };
 type State = Form & {
@@ -44,7 +44,7 @@ export function PanelProtection() {
   };
   useEffect(() => { void load().catch(e => setError(e.message)); const timer = setInterval(() => void load().catch(() => {}), 10000); return () => clearInterval(timer); }, []);
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(""); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Action failed"); } finally { setBusy(false); } };
-  if (!form || !state) return <Card className="p-5">{error || "Loading panel protection…"}</Card>;
+  if (!form || !state) return <Card className="p-4">{error ? <InlineNotice tone="danger">{error}</InlineNotice> : <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Loading panel protection…</div>}</Card>;
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm({ ...form, [key]: value });
   const bucketsLoading = bucketList === null;
   const buckets = bucketList?.names ?? [];
@@ -52,7 +52,6 @@ export function PanelProtection() {
   const validBucket = !bucketsLoading && !bucketError && buckets.includes(form.backup_bucket);
   const canSave = validBucket && state.recovery_key_configured;
   const activeBackup = state.backups.some(b => b.status === "pending" || b.status === "running");
-  const inputClass = "w-full border-2 border-fg bg-bg-raised px-3 py-2 font-mono text-[11px]";
   const save = async () => {
     await put("/api/admin/protection", form);
     await load(true); setEditing(false); setRecoveryKey(""); showToast("Backup settings saved", "success");
@@ -61,79 +60,72 @@ export function PanelProtection() {
     const url = URL.createObjectURL(new Blob([recoveryKey + "\n"], { type: "text/plain" }));
     const a = document.createElement("a"); a.href = url; a.download = "ocd-panel-recovery-key.txt"; a.click(); URL.revokeObjectURL(url);
   };
-  return <div className="space-y-4">
-    {error && <div role="alert" className="border-2 border-fg p-3 text-sm">{error}</div>}
-    {state.recovery_pending && <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-fg bg-accent-amber/20 px-5 py-4"><div className="flex items-center gap-2"><AlertTriangle size={16} /><h3 className="font-mono text-[10px] font-bold uppercase tracking-wider">Recovery paused</h3></div><Badge tone="warning">{state.pending_operations} saved operations</Badge></div>
-      <div className="space-y-4 p-5">
-        <div className="border-2 border-fg px-4">
-          <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 border-b border-fg/10 py-2"><span className="font-mono text-[10px] font-bold">Original panel stopped</span><input type="checkbox" checked={stopped} onChange={e => setStopped(e.target.checked)} /></label>
-          <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 py-2"><span className="font-mono text-[10px] font-bold">Resume saved operations</span><input type="checkbox" checked={resumeOps} onChange={e => setResumeOps(e.target.checked)} /></label>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3"><span className="font-mono text-[9px] text-muted">Backups stay off until you enable them.</span><Btn variant="primary" disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/admin/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn></div>
+  const statusLabel = (status: string) => status === "complete" ? "Completed" : status === "pending" ? "Queued" : humanize(status);
+  return <div className="space-y-6">
+    {error && <InlineNotice tone="danger">{error}</InlineNotice>}
+    {state.recovery_pending && <Card className="overflow-hidden border-warning/40">
+      <CardHeader className="bg-warning/5" icon={<AlertTriangle size={15} className="text-warning" />} title="Recovery paused" description="Confirm the original panel is down before automation resumes." actions={<Badge tone="warning">{state.pending_operations} saved operations</Badge>} />
+      <div className="px-4">
+        <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 border-b py-2"><span className="text-sm font-medium text-fg">Original panel stopped</span><input type="checkbox" checked={stopped} onChange={e => setStopped(e.target.checked)} /></label>
+        <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 py-2"><span className="text-sm font-medium text-fg">Resume saved operations</span><input type="checkbox" checked={resumeOps} onChange={e => setResumeOps(e.target.checked)} /></label>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-subtle/40 px-4 py-3"><span className="text-xs text-muted">Backups stay off until you enable them.</span><Btn variant="primary" disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/admin/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn></div>
     </Card>}
-    <Card>
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-fg p-5">
-        <div className="flex items-start gap-3">
-          <div className="border-2 border-fg bg-accent p-2 shadow-neo-sm"><ShieldCheck size={20} /></div>
-          <div>
-            <h3 className="font-mono text-sm font-bold uppercase tracking-wide">{showSetup ? "Set up panel backups" : "Panel backups"}</h3>
-            <p className="mt-1 text-xs text-muted">Encrypted backups of panel state, credentials, and SSH keys.</p>
-          </div>
-        </div>
-        {!showSetup && <div className="flex flex-wrap gap-2">
-          <Btn disabled={busy} onClick={() => { setEditing(true); setError(""); }}><Settings2 size={12} /> Edit settings</Btn>
-          <Btn variant="primary" disabled={busy || state.recovery_pending || activeBackup} onClick={() => action(async () => { await post("/api/admin/protection/backup", {}); showToast("Backup queued", "success"); })}><Archive size={12} />{activeBackup ? "Backup in progress" : "Back up now"}</Btn>
-        </div>}
-      </div>
-      {showSetup ? <div className="p-5 space-y-6">
-        <p className="text-xs text-muted">Choose where to store your backups and save a recovery key. Application databases and volumes are excluded.</p>
-        <section className="space-y-3">
-          <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Storage destination</h4>
-          <Field label="Bucket" hint="Buckets in your Hetzner Object Storage account.">
+    <Card className="overflow-hidden">
+      <CardHeader
+        icon={<ShieldCheck size={15} />}
+        title={showSetup ? "Set up panel backups" : "Panel backups"}
+        description="Encrypted backups of panel state, credentials, and SSH keys."
+        actions={!showSetup ? <>
+          <Btn disabled={busy} onClick={() => { setEditing(true); setError(""); }}><Settings2 size={14} /> Edit settings</Btn>
+          <Btn variant="primary" disabled={busy || state.recovery_pending || activeBackup} onClick={() => action(async () => { await post("/api/admin/protection/backup", {}); showToast("Backup queued", "success"); })}><Archive size={14} />{activeBackup ? "Backup in progress" : "Back up now"}</Btn>
+        </> : undefined}
+      />
+      {showSetup ? <>
+        <p className="px-4 pt-4 text-sm text-fg-dim">Choose where to store your backups and save a recovery key. Application databases and volumes are excluded.</p>
+        <section className="px-4 pt-5">
+          <h4 className="text-sm font-semibold text-fg">Storage destination</h4>
+          <Field divider align="start" label="Bucket" hint="Buckets in your Hetzner Object Storage account.">
             <div className="space-y-2">
               <NeoSelect value={validBucket ? form.backup_bucket : ""} onChange={value => set("backup_bucket", value)} options={buckets.map(name => ({ value: name, label: name }))} disabled={busy || bucketsLoading || !!bucketError || buckets.length === 0} placeholder={bucketsLoading ? "Loading buckets…" : bucketError ? "Buckets unavailable" : buckets.length === 0 ? "No buckets found" : "Select a bucket"} />
-              {bucketError && <p role="alert" className="text-xs text-accent-red">{bucketError}</p>}
-              {!bucketsLoading && !bucketError && form.backup_bucket && !validBucket && <p role="alert" className="text-xs text-accent-red">The saved bucket “{form.backup_bucket}” is unavailable. Select an existing bucket.</p>}
-              {!bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="underline">Resources</a>, then refresh this list.</p>}
-              <Btn size="xs" disabled={busy || bucketsLoading} onClick={() => { setBucketList(null); setBucketRefresh(value => value + 1); }}>{bucketError ? "Retry" : "Refresh buckets"}</Btn>
+              {bucketError && <p role="alert" className="text-xs text-danger">{bucketError}</p>}
+              {!bucketsLoading && !bucketError && form.backup_bucket && !validBucket && <p role="alert" className="text-xs text-danger">The saved bucket “{form.backup_bucket}” is unavailable. Select an existing bucket.</p>}
+              {!bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg">Resources</a>, then refresh this list.</p>}
+              <Btn size="xs" variant="ghost" disabled={busy || bucketsLoading} onClick={() => { setBucketList(null); setBucketRefresh(value => value + 1); }}><RefreshCw size={12} /> {bucketError ? "Retry" : "Refresh buckets"}</Btn>
             </div>
           </Field>
-          <Field label="Path prefix"><input className={inputClass} disabled={busy} value={form.backup_prefix} onChange={e => set("backup_prefix", e.target.value)} placeholder="ocd-panel" /></Field>
+          <Field divider label="Path prefix"><input className="font-mono" disabled={busy} value={form.backup_prefix} onChange={e => set("backup_prefix", e.target.value)} placeholder="ocd-panel" /></Field>
         </section>
-        <section className="space-y-3 border-t border-fg/20 pt-5">
+        <section className="mx-4 mt-2 border-t pb-4 pt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Recovery key</h4><p className="mt-2 text-xs text-muted">Keep this key outside the panel. You’ll need it to restore a backup.</p></div>
-            <Btn disabled={busy} onClick={() => action(async () => { const r = await post("/api/admin/protection/recovery-key", {}); setRecoveryKey(r.recovery_key); })}>{state.recovery_key_configured ? "Show recovery key" : "Create recovery key"}</Btn>
+            <div><h4 className="text-sm font-semibold text-fg">Recovery key</h4><p className="mt-0.5 text-xs text-muted">Keep this key outside the panel. You’ll need it to restore a backup.</p></div>
+            <Btn disabled={busy} onClick={() => action(async () => { const r = await post("/api/admin/protection/recovery-key", {}); setRecoveryKey(r.recovery_key); })}><KeyRound size={14} /> {state.recovery_key_configured ? "Show recovery key" : "Create recovery key"}</Btn>
           </div>
-          {recoveryKey && <div className="space-y-3 border-2 border-fg bg-alt p-4"><code className="block break-all select-all font-mono text-xs">{recoveryKey}</code><div className="flex flex-wrap gap-2"><Btn onClick={downloadKey}><Download size={12} /> Download key</Btn><Btn onClick={() => setRecoveryKey("")}>Hide key</Btn></div></div>}
+          {recoveryKey && <div className="mt-3 space-y-3 rounded-lg border bg-subtle/60 p-3"><code className="block select-all break-all font-mono text-xs text-fg">{recoveryKey}</code><div className="flex flex-wrap gap-2"><Btn size="xs" onClick={downloadKey}><Download size={12} /> Download key</Btn><Btn size="xs" variant="ghost" onClick={() => setRecoveryKey("")}>Hide key</Btn></div></div>}
         </section>
-        <section className="space-y-3 border-t border-fg/20 pt-5">
-          <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Schedule & retention</h4>
-          <Field label="Daily backups"><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.backup_enabled} disabled={busy || !canSave || state.recovery_pending} onChange={e => set("backup_enabled", e.target.checked)} /> Back up every 24 hours</label></Field>
-          <Field label="Backups to retain" hint="Older successful backups are removed after a new backup is verified."><input className={inputClass} type="number" min={1} max={90} disabled={busy} value={form.backup_retention} onChange={e => set("backup_retention", Number(e.target.value))} /></Field>
+        <section className="mx-4 border-t pt-5">
+          <h4 className="text-sm font-semibold text-fg">Schedule & retention</h4>
+          <Field divider label="Daily backups"><label className="flex items-center gap-2 text-sm text-fg"><input type="checkbox" checked={form.backup_enabled} disabled={busy || !canSave || state.recovery_pending} onChange={e => set("backup_enabled", e.target.checked)} /> Back up every 24 hours</label></Field>
+          <Field divider label="Backups to retain" hint="Older successful backups are removed after a new backup is verified."><input type="number" min={1} max={90} disabled={busy} value={form.backup_retention} onChange={e => set("backup_retention", Number(e.target.value))} /></Field>
         </section>
-        <div className="flex flex-wrap gap-2 border-t border-fg/20 pt-5">
-          <Btn variant="primary" loading={busy} disabled={!canSave} onClick={() => action(save)}>{configured ? "Save settings" : "Finish setup"}</Btn>
+        <div className="mt-2 flex flex-wrap justify-end gap-2 border-t bg-subtle/40 px-4 py-3">
           {configured && <Btn disabled={busy} onClick={() => { setForm({ backup_enabled: state.backup_enabled, backup_bucket: state.backup_bucket, backup_prefix: state.backup_prefix, backup_retention: state.backup_retention }); setEditing(false); setRecoveryKey(""); setError(""); }}>Cancel</Btn>}
+          <Btn variant="primary" loading={busy} disabled={!canSave} onClick={() => action(save)}>{configured ? "Save settings" : "Finish setup"}</Btn>
         </div>
-      </div> : <>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-fg/20 bg-alt px-5 py-4">
-          <div className="min-w-0"><p className="font-mono text-[10px] font-bold uppercase tracking-wider">Storage destination</p><p className="mt-1 break-all font-mono text-xs">s3://{state.backup_bucket}/{state.backup_prefix}</p></div>
+      </> : <>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-canvas/50 px-4 py-3">
+          <div className="min-w-0"><p className="text-xs text-muted">Storage destination</p><p className="mt-0.5 break-all font-mono text-xs text-fg">s3://{state.backup_bucket}/{state.backup_prefix}</p></div>
           <div className="flex flex-wrap items-center gap-3"><span className="text-xs text-muted">Retaining {state.backup_retention} successful backups</span><Badge tone={state.backup_enabled ? "success" : "neutral"}>{state.backup_enabled ? "Daily backups on" : "Manual backups"}</Badge></div>
         </div>
-        <div className="p-5">
-          <div className="mb-4 flex items-center justify-between"><h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Backup history</h4><span className="font-mono text-[10px] text-muted">{state.backups.length} records · updates automatically</span></div>
-          {state.backups.length === 0 ? <div className="border-2 border-dashed border-fg/25 px-4 py-10 text-center"><Archive size={28} className="mx-auto mb-3 text-muted" /><p className="text-sm font-bold">No backups yet</p><p className="mt-2 text-xs text-muted">Create your first backup with “Back up now”{state.backup_enabled ? ", or wait for the daily schedule." : "."}</p></div> : <div className="overflow-x-auto"><Table headers={["Created", "Status", "Size", "Backup location"]}>
-            {state.backups.map(b => <tr key={b.id} className="border-t border-fg/15">
-              <td className="whitespace-nowrap px-3 py-3 font-mono text-[10px]">{new Date(b.created_at).toLocaleString()}</td>
-              <td className="px-3 py-3"><Badge tone={b.status === "complete" ? "success" : b.status === "failed" ? "danger" : b.status === "pending" || b.status === "running" ? "warning" : "neutral"}>{b.status === "complete" ? "Completed" : b.status === "pending" ? "Queued" : b.status}</Badge></td>
-              <td className="whitespace-nowrap px-3 py-3 font-mono text-[10px]">{b.size_bytes ? `${(b.size_bytes / 1024 / 1024).toFixed(2)} MB` : "—"}</td>
-              <td className="min-w-48 px-3 py-3"><code className="break-all select-all text-[10px]">s3://{b.bucket}/{b.object_key}</code>{b.error && <p className="mt-1 break-words text-xs text-accent-red">{b.error}</p>}</td>
-            </tr>)}
-          </Table></div>}
-        </div>
+        <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-4"><h4 className="text-sm font-semibold text-fg">Backup history</h4><span className="text-xs text-muted"><span className="tabular-nums">{state.backups.length}</span> records · updates automatically</span></div>
+        {state.backups.length === 0 ? <EmptyState icon={Archive} message="No backups yet" description={`Create your first backup with “Back up now”${state.backup_enabled ? ", or wait for the daily schedule." : "."}`} /> : <div className="border-t"><Table headers={["Created", "Status", "Size", "Backup location"]}>
+          {state.backups.map(b => <tr key={b.id}>
+            <td className="whitespace-nowrap text-xs tabular-nums text-fg-dim">{new Date(b.created_at).toLocaleString()}</td>
+            <td><Badge tone={b.status === "complete" ? "success" : b.status === "failed" ? "danger" : b.status === "pending" || b.status === "running" ? "warning" : "neutral"}>{statusLabel(b.status)}</Badge></td>
+            <td className="whitespace-nowrap font-mono text-xs tabular-nums text-fg-dim">{b.size_bytes ? `${(b.size_bytes / 1024 / 1024).toFixed(2)} MB` : "—"}</td>
+            <td className="min-w-48"><code className="select-all break-all font-mono text-xs text-fg-dim">s3://{b.bucket}/{b.object_key}</code>{b.error && <p className="mt-1 break-words text-xs text-danger">{b.error}</p>}</td>
+          </tr>)}
+        </Table></div>}
       </>}
     </Card>
   </div>;

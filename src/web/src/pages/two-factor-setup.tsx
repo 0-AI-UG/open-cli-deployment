@@ -4,7 +4,7 @@ import { post } from "../api/client.ts";
 import { useAuth, login, logout } from "../stores/auth.ts";
 import { Spinner, Card, Btn, AuthShell, InlineNotice } from "../components/ui.tsx";
 import { PasskeyUnsupported } from "../components/passkey-unsupported.tsx";
-import { Fingerprint, Shield } from "lucide-react";
+import { Fingerprint } from "lucide-react";
 
 export function TwoFactorSetupPage() {
   const { tempToken, token } = useAuth();
@@ -40,34 +40,33 @@ export function TwoFactorSetupPage() {
   }
 
   return (
-    <AuthShell icon={<Shield size={32} />} title="Add a Passkey" description="Required to secure your account" width="md">
-        {!supported ? (
-          <PasskeyUnsupported onBack={() => { logout(); window.location.hash = "#/login"; }} />
-        ) : (
-          <Card className="p-6 text-center">
-            <Fingerprint size={48} className="text-fg mx-auto mb-4" />
-            {loading ? (
-              <>
-                <p className="text-[10px] text-muted font-mono uppercase tracking-wider mb-4">
-                  Follow your browser's prompt to register a passkey
-                </p>
-                <Spinner />
-              </>
-            ) : (
-              <>
-                {error && <InlineNotice tone="danger" className="mb-4">{error}</InlineNotice>}
-                <Btn
-                  onClick={register}
-                  variant="primary"
-                  size="md"
-                  className="w-full justify-center"
-                >
-                  <Fingerprint size={14} /> {error ? "Try Again" : "Register Passkey"}
-                </Btn>
-              </>
-            )}
-          </Card>
-        )}
+    <AuthShell title="Add a passkey" description="A passkey is required to secure your account." width="sm">
+      {!supported ? (
+        <PasskeyUnsupported onBack={() => { logout(); window.location.hash = "#/login"; }} />
+      ) : (
+        <Card className="p-6 text-center">
+          <span className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full border bg-subtle text-fg">
+            <Fingerprint size={22} />
+          </span>
+          {loading ? (
+            <div className="space-y-3">
+              <p className="text-sm text-fg-dim">Follow your browser's prompt to register a passkey.</p>
+              <div className="flex justify-center"><Spinner /></div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {error ? (
+                <InlineNotice tone="danger" className="text-left">{error}</InlineNotice>
+              ) : (
+                <p className="text-sm text-fg-dim">Use Touch ID, Face ID, Windows Hello, or a security key.</p>
+              )}
+              <Btn onClick={register} variant="primary" size="md" className="w-full">
+                <Fingerprint size={14} /> {error ? "Try again" : "Register passkey"}
+              </Btn>
+            </div>
+          )}
+        </Card>
+      )}
     </AuthShell>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { RefreshCw, ScrollText, Wrench } from "lucide-react";
+import { AlertCircle, ArrowRight, Ban, CheckCircle2, ChevronRight, Circle, GitBranch, ListChecks, Loader2, MinusCircle, RefreshCw, ScrollText, Undo2, Wrench, XCircle } from "lucide-react";
 import { useOperation, humanizeStep, TERMINAL_STATUSES, type OperationView } from "../hooks/useOperation.ts";
-import { confirm, Btn, showToast, Badge, PageShell, PageHeader, PageState, SectionHeader } from "../components/ui.tsx";
+import { confirm, Btn, showToast, Badge, Card, CardHeader, PageShell, PageHeader, PageState, StatusBadge, humanize, type Tone } from "../components/ui.tsx";
 import { PermissionGate } from "../components/permission-gate.tsx";
 import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
 
@@ -21,12 +21,14 @@ function outcomeText(op: OperationView): string {
   return "";
 }
 
-function stepStatusClass(status: string): string {
-  if (status === "ok") return "bg-accent text-fg";
-  if (status === "started" || status === "executing") return "bg-accent-blue text-white";
-  if (status === "failed") return "bg-accent-red text-white";
-  if (status === "skipped") return "bg-alt text-fg-dim";
-  return "bg-alt text-fg";
+type Step = NonNullable<ReturnType<typeof useOperation>>["steps"] extends (infer T)[] | undefined ? T : never;
+
+function stepTone(status: string): { Icon: typeof CheckCircle2; icon: string; badge: Tone; spin?: boolean } {
+  if (status === "ok") return { Icon: CheckCircle2, icon: "text-success", badge: "success" };
+  if (status === "started" || status === "executing") return { Icon: Loader2, icon: "text-info", badge: "info", spin: true };
+  if (status === "failed") return { Icon: XCircle, icon: "text-danger", badge: "danger" };
+  if (status === "skipped") return { Icon: MinusCircle, icon: "text-muted", badge: "neutral" };
+  return { Icon: Circle, icon: "text-muted", badge: "neutral" };
 }
 
 export function EngineOpDetailPage({ opId }: { opId: number }) {
@@ -90,6 +92,9 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
     }
   }
 
+  const hasOutcome = !!(op.error || failedForward.length > 0 || failedCompensations.length > 0 || failedChildren.length > 0);
+  const outcomeWarning = op.status === "compensating" || op.status === "cancelled";
+
   return (
     <PageShell>
       <PageHeader
@@ -98,145 +103,161 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
         eyebrow={`Operation #${op.id}`}
         title={op.label || op.kind}
         meta={<>
-          <Badge tone={op.status === "done" ? "success" : op.status === "running" ? "info" : op.status.includes("fail") || op.status === "compensated" ? "danger" : op.status === "compensating" ? "warning" : "neutral"}>{op.status}</Badge>
-          <div className="mt-2">
-            {(op.resource_labels ?? op.resource_keys).join(", ")} · triggered by {op.trigger}
+          <StatusBadge status={op.status} />
+          <span className="min-w-0 break-words">
+            <span className="font-mono text-xs">{(op.resource_labels ?? op.resource_keys).join(", ")}</span> · triggered by {op.trigger}
             {op.attempt > 1 && ` · attempt ${op.attempt}`}
-          </div>
+          </span>
         </>}
         actions={<>
-        {active && (
-          <PermissionGate permission="operations.cancel">
-          <Btn
-            variant="danger"
-            onClick={onCancel}
-            loading={actionBusy === "cancel"}
-            disabled={actionBusy !== null}
-          >
-            Cancel
-          </Btn>
-          </PermissionGate>
-        )}
+        <a
+          href={`#/engine/op/${op.id}/logs`}
+          className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-line-strong bg-surface px-3 text-sm font-medium text-fg shadow-xs transition-colors hover:bg-subtle max-md:h-11"
+        >
+          <ScrollText size={14} /> View logs
+        </a>
         {["failed", "compensation_failed", "compensated", "cancelled"].includes(op.status) && (
           <PermissionGate permission="operations.cancel">
-            <Btn size="xs" loading={actionBusy === "retry"} disabled={actionBusy !== null} onClick={onRetry}>
-              <RefreshCw size={12} /> Retry
+            <Btn loading={actionBusy === "retry"} disabled={actionBusy !== null} onClick={onRetry}>
+              <RefreshCw size={14} /> Retry
             </Btn>
           </PermissionGate>
         )}
         {["failed", "compensation_failed"].includes(op.status) && (
           <PermissionGate permission="operations.cancel">
-            <Btn size="xs" variant="ghost" loading={actionBusy === "finalize"} disabled={actionBusy !== null} onClick={onFinalize}>
-              <Wrench size={12} /> Finalize
+            <Btn variant="ghost" loading={actionBusy === "finalize"} disabled={actionBusy !== null} onClick={onFinalize}>
+              <Wrench size={14} /> Finalize
             </Btn>
+          </PermissionGate>
+        )}
+        {active && (
+          <PermissionGate permission="operations.cancel">
+          <Btn
+            onClick={onCancel}
+            loading={actionBusy === "cancel"}
+            disabled={actionBusy !== null}
+          >
+            <Ban size={14} /> Cancel
+          </Btn>
           </PermissionGate>
         )}
         </>}
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-3 font-mono text-[10px] min-[380px]:grid-cols-3">
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-line shadow-xs min-[380px]:grid-cols-3">
         <Meta label="Enqueued" value={fmtTs(op.enqueued_at)} />
         <Meta label="Started" value={fmtTs(op.started_at)} />
         <Meta label="Finished" value={fmtTs(op.finished_at)} />
       </div>
 
-      {(op.error || failedForward.length > 0 || failedCompensations.length > 0 || failedChildren.length > 0) && (
-        <section className="mb-6 border-2 border-fg bg-bg-raised p-4 shadow-neo-sm" aria-label="Operation outcome">
-          <h2 className="font-mono text-xs font-bold uppercase tracking-wider">What happened</h2>
-          <p className="mt-2 text-xs">{outcomeText(op) || "Review the failure details below."}</p>
-          {op.error?.message && (
-            <div className="mt-3 border-l-4 border-accent-red pl-3">
-              <div className="font-mono text-[9px] font-bold uppercase text-fg-dim">Reason</div>
-              <p className="mt-1 break-words font-mono text-xs">{op.error.message}</p>
-            </div>
-          )}
-          {op.error?.compensation_error && (
-            <p className="mt-3 border-l-4 border-accent-red pl-3 break-words font-mono text-xs">
-              Recovery: {op.error.compensation_error}
-              {op.error.retries_exhausted ? " · Automatic retries exhausted" : ""}
-            </p>
-          )}
-          {failedForward.length > 0 && (
-            <p className="mt-3 font-mono text-[10px]">Failed step: {failedForward.map((s) => humanizeStep(s.step)).join(", ")}</p>
-          )}
-          {failedCompensations.length > 0 && (
-            <p className="mt-2 font-mono text-[10px]">Failed cleanup or rollback: {failedCompensations.map((s) => humanizeStep(s.step)).join(", ")}</p>
-          )}
-          {failedChildren.length > 0 && (
-            <div className="mt-3 font-mono text-[10px]">
-              <div className="font-bold">Affected child operations</div>
-              {failedChildren.map((child) => (
-                <a key={child.id} href={`#/engine/op/${child.id}`} className="mt-1 block break-words underline">
-                  #{child.id} {child.label || child.kind} · {(child.resource_labels ?? child.resource_keys).join(", ")} · {child.status}
-                  {child.error?.message ? ` — ${child.error.message}` : ""}
+      {hasOutcome && (
+        <section aria-label="Operation outcome">
+          <Card className={`overflow-hidden ${outcomeWarning ? "border-warning/30" : "border-danger/30"}`}>
+            <CardHeader
+              title="What happened"
+              icon={<AlertCircle size={15} className={outcomeWarning ? "text-warning" : "text-danger"} />}
+              className={outcomeWarning ? "bg-warning/5" : "bg-danger/5"}
+            />
+            <div className="space-y-3 p-4">
+              <p className="text-sm text-fg-dim">{outcomeText(op) || "Review the failure details below."}</p>
+              {op.error?.message && (
+                <div>
+                  <div className="mb-1 text-xs font-medium text-muted">Reason</div>
+                  <p className="break-words rounded-md border bg-subtle/60 px-3 py-2 font-mono text-xs text-fg">{op.error.message}</p>
+                </div>
+              )}
+              {op.error?.compensation_error && (
+                <div>
+                  <div className="mb-1 text-xs font-medium text-muted">Recovery</div>
+                  <p className="break-words rounded-md border bg-subtle/60 px-3 py-2 font-mono text-xs text-fg">
+                    {op.error.compensation_error}
+                    {op.error.retries_exhausted ? <span className="font-sans text-muted"> · Automatic retries exhausted</span> : ""}
+                  </p>
+                </div>
+              )}
+              {(failedForward.length > 0 || failedCompensations.length > 0) && (
+                <dl className="space-y-1 text-sm">
+                  {failedForward.length > 0 && (
+                    <div className="flex flex-wrap gap-x-2"><dt className="text-muted">Failed step:</dt><dd className="text-fg">{failedForward.map((s) => humanizeStep(s.step)).join(", ")}</dd></div>
+                  )}
+                  {failedCompensations.length > 0 && (
+                    <div className="flex flex-wrap gap-x-2"><dt className="text-muted">Failed cleanup or rollback:</dt><dd className="text-fg">{failedCompensations.map((s) => humanizeStep(s.step)).join(", ")}</dd></div>
+                  )}
+                </dl>
+              )}
+              {failedChildren.length > 0 && (
+                <div>
+                  <div className="mb-1.5 text-xs font-medium text-muted">Affected child operations</div>
+                  <div className="divide-y overflow-hidden rounded-md border">
+                    {failedChildren.map((child) => (
+                      <a key={child.id} href={`#/engine/op/${child.id}`} className="block break-words px-3 py-2 text-sm transition-colors hover:bg-subtle/50">
+                        <span className="font-mono text-xs text-muted">#{child.id}</span>{" "}
+                        <span className="font-medium text-fg">{child.label || child.kind}</span>
+                        <span className="text-muted"> · <span className="font-mono text-xs">{(child.resource_labels ?? child.resource_keys).join(", ")}</span> · {child.status}</span>
+                        {child.error?.message ? <span className="text-danger"> — {child.error.message}</span> : ""}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {op.error?.superseded_by && (
+                <a href={`#/engine/op/${op.error.superseded_by}`} className="inline-flex items-center gap-1 text-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg">
+                  Newer operation #{op.error.superseded_by} took ownership of these resources
+                  <ArrowRight size={13} />
                 </a>
-              ))}
+              )}
             </div>
-          )}
-          {op.error?.superseded_by && (
-            <a href={`#/engine/op/${op.error.superseded_by}`} className="mt-3 block font-mono text-[10px] underline">
-              Newer operation #{op.error.superseded_by} took ownership of these resources
-            </a>
-          )}
+          </Card>
         </section>
       )}
 
-      <div className="mb-4">
-        <a
-          href={`#/engine/op/${op.id}/logs`}
-          className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-wider border-2 border-fg bg-bg-raised text-fg px-3 py-1.5 shadow-neo-sm hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-neo-none transition-all"
-        >
-          <ScrollText size={12} /> View Logs
-        </a>
-      </div>
-
-      <section className="mb-6">
-        <SectionHeader className="mb-3" title="Steps" />
-        <div className="flex flex-col gap-1">
-          {forward.map((s) => (
-            <StepRow key={s.seq} step={s} />
-          ))}
-          {forward.length === 0 && (
-            <div className="text-xs font-mono text-fg-dim">No steps yet.</div>
+      <section>
+        <Card className="overflow-hidden">
+          <CardHeader title="Steps" icon={<ListChecks size={15} />} description={forward.length > 0 ? `${forward.length} step${forward.length === 1 ? "" : "s"}` : undefined} />
+          {forward.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted">No steps yet.</div>
+          ) : (
+            <StepTimeline steps={forward} />
           )}
-        </div>
+        </Card>
       </section>
 
       {op.children && op.children.length > 0 && (
-        <section className="mb-6">
-          <SectionHeader className="mb-3" title={`Child operations (${op.children.length})`} />
-          <div className="flex flex-col gap-1">
-            {op.children.map((c) => (
-              <a
-                key={c.id}
-                href={`#/engine/op/${c.id}`}
-                className="flex min-w-0 flex-wrap items-center gap-2 border-2 border-fg bg-bg-raised px-3 py-2 shadow-neo-sm transition-colors hover:bg-alt"
-              >
-                <span className="font-mono text-[9px] text-fg-dim">#{c.id}</span>
-                <span className={`font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border-2 border-fg ${
-                  c.status === "done" ? "bg-accent text-fg"
-                    : c.status === "running" ? "bg-accent-blue text-white"
-                    : c.status === "compensation_failed" ? "bg-accent-red text-white border-dashed"
-                    : c.status === "failed" || c.status === "compensated" ? "bg-accent-red text-white"
-                    : "bg-alt text-fg"
-                }`}>{c.status}</span>
-                <span className="min-w-0 break-words font-mono text-xs font-bold">{c.label || c.kind}</span>
-                <span className="w-full min-w-0 break-words font-mono text-[10px] text-fg-dim sm:ml-auto sm:w-auto">{(c.resource_labels ?? c.resource_keys).join(", ")}</span>
-                {c.error?.message && <span className="w-full break-words font-mono text-[10px]">{c.error.message}</span>}
-              </a>
-            ))}
-          </div>
+        <section>
+          <Card className="overflow-hidden">
+            <CardHeader title="Child operations" icon={<GitBranch size={15} />} description={`${op.children.length} operation${op.children.length === 1 ? "" : "s"}`} />
+            <div className="divide-y">
+              {op.children.map((c) => (
+                <a
+                  key={c.id}
+                  href={`#/engine/op/${c.id}`}
+                  className="group block px-4 py-3 transition-colors hover:bg-subtle/50"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-baseline gap-2">
+                        <span className="min-w-0 truncate text-sm font-medium text-fg group-hover:underline">{c.label || c.kind}</span>
+                        <span className="shrink-0 font-mono text-xs text-muted">#{c.id}</span>
+                      </div>
+                      <div className="mt-0.5 break-words font-mono text-xs text-muted">{(c.resource_labels ?? c.resource_keys).join(", ")}</div>
+                    </div>
+                    <StatusBadge status={c.status} />
+                    <ChevronRight size={14} className="hidden shrink-0 text-muted group-hover:text-fg sm:block" />
+                  </div>
+                  {c.error?.message && <div className="mt-1.5 break-words font-mono text-xs text-danger">{c.error.message}</div>}
+                </a>
+              ))}
+            </div>
+          </Card>
         </section>
       )}
 
       {compensations.length > 0 && (
         <section>
-          <SectionHeader className="mb-3" title="Compensations" />
-          <div className="flex flex-col gap-1">
-            {compensations.map((s) => (
-              <StepRow key={s.seq} step={s} />
-            ))}
-          </div>
+          <Card className="overflow-hidden">
+            <CardHeader title="Compensations" icon={<Undo2 size={15} />} description="Cleanup and rollback steps" />
+            <StepTimeline steps={compensations} />
+          </Card>
         </section>
       )}
     </PageShell>
@@ -245,33 +266,45 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-2 border-fg bg-bg-raised shadow-neo-sm p-2">
-      <div className="text-[9px] font-bold uppercase tracking-wider text-fg-dim">{label}</div>
-      <div className="mt-0.5 text-fg">{value}</div>
+    <div className="min-w-0 bg-surface px-4 py-3">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-1 truncate text-sm tabular-nums text-fg">{value}</div>
     </div>
   );
 }
 
-
-function StepRow({ step }: { step: NonNullable<ReturnType<typeof useOperation>>["steps"] extends (infer T)[] | undefined ? T : never }) {
+function StepTimeline({ steps }: { steps: Step[] }) {
   return (
-    <div className="border-2 border-fg bg-bg-raised shadow-neo-sm px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-[9px] text-fg-dim">#{step.seq}</span>
-        <span
-          className={`font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 border-2 border-fg ${stepStatusClass(step.status)}`}
-        >
-          {step.status}
-        </span>
-        <span className="font-mono text-xs font-bold">{humanizeStep(step.step)}</span>
-        <span className="font-mono text-[10px] text-fg-dim ml-auto">
-          {fmtTs(step.started_at)}
-          {step.finished_at ? ` → ${fmtTs(step.finished_at)}` : ""}
-        </span>
+    <ol className="px-4 py-2">
+      {steps.map((s, i) => (
+        <StepRow key={s.seq} step={s} last={i === steps.length - 1} />
+      ))}
+    </ol>
+  );
+}
+
+function StepRow({ step, last }: { step: Step; last: boolean }) {
+  const tone = stepTone(step.status);
+  return (
+    <li className="relative flex gap-3">
+      <div className="flex w-4 shrink-0 flex-col items-center pt-3">
+        <tone.Icon size={16} className={`shrink-0 bg-surface ${tone.icon} ${tone.spin ? "animate-spin" : ""}`} />
+        {!last && <span className="mt-1 w-px flex-1 bg-line" />}
       </div>
-      {step.detail && (
-        <div className="mt-1 font-mono text-[10px] text-fg-dim">{step.detail}</div>
-      )}
-    </div>
+      <div className="min-w-0 flex-1 py-2.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-medium text-fg">{humanizeStep(step.step)}</span>
+          <Badge tone={tone.badge}>{humanize(step.status)}</Badge>
+          <span className="font-mono text-xs text-muted">#{step.seq}</span>
+          <span className="w-full text-xs tabular-nums text-muted sm:ml-auto sm:w-auto">
+            {fmtTs(step.started_at)}
+            {step.finished_at ? ` → ${fmtTs(step.finished_at)}` : ""}
+          </span>
+        </div>
+        {step.detail && (
+          <div className="mt-1 break-words font-mono text-xs text-fg-dim">{step.detail}</div>
+        )}
+      </div>
+    </li>
   );
 }

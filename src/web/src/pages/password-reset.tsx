@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { post } from "../api/client.ts";
-import { showToast, Btn, Field, Card, AuthShell } from "../components/ui.tsx";
-import { KeyRound, Fingerprint, ArrowLeft } from "lucide-react";
+import { showToast, Btn, Card, AuthShell } from "../components/ui.tsx";
+import { Fingerprint, ArrowLeft } from "lucide-react";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { PasskeyUnsupported } from "../components/passkey-unsupported.tsx";
 
@@ -35,41 +35,40 @@ export function PasswordResetPage() {
     }
   };
 
-  return (
-    <AuthShell icon={<KeyRound size={24} />} title="Reset Password">
+  const fieldLabel = "block text-sm font-medium text-fg";
 
-        {!supported ? (
-          <PasskeyUnsupported onBack={() => { window.location.hash = "#/login"; }} />
-        ) : (
+  return (
+    <AuthShell title="Reset password" description="Choose a new password, then confirm it's you with your passkey.">
+      {!supported ? (
+        <PasskeyUnsupported onBack={() => { window.location.hash = "#/login"; }} />
+      ) : (
+        <>
           <Card className="p-6">
-            <p className="text-[10px] text-muted font-mono mb-4 uppercase tracking-wider">
-              Enter your username and new password, then verify with your passkey.
-            </p>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <Field label="Username">
+              <label className="block space-y-1.5">
+                <span className={fieldLabel}>Username</span>
                 <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required autoFocus />
-              </Field>
-              <Field label="New password">
+              </label>
+              <label className="block space-y-1.5">
+                <span className={fieldLabel}>New password</span>
                 <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" required minLength={8} />
-              </Field>
-              <Field label="Confirm new password">
+              </label>
+              <label className="block space-y-1.5">
+                <span className={fieldLabel}>Confirm new password</span>
                 <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" required minLength={8} />
-              </Field>
-              <Btn
-                type="submit"
-                variant="primary"
-                size="md"
-                loading={loading}
-                className="w-full justify-center"
-              >
-                <Fingerprint size={14} /><span>Verify & Reset</span>
+              </label>
+              <Btn type="submit" variant="primary" size="md" loading={loading} className="mt-2 w-full">
+                <Fingerprint size={14} /><span>Verify and reset</span>
               </Btn>
             </form>
-            <div className="mt-4 text-center">
-              <Btn variant="ghost" onClick={() => { window.location.hash = "#/login"; }}><ArrowLeft size={14} /></Btn>
-            </div>
           </Card>
-        )}
+          <p className="mt-4 text-center text-xs text-muted">
+            <a href="#/login" className="inline-flex items-center gap-1 transition-colors hover:text-fg">
+              <ArrowLeft size={12} /> Back to sign in
+            </a>
+          </p>
+        </>
+      )}
     </AuthShell>
   );
 }

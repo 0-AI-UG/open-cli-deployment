@@ -1,3 +1,62 @@
 @tailwind base;
+
+@layer base {
+  /* Form controls share one look so every page gets it without per-call classes.
+     Selectors stay at element specificity (:where) so they follow Tailwind's
+     preflight in this layer but still yield to utilities like w-24 or h-11. */
+  input:where([type="text"], [type="email"], [type="password"], [type="number"], [type="search"], [type="url"], [type="tel"], :not([type])), select, textarea {
+    background: rgb(var(--surface));
+    border: 1px solid rgb(var(--line-strong));
+    border-radius: 6px;
+    color: rgb(var(--fg));
+    padding: 0 10px;
+    height: 32px;
+    font: inherit;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+    box-shadow: var(--shadow-xs);
+    transition: border-color .12s, box-shadow .12s;
+  }
+  textarea { height: auto; padding: 8px 10px; line-height: 20px; }
+  input:hover:not(:disabled):not(:focus), select:hover:not(:disabled):not(:focus), textarea:hover:not(:disabled):not(:focus) {
+    border-color: rgb(var(--muted) / 0.6);
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: rgb(var(--ring));
+    box-shadow: 0 0 0 3px rgb(var(--ring) / 0.18);
+  }
+  input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; background: rgb(var(--subtle)); }
+  input::placeholder, textarea::placeholder { color: rgb(var(--muted)); }
+  input:where(.font-mono), textarea:where(.font-mono) { font-family: "Geist Mono Variable", ui-monospace, monospace; font-size: 12px; }
+  select { cursor: pointer; appearance: none; }
+
+  input:where([type="checkbox"]) {
+    appearance: none; -webkit-appearance: none;
+    width: 16px; height: 16px; min-width: 16px;
+    border: 1px solid rgb(var(--line-strong)); border-radius: 4px; background: rgb(var(--surface));
+    cursor: pointer; position: relative; display: inline-block; vertical-align: middle;
+    box-shadow: var(--shadow-xs);
+    transition: background-color .12s, border-color .12s;
+  }
+  input:where([type="checkbox"]):hover:not(:disabled) { border-color: rgb(var(--muted)); }
+  input:where([type="checkbox"]):checked { background: rgb(var(--primary)); border-color: rgb(var(--primary)); }
+  input:where([type="checkbox"]):checked::after {
+    content: ''; position: absolute; left: 4.5px; top: 1.5px; width: 5px; height: 9px;
+    border: solid rgb(var(--primary-fg)); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  input:where([type="checkbox"]):disabled { opacity: .5; cursor: not-allowed; }
+
+  @media (max-width: 767px) {
+    input:where([type="text"], [type="email"], [type="password"], [type="number"], [type="search"], [type="url"], [type="tel"], :not([type])), select {
+      height: 44px;
+      font-size: 16px;
+    }
+    textarea { font-size: 16px; }
+    input:where([type="checkbox"]) { width: 20px; height: 20px; min-width: 20px; }
+    input:where([type="checkbox"]):checked::after { left: 6px; top: 2px; width: 6px; height: 11px; }
+  }
+}
+
 @tailwind components;
 @tailwind utilities;

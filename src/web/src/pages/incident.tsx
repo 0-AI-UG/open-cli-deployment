@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowRight, CheckCircle2, History, RefreshCw } from "lucide-react";
 import { get, post } from "../api/client.ts";
-import { Badge, Btn, Card, PageHeader, PageShell } from "../components/ui.tsx";
+import { Badge, Btn, Card, CardHeader, InlineNotice, PageHeader, PageShell, Spinner } from "../components/ui.tsx";
 import type { Incident } from "../../../shared/incidents.ts";
 import { incidentDate, incidentDuration, incidentGuide } from "../lib/incidents.ts";
 
@@ -62,37 +62,55 @@ export function IncidentPage({ id }: { id: string }) {
       }
     }
   };
-  return <PageShell>
+  return <PageShell width="md">
     <PageHeader title="Incident details" eyebrow="Operations" description={incident?.title || "Outage and recovery history"} backHref="#/incidents" backLabel="Back to incidents" actions={<>
-      {incident && !resolved && data?.canResolve && <Btn variant="primary" loading={resolving} disabled={resolving} onClick={() => void markFixed()}><CheckCircle2 size={13} /> Mark as fixed</Btn>}
-      <Btn disabled={loading || resolving} onClick={() => void load()}><RefreshCw size={13} /> Refresh</Btn>
+      {incident && !resolved && data?.canResolve && <Btn variant="primary" loading={resolving} disabled={resolving} onClick={() => void markFixed()}><CheckCircle2 size={14} /> Mark as fixed</Btn>}
+      <Btn disabled={loading || resolving} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>
     </>} />
-    {error && <div className="border-2 border-accent-red bg-bg-raised p-4 text-sm text-accent-red" role="alert">{error}{incident && " Displaying the last loaded state."}</div>}
-    {!incident && loading && <Card className="p-6 font-mono text-xs text-muted">Loading incident…</Card>}
+    {error && <InlineNotice tone="danger">{error}{incident && " Displaying the last loaded state."}</InlineNotice>}
+    {!incident && loading && <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading incident…</Card>}
     {incident && guide && <>
-      <Card className="space-y-4 p-5">
-        <div className="flex items-start gap-3">
-          {resolved ? <CheckCircle2 className="shrink-0 text-accent-green" size={20} /> : <AlertTriangle className="shrink-0 text-accent-red" size={20} />}
-          <div className="min-w-0 flex-1"><h2 className="break-words font-mono text-sm font-bold">{incident.title}</h2><p className="mt-1 text-xs text-muted">{guide.category}</p></div>
+      <Card className={`overflow-hidden ${resolved ? "" : "border-danger/30"}`}>
+        <div className={`flex items-start gap-3 p-4 ${resolved ? "" : "bg-danger/5"}`}>
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border ${resolved ? "border-success/20 bg-success/10 text-success" : "border-danger/20 bg-danger/10 text-danger"}`}>
+            {resolved ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
+          </span>
+          <div className="min-w-0 flex-1"><h2 className="break-words text-base font-semibold text-fg">{incident.title}</h2><p className="mt-0.5 text-sm text-muted">{guide.category}</p></div>
           <Badge tone={resolved ? "success" : "danger"}>{resolved ? "Resolved" : "Active"}</Badge>
         </div>
-        <p className="text-sm leading-relaxed">{resolved ? "This incident has been resolved. This record is retained for review." : guide.condition}</p>
-        <dl className="grid gap-4 border-t border-fg/15 pt-4 sm:grid-cols-3">
-          {[ ["Opened", incidentDate(incident.opened_at ?? incident.first_seen)], ["Resolved", incident.resolved_at === null ? "Still active" : incidentDate(incident.resolved_at)], ["Duration", incidentDuration(incident)] ].map(([label, value]) => <div key={label}><dt className="font-mono text-[10px] uppercase text-muted">{label}</dt><dd className="mt-1 font-mono text-xs">{value}</dd></div>)}
+        <p className="border-t px-4 py-3 text-sm leading-relaxed text-fg-dim">{resolved ? "This incident has been resolved. This record is retained for review." : guide.condition}</p>
+        <dl className="border-t">
+          {[ ["Opened", incidentDate(incident.opened_at ?? incident.first_seen)], ["Resolved", incident.resolved_at === null ? "Still active" : incidentDate(incident.resolved_at)], ["Duration", incidentDuration(incident)] ].map(([label, value]) => <div key={label} className="flex min-h-11 items-center justify-between gap-4 border-b px-4 py-2.5 last:border-b-0"><dt className="shrink-0 text-sm text-muted">{label}</dt><dd className="min-w-0 text-right text-sm tabular-nums text-fg">{value}</dd></div>)}
         </dl>
-        <a className="inline-flex min-h-11 items-center gap-2 font-mono text-xs font-bold underline" href={`#${incident.path}`}>
-          {guide.linkLabel} <ArrowRight size={14} />
-        </a>
+        <div className="border-t bg-subtle/40 px-4 py-2">
+          <a className="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-fg hover:underline max-md:min-h-11" href={`#${incident.path}`}>
+            {guide.linkLabel} <ArrowRight size={14} />
+          </a>
+        </div>
       </Card>
-      <Card className="space-y-4 p-5">
-        <h2 className="font-mono text-xs font-bold uppercase">Timeline</h2>
-        <ol className="space-y-4 border-l-2 border-fg/20 pl-4 text-xs">
-          <li><div className="font-bold">Condition first detected</div><time className="text-muted" dateTime={new Date(incident.first_seen).toISOString()}>{incidentDate(incident.first_seen)}</time></li>
-          <li><div className="font-bold">Incident opened{(incident.opened_at ?? incident.first_seen) > incident.first_seen ? " after the grace period" : ""}</div><span className="text-muted">{incidentDate(incident.opened_at ?? incident.first_seen)}</span></li>
-          <li><div className="font-bold">{resolved ? "Incident resolved" : "Awaiting resolution"}</div><span className="text-muted">{resolved ? incidentDate(incident.resolved_at) : "The incident can be marked as fixed manually or resolved automatically by monitoring."}</span></li>
+      <Card className="overflow-hidden">
+        <CardHeader title="Timeline" icon={<History size={15} />} />
+        <ol className="space-y-0 px-4 py-3 text-sm">
+          <TimelineItem tone="neutral" title="Condition first detected"><time dateTime={new Date(incident.first_seen).toISOString()}>{incidentDate(incident.first_seen)}</time></TimelineItem>
+          <TimelineItem tone="danger" title={`Incident opened${(incident.opened_at ?? incident.first_seen) > incident.first_seen ? " after the grace period" : ""}`}>{incidentDate(incident.opened_at ?? incident.first_seen)}</TimelineItem>
+          <TimelineItem tone={resolved ? "success" : "pending"} title={resolved ? "Incident resolved" : "Awaiting resolution"} last>{resolved ? incidentDate(incident.resolved_at) : "The incident can be marked as fixed manually or resolved automatically by monitoring."}</TimelineItem>
         </ol>
-        <p className="break-all font-mono text-[10px] text-muted">Incident {incident.incident_id}</p>
+        <p className="break-all border-t px-4 py-2.5 font-mono text-xs text-muted">Incident {incident.incident_id}</p>
       </Card>
     </>}
   </PageShell>;
+}
+
+function TimelineItem({ tone, title, last = false, children }: { tone: "neutral" | "danger" | "success" | "pending"; title: string; last?: boolean; children: ReactNode }) {
+  const dot = { neutral: "bg-muted/60", danger: "bg-danger", success: "bg-success", pending: "border border-dashed border-line-strong bg-surface" }[tone];
+  return <li className="relative flex gap-3">
+    <div className="flex w-3 shrink-0 flex-col items-center pt-1.5">
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
+      {!last && <span className="mt-1 w-px flex-1 bg-line" />}
+    </div>
+    <div className={`min-w-0 flex-1 ${last ? "" : "pb-4"}`}>
+      <div className="font-medium text-fg">{title}</div>
+      <div className="mt-0.5 text-xs text-muted">{children}</div>
+    </div>
+  </li>;
 }

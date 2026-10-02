@@ -31,7 +31,7 @@ export function SkillInstallMenu() {
         8,
         Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8),
       );
-      setPosition({ top: rect.bottom + 4, left });
+      setPosition({ top: rect.bottom + 6, left });
     };
 
     updatePosition();
@@ -100,10 +100,10 @@ export function SkillInstallMenu() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`flex items-center gap-1.5 border-l border-fg/20 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wider transition-all ${
+        className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors ${
           open
-            ? "bg-fg text-accent"
-            : "text-fg/70 hover:bg-fg/10 hover:text-fg"
+            ? "bg-subtle text-fg"
+            : "text-fg-dim hover:bg-subtle hover:text-fg"
         }`}
         title={
           copiedTarget
@@ -114,15 +114,15 @@ export function SkillInstallMenu() {
         aria-expanded={open}
       >
         {copiedAgent ? (
-          <Check size={13} className="text-fg" />
+          <Check size={14} className="text-success" />
         ) : (
-          <Sparkles size={13} />
+          <Sparkles size={14} />
         )}
-        <span>{copiedAgent ? "Copied" : "Skill"}</span>
+        <span>{copiedAgent ? "Copied" : "Agent skill"}</span>
         {!copiedAgent && (
           <ChevronDown
-            size={11}
-            className={`transition-transform ${open ? "rotate-180" : ""}`}
+            size={14}
+            className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
           />
         )}
       </button>
@@ -141,13 +141,13 @@ export function SkillInstallMenu() {
               left: position.left,
               width: MENU_WIDTH,
             }}
-            className="z-[60] border-2 border-fg bg-bg-raised shadow-neo"
+            className="z-[90] animate-pop-in overflow-hidden rounded-lg border bg-surface shadow-pop"
           >
-            <div className="border-b-2 border-fg bg-accent px-3 py-2">
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-fg">
+            <div className="border-b px-3 py-2.5">
+              <div className="text-sm font-semibold text-fg">
                 Install agent skill
               </div>
-              <div className="mt-0.5 font-mono text-[9px] text-fg/60">
+              <div className="mt-0.5 text-xs text-muted">
                 Choose an agent to copy its command
               </div>
             </div>
@@ -161,21 +161,21 @@ export function SkillInstallMenu() {
                     role="menuitem"
                     onClick={() => void copyInstallCommand(agent.name)}
                     title={command}
-                    className="group flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-alt focus:bg-alt focus:outline-none"
+                    className="group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-subtle focus:bg-subtle focus:outline-none"
                   >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-fg bg-bg-raised text-fg">
-                      <Sparkles size={11} />
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-subtle text-muted">
+                      <Sparkles size={13} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-mono text-[10px] font-bold text-fg">
+                      <span className="block truncate text-sm font-medium text-fg">
                         {agent.label}
                       </span>
-                      <span className="block font-mono text-[8px] text-muted">
+                      <span className="block font-mono text-2xs text-muted">
                         --agent {agent.name}
                       </span>
                     </span>
                     <Copy
-                      size={11}
+                      size={14}
                       className="shrink-0 text-muted transition-colors group-hover:text-fg"
                     />
                   </button>

@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { get } from "../api/client.ts";
 import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
-import { Card, Btn, Table, EmptyState, InfoTip, showToast, confirm, PageShell, PageHeader, PageState } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, Table, EmptyState, InfoTip, InlineNotice, SectionHeader, Stat, StatusBadge, showToast, confirm, PageShell, PageHeader, PageState } from "../components/ui.tsx";
 import { useActiveOperations } from "../hooks/useOperation.ts";
 import { PermissionGate } from "../components/permission-gate.tsx";
 import { NeoSelect } from "../components/neo-select.tsx";
 import { useServerTypes, typeOptions, locationOptions } from "../hooks/use-server-types.ts";
-import { ArrowRight, HardDrive, Server, Database, Trash2, RefreshCw, Plus, History, Cloud, Hammer } from "lucide-react";
+import { ArrowRight, HardDrive, Server, Trash2, RefreshCw, Plus, History, Cloud, Hammer } from "lucide-react";
 import type { ResourcesData } from "../types.ts";
 import { serverProvisioningResourceId } from "../../../shared/server-provisioning.ts";
 import { InfrastructureTools } from "../components/infrastructure-tools.tsx";
@@ -214,9 +214,13 @@ export function ResourcesPage() {
 
   if (loading) return <PageState title="Loading resources" />;
 
+  const rowClass = "flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-subtle/50";
+  const tileClass = "grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted";
+  const sep = <span className="text-line-strong">·</span>;
+
   return (
     <PageShell>
-      <PageHeader title="Resources" description="Servers, volumes, S3 buckets, capacity, and infrastructure cost." actions={<Btn variant="ghost" onClick={async () => {
+      <PageHeader title="Resources" description="Servers, volumes, S3 buckets, capacity, and infrastructure cost." actions={<Btn onClick={async () => {
           setLoading(true);
           try {
             await runCliAction("servers.refresh");
@@ -226,280 +230,301 @@ export function ResourcesPage() {
             showToast(error instanceof Error ? error.message : "Refresh failed", "error");
             setLoading(false);
           }
-        }}><RefreshCw size={13} /> Refresh inventory</Btn>} />
+        }}><RefreshCw size={14} /> Refresh inventory</Btn>} />
 
       <TabBar tabs={RESOURCE_SECTIONS} active={section} onChange={setSection} />
 
       {/* Cost estimate */}
       {section === "overview" && data?.totals && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider flex items-center gap-1">Estimated Monthly Cost <InfoTip text="Estimates based on Hetzner's list prices. Excludes traffic overage and snapshots." /></h3>
-            <span className="font-mono text-[9px] text-muted uppercase tracking-wider">
-              gross · {data.totals.currency || "EUR"}
-            </span>
+        <section className="space-y-3">
+          <SectionHeader
+            title={<span className="inline-flex items-center gap-1">Estimated monthly cost <InfoTip text="Estimates based on Hetzner's list prices. Excludes traffic overage and snapshots." /></span>}
+            actions={<span className="text-xs text-muted">Gross · {data.totals.currency || "EUR"}</span>}
+          />
+          <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-3">
+            <Stat label="Servers" value={fmtPrice(data.totals.servers)} className="bg-surface px-4 py-3.5" />
+            <Stat label="Volumes" value={fmtPrice(data.totals.volumes)} className="bg-surface px-4 py-3.5" />
+            <Stat label="Total / month" value={fmtPrice(data.totals.total)} hint="Servers + volumes" className="bg-subtle px-4 py-3.5" />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <div className="border-2 border-fg p-3 bg-alt">
-              <div className="font-mono text-[9px] text-muted uppercase tracking-wider mb-1">Servers</div>
-              <div className="font-mono text-sm font-bold text-fg">{fmtPrice(data.totals.servers)}</div>
-            </div>
-            <div className="border-2 border-fg p-3 bg-alt">
-              <div className="font-mono text-[9px] text-muted uppercase tracking-wider mb-1">Volumes</div>
-              <div className="font-mono text-sm font-bold text-fg">{fmtPrice(data.totals.volumes)}</div>
-            </div>
-            <div className="border-2 border-fg p-3 bg-accent">
-              <div className="font-mono text-[9px] text-fg uppercase tracking-wider mb-1 font-bold">Total / month</div>
-              <div className="font-mono text-sm font-bold text-fg">{fmtPrice(data.totals.total)}</div>
-            </div>
-          </div>
-        </Card>
+        </section>
       )}
 
       {section === "overview" && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            { key: "servers" as const, label: "Servers", value: data?.servers?.length || 0, unit: "hosts", icon: Server },
-            { key: "volumes" as const, label: "Volumes", value: data?.volumes?.length || 0, unit: "volumes", icon: HardDrive },
-            {
-              key: "object-storage" as const,
-              label: "Object Storage",
-              value: data?.s3_configured ? data.buckets?.length || 0 : "—", unit: data?.s3_configured ? "buckets" : "Not configured", icon: Cloud,
-            },
-            { key: "tools" as const, label: "Tools", value: "↗", unit: "Workers · cleanup", icon: Hammer },
-          ].map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setSection(item.key)}
-              className="group flex min-h-28 w-full flex-col justify-between border-2 border-fg bg-bg-raised p-4 text-left shadow-neo transition-all hover:-translate-x-px hover:-translate-y-px hover:bg-alt hover:shadow-neo-lg"
-            >
-              <span className="flex w-full items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-wider"><item.icon size={14} />{item.label}<ArrowRight size={12} className="ml-auto text-muted group-hover:text-fg" /></span>
-              <span className="flex items-baseline gap-2"><strong className="font-mono text-xl text-fg">{item.value}</strong><span className="font-mono text-[9px] text-muted">{item.unit}</span></span>
-            </button>
-          ))}
-        </div>
+        <section className="space-y-3">
+          <SectionHeader title="Inventory" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              { key: "servers" as const, label: "Servers", value: data?.servers?.length || 0, unit: "hosts", icon: Server },
+              { key: "volumes" as const, label: "Volumes", value: data?.volumes?.length || 0, unit: "volumes", icon: HardDrive },
+              {
+                key: "object-storage" as const,
+                label: "Object Storage",
+                value: data?.s3_configured ? data.buckets?.length || 0 : "—", unit: data?.s3_configured ? "buckets" : "Not configured", icon: Cloud,
+              },
+              { key: "tools" as const, label: "Tools", value: "↗", unit: "Workers · cleanup", icon: Hammer },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setSection(item.key)}
+                className="group flex w-full items-center gap-3.5 rounded-lg border bg-surface p-4 text-left shadow-xs transition-colors hover:border-line-strong hover:bg-subtle/40 focus-visible:outline-none focus-visible:ring-2"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border bg-subtle text-muted transition-colors group-hover:text-fg">
+                  <item.icon size={18} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-fg">{item.label}</span>
+                  <span className="mt-0.5 flex items-baseline gap-1.5">
+                    <strong className="text-xl font-semibold tabular-nums tracking-tight text-fg">{item.value}</strong>
+                    <span className="truncate text-xs text-muted">{item.unit}</span>
+                  </span>
+                </span>
+                <ArrowRight size={15} className="shrink-0 text-muted transition-colors group-hover:text-fg" />
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Servers */}
-      {section === "servers" && <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Server size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Servers ({data?.servers?.length || 0})</h3>
-          <div className="ml-auto relative" ref={popoverRef}>
-            <PermissionGate permission="servers.create">
-              <Btn size="xs" onClick={creating ? undefined : togglePopover}>
-                <Plus size={11} /> Create Server
-              </Btn>
-            </PermissionGate>
-            {showCreate && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-bg-raised border-2 border-fg shadow-neo p-3 space-y-2 w-52">
-                <NeoSelect
-                  value={createType}
-                  options={typeOptions(serverTypes)}
-                  onChange={(v) => { setCreateType(v); setCreateLocation(""); }}
-                  placeholder="Type..."
-                  compact
-                />
-                <NeoSelect
-                  value={createLocation}
-                  options={locationOptions(serverTypes, createType)}
-                  onChange={setCreateLocation}
-                  placeholder="Location..."
-                  compact
-                  disabled={!createType}
-                />
-                <input
-                  type="text"
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                  placeholder="Name (optional)"
-                  className="font-mono text-[10px] w-full"
-                />
-                <Btn size="xs" variant="primary" onClick={handleCreateServer} disabled={creating || ops.isBusyWith("provision_server") || !createType || !createLocation} className="w-full">
-                  {ops.isBusyWith("provision_server") ? "Provisioning…" : (creating && createProgress ? createProgress : "Create")}
+      {section === "servers" && <Card className="overflow-hidden">
+        <CardHeader
+          title="Servers"
+          icon={<Server size={15} />}
+          description={`${data?.servers?.length || 0} host${(data?.servers?.length || 0) === 1 ? "" : "s"} in the fleet`}
+          actions={
+            <div className="relative" ref={popoverRef}>
+              <PermissionGate permission="servers.create">
+                <Btn size="xs" onClick={creating ? undefined : togglePopover}>
+                  <Plus size={13} /> Create server
                 </Btn>
-              </div>
-            )}
-          </div>
-        </div>
-        {!data?.servers?.length ? <EmptyState message="No servers" /> : (
-          <Table headers={["Name", "Replicas", "Disk", "€/mo", ""]}>
+              </PermissionGate>
+              {showCreate && (
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-64 animate-pop-in space-y-2 rounded-lg border bg-surface p-3 shadow-pop">
+                  <div className="pb-1 text-xs font-medium text-muted">New Hetzner server</div>
+                  <NeoSelect
+                    value={createType}
+                    options={typeOptions(serverTypes)}
+                    onChange={(v) => { setCreateType(v); setCreateLocation(""); }}
+                    placeholder="Type..."
+                    compact
+                  />
+                  <NeoSelect
+                    value={createLocation}
+                    options={locationOptions(serverTypes, createType)}
+                    onChange={setCreateLocation}
+                    placeholder="Location..."
+                    compact
+                    disabled={!createType}
+                  />
+                  <input
+                    type="text"
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                    placeholder="Name (optional)"
+                    className="w-full font-mono"
+                  />
+                  <Btn size="xs" variant="primary" onClick={handleCreateServer} disabled={creating || ops.isBusyWith("provision_server") || !createType || !createLocation} className="w-full">
+                    {ops.isBusyWith("provision_server") ? "Provisioning…" : (creating && createProgress ? createProgress : "Create")}
+                  </Btn>
+                </div>
+              )}
+            </div>
+          }
+        />
+        {!data?.servers?.length ? <EmptyState message="No servers" icon={Server} /> : (
+          <div className="divide-y">
             {data.servers.map((s) => (
-              <tr key={s.id} className="hover:bg-alt/50">
-                <td className="py-2 px-3">
-                  <a
-                    href={`#/resources/servers/${s.id}`}
-                    className="text-fg font-bold hover:text-accent-blue hover:underline"
-                  >
-                    {s.name}
-                  </a>
-                </td>
-                <td className="py-2 px-3 text-fg-dim">{s.replica_count}</td>
-                <td className="py-2 px-3 font-mono text-[10px]">
-                  {s.disk_free_gb != null && s.disk_total_gb != null ? (
-                    <span
-                      className={
-                        s.disk_free_gb < 2
-                          ? "text-accent-red font-bold"
-                          : s.disk_free_gb < 5
-                            ? "text-accent-amber font-bold"
-                            : "text-fg-dim"
-                      }
-                      title={`${s.disk_used_gb} / ${s.disk_total_gb} GB used`}
-                    >
-                      {s.disk_free_gb}<span className="text-muted">/{s.disk_total_gb}</span><span className="text-muted ml-0.5">GB</span>
-                    </span>
-                  ) : "—"}
-                </td>
-                <td className="py-2 px-3 text-fg font-bold">{fmtPrice(s.monthly_eur)}</td>
-                <td className="py-2 px-3">
+              <div key={s.id} className={rowClass}>
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className={tileClass}><Server size={15} /></span>
+                  <div className="min-w-0">
+                    <a href={`#/resources/servers/${s.id}`} className="block truncate text-sm font-medium text-fg hover:underline">
+                      {s.name}
+                    </a>
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                      {s.type && <><span className="font-mono">{s.type}</span>{sep}</>}
+                      {s.location && <><span className="font-mono">{s.location}</span>{sep}</>}
+                      <span>{s.replica_count} replica{s.replica_count === 1 ? "" : "s"}</span>
+                      {sep}
+                      {s.disk_free_gb != null && s.disk_total_gb != null ? (
+                        <span
+                          className={`tabular-nums ${
+                            s.disk_free_gb < 2
+                              ? "font-medium text-danger"
+                              : s.disk_free_gb < 5
+                                ? "font-medium text-warning"
+                                : ""
+                          }`}
+                          title={`${s.disk_used_gb} / ${s.disk_total_gb} GB used`}
+                        >
+                          {s.disk_free_gb}/{s.disk_total_gb} GB free
+                        </span>
+                      ) : <span>Disk —</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-sm tabular-nums text-fg">{fmtPrice(s.monthly_eur)}<span className="text-xs text-muted">/mo</span></span>
                   <PermissionGate permission="resources.delete">
                     <Btn
-                      size="xs"
-                      variant="danger"
+                      variant="ghost"
                       disabled={s.replica_count > 0}
-                      title={s.replica_count > 0 ? "In use by replicas" : undefined}
+                      title={s.replica_count > 0 ? "In use by replicas" : `Delete ${s.name}`}
                       loading={deleting === `server-${s.id}` || !!ops.byResourceKey(`server:${s.id}`)}
                       onClick={() => handleDelete("server", String(s.id), s.name)}
                     >
-                      <Trash2 size={11} />
+                      <Trash2 size={15} />
                     </Btn>
                   </PermissionGate>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </Table>
+          </div>
         )}
       </Card>}
 
       {/* Object storage */}
-      {section === "object-storage" && <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Cloud size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">S3 Buckets ({data?.buckets?.length || 0})</h3>
-          {data?.s3_configured && <span className="font-mono text-[8px] text-muted uppercase">Hetzner · {data.s3_region}</span>}
-        </div>
+      {section === "object-storage" && <Card className="overflow-hidden">
+        <CardHeader
+          title="S3 buckets"
+          icon={<Cloud size={15} />}
+          description={data?.s3_configured ? `${data?.buckets?.length || 0} bucket${(data?.buckets?.length || 0) === 1 ? "" : "s"} · Hetzner · ${data.s3_region}` : "Hetzner Object Storage"}
+        />
         {!data?.s3_configured ? (
-          <EmptyState message="Hetzner Object Storage is not configured. Add S3 credentials under Admin → Hetzner." />
+          <EmptyState icon={Cloud} message="Hetzner Object Storage is not configured" description="Add S3 credentials under Admin → Hetzner." />
         ) : data.s3_error ? (
-          <div className="border-2 border-accent-red bg-accent-red/10 p-3 font-mono text-[10px] text-accent-red">{data.s3_error}</div>
+          <div className="p-4"><InlineNotice tone="danger"><span className="break-words font-mono text-xs">{data.s3_error}</span></InlineNotice></div>
         ) : (
           <>
             <PermissionGate permission="buckets.create">
-              <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+              <div className="flex flex-col gap-2 border-b bg-subtle/40 px-4 py-3 sm:flex-row sm:items-center">
                 <input
                   type="text"
                   value={bucketName}
                   onChange={(event) => setBucketName(event.target.value)}
                   placeholder="globally-unique-bucket-name"
-                  className="min-w-0 flex-1 font-mono text-[10px]"
+                  className="min-w-0 flex-1 font-mono"
                 />
-                <Btn size="xs" onClick={handleCreateBucket} loading={bucketBusy?.startsWith("create:") === true} disabled={!bucketName.trim()}>
-                  <Plus size={11} /> Create private bucket
+                <Btn onClick={handleCreateBucket} loading={bucketBusy?.startsWith("create:") === true} disabled={!bucketName.trim()}>
+                  <Plus size={14} /> Create private bucket
                 </Btn>
               </div>
             </PermissionGate>
-            {!data.buckets.length ? <EmptyState message="No buckets in this region" /> : (
-              <Table headers={["Name", "Region", "Created", "Endpoint", ""]}>
+            {!data.buckets.length ? <EmptyState message="No buckets in this region" icon={Cloud} /> : (
+              <div className="divide-y">
                 {data.buckets.map((bucket) => (
-                  <tr key={bucket.name} className="hover:bg-alt/50">
-                    <td className="py-2 px-3">
-                      <a href={`#/resources/buckets/${encodeURIComponent(bucket.name)}`} className="text-fg font-bold hover:text-accent-blue hover:underline">
-                        {bucket.name}
-                      </a>
-                    </td>
-                    <td className="py-2 px-3 text-fg-dim">{bucket.region}</td>
-                    <td className="py-2 px-3 text-fg-dim">{bucket.createdAt ? new Date(bucket.createdAt).toLocaleString() : "—"}</td>
-                    <td className="py-2 px-3 font-mono text-[9px] text-fg-dim">{bucket.endpoint}</td>
-                    <td className="py-2 px-3">
-                      <PermissionGate permission="buckets.delete">
-                        <Btn size="xs" variant="danger" loading={bucketBusy === `delete:${bucket.name}`} onClick={() => handleDeleteBucket(bucket.name)}>
-                          <Trash2 size={11} />
-                        </Btn>
-                      </PermissionGate>
-                    </td>
-                  </tr>
+                  <div key={bucket.name} className={rowClass}>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className={tileClass}><Cloud size={15} /></span>
+                      <div className="min-w-0">
+                        <a href={`#/resources/buckets/${encodeURIComponent(bucket.name)}`} className="block truncate text-sm font-medium text-fg hover:underline">
+                          {bucket.name}
+                        </a>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                          <span className="font-mono">{bucket.region}</span>
+                          {sep}
+                          <span>Created {bucket.createdAt ? new Date(bucket.createdAt).toLocaleString() : "—"}</span>
+                          {sep}
+                          <span className="min-w-0 truncate font-mono" title={bucket.endpoint}>{bucket.endpoint}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <PermissionGate permission="buckets.delete">
+                      <Btn variant="ghost" title={`Delete ${bucket.name}`} loading={bucketBusy === `delete:${bucket.name}`} onClick={() => handleDeleteBucket(bucket.name)}>
+                        <Trash2 size={15} />
+                      </Btn>
+                    </PermissionGate>
+                  </div>
                 ))}
-              </Table>
+              </div>
             )}
           </>
         )}
       </Card>}
 
       {/* Volumes */}
-      {section === "volumes" && <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Database size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Volumes ({data?.volumes?.length || 0})</h3>
-          <div className="ml-auto">
-            <PermissionGate permission="volumes.delete">
-              <Btn size="xs" variant="ghost" onClick={toggleVolumeAudit}>
-                <History size={11} /> {volumeAudit ? "Hide audit" : "Deletion audit"}
-              </Btn>
-            </PermissionGate>
-          </div>
-        </div>
-        <p className="text-xs text-muted mb-3">Hetzner block volumes only. Server-local directories share the server disk and appear under each server’s Storage and the app’s Storage.</p>
-        {!data?.volumes?.length ? <EmptyState message="No Hetzner volumes" /> : (
-          <Table headers={["Name", "State", "Size", "Location", "Server", "App", "€/mo", ""]}>
-            {data.volumes.map((v) => (
-              <tr key={v.id} className="hover:bg-alt/50">
-                <td className="py-2 px-3">
-                  <a
-                    href={`#/resources/volumes/${encodeURIComponent(v.id)}`}
-                    className="text-fg font-bold hover:text-accent-blue hover:underline"
-                  >
-                    {v.name}
-                  </a>
-                </td>
-                <td className="py-2 px-3 text-fg-dim">
-                  {v.retired_state
-                    ? v.retention_class === "provisional"
-                      ? `provisional until ${String(v.purge_after || "").slice(0, 10)}; auto-cleanup (${v.retired_from})`
-                      : `retained; review ${String(v.purge_after || "").slice(0, 10)} (${v.retired_from})`
-                    : "attached"}
-                </td>
-                <td className="py-2 px-3 text-fg-dim">{v.size} GB</td>
-                <td className="py-2 px-3 text-fg-dim">{v.location}</td>
-                <td className="py-2 px-3 text-fg-dim">{v.server_name || "—"}</td>
-                <td className="py-2 px-3 text-accent-blue font-bold">{v.app_name || "—"}</td>
-                <td className="py-2 px-3 text-fg font-bold">{fmtPrice(v.monthly_eur)}</td>
-                <td className="py-2 px-3">
-                  <div className="flex items-center gap-1">
-                    <PermissionGate permission="volumes.delete">
-                      <Btn size="xs" variant="danger" disabled={!!v.app_name} title={v.app_name ? `In use by ${v.app_name}` : undefined} loading={deleting === `volume-${v.id}`} onClick={() => handleDelete("volume", v.id, v.name)}>
-                        <Trash2 size={11} />
-                      </Btn>
-                    </PermissionGate>
+      {section === "volumes" && <>
+        <Card className="overflow-hidden">
+          <CardHeader
+            title="Volumes"
+            icon={<HardDrive size={15} />}
+            description={`${data?.volumes?.length || 0} Hetzner block volume${(data?.volumes?.length || 0) === 1 ? "" : "s"}`}
+            actions={
+              <PermissionGate permission="volumes.delete">
+                <Btn size="xs" variant="ghost" onClick={toggleVolumeAudit}>
+                  <History size={13} /> {volumeAudit ? "Hide audit" : "Deletion audit"}
+                </Btn>
+              </PermissionGate>
+            }
+          />
+          <p className="border-b bg-subtle/40 px-4 py-2.5 text-xs text-muted">Hetzner block volumes only. Server-local directories share the server disk and appear under each server’s Storage and the app’s Storage.</p>
+          {!data?.volumes?.length ? <EmptyState message="No Hetzner volumes" icon={HardDrive} /> : (
+            <div className="divide-y">
+              {data.volumes.map((v) => {
+                const stateText = v.retired_state
+                  ? v.retention_class === "provisional"
+                    ? `provisional until ${String(v.purge_after || "").slice(0, 10)}; auto-cleanup (${v.retired_from})`
+                    : `retained; review ${String(v.purge_after || "").slice(0, 10)} (${v.retired_from})`
+                  : "attached";
+                return (
+                  <div key={v.id} className={rowClass}>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className={tileClass}><HardDrive size={15} /></span>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <a href={`#/resources/volumes/${encodeURIComponent(v.id)}`} className="truncate text-sm font-medium text-fg hover:underline">
+                            {v.name}
+                          </a>
+                          {v.app_name && <Badge tone="info">{v.app_name}</Badge>}
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                          <span className={v.retired_state ? "text-warning" : ""}>{stateText}</span>
+                          {sep}
+                          <span className="tabular-nums">{v.size} GB</span>
+                          {sep}
+                          <span className="font-mono">{v.location}</span>
+                          {sep}
+                          <span>{v.server_name ? <>on <span className="font-mono">{v.server_name}</span></> : "No server"}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-sm tabular-nums text-fg">{fmtPrice(v.monthly_eur)}<span className="text-xs text-muted">/mo</span></span>
+                      <PermissionGate permission="volumes.delete">
+                        <Btn variant="ghost" disabled={!!v.app_name} title={v.app_name ? `In use by ${v.app_name}` : `Delete ${v.name}`} loading={deleting === `volume-${v.id}`} onClick={() => handleDelete("volume", v.id, v.name)}>
+                          <Trash2 size={15} />
+                        </Btn>
+                      </PermissionGate>
+                    </div>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </Table>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </Card>
         {volumeAudit && (
-          <div className="mt-4">
-            <h4 className="font-mono text-[9px] font-bold uppercase mb-2">Permanent deletion audit</h4>
+          <Card className="overflow-hidden">
+            <CardHeader title="Permanent deletion audit" icon={<History size={15} />} description="Every attempt to permanently delete volume data" />
             {volumeAudit.length === 0 ? (
-              <div className="font-mono text-[9px] text-muted">No deletion attempts recorded.</div>
+              <EmptyState message="No deletion attempts recorded." icon={History} />
             ) : (
               <Table headers={["Requested", "Volume", "Former owner", "Status", "Actor", "Error"]}>
                 {volumeAudit.map((row) => (
                   <tr key={row.id}>
-                    <td className="py-2 px-3 text-fg-dim">{row.requested_at}</td>
-                    <td className="py-2 px-3 font-bold">{row.provider_volume_name} <span className="text-muted">#{row.provider_volume_id}</span></td>
-                    <td className="py-2 px-3 text-fg-dim">{row.former_resource_name || "—"}</td>
-                    <td className="py-2 px-3">{row.status}</td>
-                    <td className="py-2 px-3 text-fg-dim">{row.actor_user_id}</td>
-                    <td className="py-2 px-3 text-accent-red">{row.error || "—"}</td>
+                    <td className="whitespace-nowrap text-fg-dim">{row.requested_at}</td>
+                    <td><span className="font-medium text-fg">{row.provider_volume_name}</span> <span className="font-mono text-xs text-muted">#{row.provider_volume_id}</span></td>
+                    <td className="text-fg-dim">{row.former_resource_name || "—"}</td>
+                    <td><StatusBadge status={row.status} /></td>
+                    <td className="font-mono text-xs text-fg-dim">{row.actor_user_id}</td>
+                    <td className={row.error ? "text-danger" : "text-muted"}>{row.error || "—"}</td>
                   </tr>
                 ))}
               </Table>
             )}
-          </div>
+          </Card>
         )}
-      </Card>}
+      </>}
 
       {section === "tools" && <InfrastructureTools />}
     </PageShell>

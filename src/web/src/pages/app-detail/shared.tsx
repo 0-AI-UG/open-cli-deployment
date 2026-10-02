@@ -73,7 +73,7 @@ export function CpuUsage({ cpuPercent, limitCores, status }: { cpuPercent?: numb
   }
   // Smaller than the table baseline so "used / allowed" fits the width the bare
   // percentage used to occupy.
-  return <span className="text-[10px]">{text}</span>;
+  return <span className="whitespace-nowrap text-xs tabular-nums">{text}</span>;
 }
 
 /**
@@ -88,19 +88,28 @@ export function MemUsage({ memoryPercent, usedMb, limitMb, status }: { memoryPer
     if (usedMb != null && limitMb) text = `${fmtMem(usedMb)} / ${fmtMem(limitMb)}`;
     else if (memoryPercent != null) text = `${memoryPercent.toFixed(1)}%`;
   }
-  return <span className="text-[10px]">{text}</span>;
+  return <span className="whitespace-nowrap text-xs tabular-nums">{text}</span>;
 }
 
-export function Sparkline({ values, color = "#5B8DEF" }: { values: number[]; color?: string }) {
-  if (values.length < 2) return <span className="text-[9px] text-muted font-mono">no data</span>;
+/**
+ * A tiny trend line. By default it strokes `currentColor` with the info token so
+ * it reads in both themes; pass `color` (any CSS color) to override per series.
+ */
+export function Sparkline({ values, color }: { values: number[]; color?: string }) {
+  if (values.length < 2) return <span className="text-xs text-muted">No data</span>;
   const w = 120, h = 24;
   const max = Math.max(100, ...values);
   const step = w / (values.length - 1);
-  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(" ");
+  const coords = values.map((v, i) => [i * step, h - (v / max) * (h - 2) - 1] as const);
+  const pts = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `0,${h} ${pts} ${w},${h}`;
+  const [lastX, lastY] = coords[coords.length - 1];
   return (
-    <svg width={w} height={h} className="inline-block" role="img" aria-label="Recent metric trend">
+    <svg width={w} height={h} className="inline-block overflow-visible align-middle text-info" style={color ? { color } : undefined} role="img" aria-label="Recent metric trend">
       <title>Recent metric trend</title>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" />
+      <polygon points={area} fill="currentColor" fillOpacity="0.08" />
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r="2" fill="currentColor" />
     </svg>
   );
 }

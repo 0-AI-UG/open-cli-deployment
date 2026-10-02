@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { get } from "../../api/client.ts";
-import { Card, Btn, Spinner } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, SegmentedControl, Spinner } from "../../components/ui.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { LogViewer } from "../../components/log-viewer.tsx";
 import { ScrollText, RefreshCw } from "lucide-react";
@@ -15,9 +15,8 @@ type MemberLog = {
 
 const keyOf = (m: MemberLog) => `${m.kind}-${m.id}`;
 
-// Distinct hues, all legible on the log viewer's near-black and dark enough to
-// take black text on the chips — the chip and the lines it controls carry the
-// same colour, so the filter row doubles as the legend.
+// Distinct hues, all legible on the log viewer's near-black. Each filter chip
+// carries its member's colour as a dot, so the filter row doubles as the legend.
 const MEMBER_COLORS = [
   "#5EEAD4", "#FFB800", "#7BABFF", "#C084FC",
   "#6EE7A0", "#FF8A5B", "#F472B6", "#FFD54F",
@@ -126,28 +125,31 @@ export function StackLogsTab({ stackId }: { stackId: number }) {
   };
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <ScrollText size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">
-            {source === "live" ? "Stack Logs" : "Stack Deploy Log"}
-          </h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-36">
-            <NeoSelect
-              value={source}
-              onChange={(v) => setSource(v as "live" | "deploy")}
-              options={[
-                { value: "live", label: "Container logs" },
-                { value: "deploy", label: "Deploy log" },
-              ]}
-              compact
-            />
-          </div>
+    <Card className="overflow-hidden">
+      <CardHeader
+        title={source === "live" ? "Stack logs" : "Stack deploy log"}
+        icon={<ScrollText size={15} />}
+        description={source === "live" ? "Every member's output, interleaved by timestamp" : "Narration from the last stack deploy"}
+        actions={
+          <Btn size="xs" loading={loading} onClick={() => (source === "live" ? loadLive() : loadDeploy())}>
+            <RefreshCw size={13} /> Refresh
+          </Btn>
+        }
+      />
+
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SegmentedControl
+            ariaLabel="Log source"
+            value={source}
+            onChange={(v) => setSource(v)}
+            options={[
+              { value: "live", label: "Container logs" },
+              { value: "deploy", label: "Deploy log" },
+            ] as const}
+          />
           {source === "live" && (
-            <div className="w-24">
+            <div className="w-32">
               <NeoSelect
                 value={String(tail)}
                 onChange={(v) => setTail(parseInt(v))}
@@ -156,39 +158,40 @@ export function StackLogsTab({ stackId }: { stackId: number }) {
               />
             </div>
           )}
-          <Btn size="xs" loading={loading} onClick={() => (source === "live" ? loadLive() : loadDeploy())}>
-            <RefreshCw size={12} /> Refresh
-          </Btn>
         </div>
+
+        {source === "live" && members.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {members.map((m) => {
+              const k = keyOf(m);
+              const on = !muted.has(k);
+              const color = colorOf[m.name];
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => toggle(k)}
+                  title={m.error || `${m.kind} · ${on ? "shown" : "hidden"}`}
+                  aria-pressed={on}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-xs transition-colors max-md:h-9 ${
+                    on ? "bg-surface text-fg hover:bg-subtle" : "border-dashed bg-transparent text-muted hover:text-fg"
+                  } ${m.error ? "line-through" : ""}`}
+                >
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${on ? "" : "opacity-40"}`}
+                    style={{ backgroundColor: color }}
+                  />
+                  {m.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {loading && members.length === 0 && source === "live"
+          ? <div className="flex justify-center py-10"><Spinner /></div>
+          : <LogViewer logs={source === "live" ? merged : deployLog} tagColors={source === "live" ? colorOf : undefined} />}
       </div>
-
-      {source === "live" && members.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          {members.map((m) => {
-            const k = keyOf(m);
-            const on = !muted.has(k);
-            const color = colorOf[m.name];
-            return (
-              <button
-                key={k}
-                onClick={() => toggle(k)}
-                title={m.error || `${m.kind} · ${on ? "shown" : "hidden"}`}
-                style={on ? { backgroundColor: color } : undefined}
-                className={`font-mono text-[9px] font-bold uppercase tracking-wider border-2 border-fg px-2 py-0.5 transition-all flex items-center gap-1.5 ${
-                  on ? "text-[#111] shadow-neo-sm" : "bg-bg-raised text-muted"
-                } ${m.error ? "line-through" : ""}`}
-              >
-                {!on && <span className="w-2 h-2 border border-fg/40" style={{ backgroundColor: color }} />}
-                {m.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {loading && members.length === 0 && source === "live"
-        ? <div className="flex justify-center py-10"><Spinner /></div>
-        : <LogViewer logs={source === "live" ? merged : deployLog} tagColors={source === "live" ? colorOf : undefined} />}
     </Card>
   );
 }

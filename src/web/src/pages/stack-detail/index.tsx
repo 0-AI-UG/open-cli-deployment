@@ -5,7 +5,7 @@ import { Btn, StatusBadge, showToast, confirm, PageShell, PageHeader, PageState 
 import { PermissionGate } from "../../components/permission-gate.tsx";
 import { TabBar } from "../../components/tab-bar.tsx";
 import { trackOperationInToast, useActiveOperations } from "../../hooks/useOperation.ts";
-import { ArrowLeft, ArrowUpFromLine, Trash2 } from "lucide-react";
+import { ArrowUpFromLine, Trash2 } from "lucide-react";
 import { OverviewTab } from "./overview-tab.tsx";
 import { StackLogsTab } from "./logs-tab.tsx";
 import type { StackDetail, EnvironmentData } from "../../types.ts";
@@ -69,7 +69,7 @@ export function StackDetailPage({ stackId }: { stackId: number }) {
   };
 
   if (loading) return <PageState title="Loading stack" />;
-  if (!stack) return <PageState kind="empty" title="Stack not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}>Back to dashboard</Btn>} />;
+  if (!stack) return <PageState kind="empty" title="Stack not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}>Back to overview</Btn>} />;
 
   // Staging siblings are hidden implementation detail of their production app —
   // they belong to the member, not to the stack's member list.
@@ -89,35 +89,32 @@ export function StackDetailPage({ stackId }: { stackId: number }) {
     <PageShell>
       <PageHeader
         backHref="#/"
-        backLabel="Back to dashboard"
+        backLabel="Overview"
         eyebrow="Stack"
         title={stack.name}
         meta={<>
-          <div><StatusBadge status={stack.status} /></div>
-          <div className="mt-1">
-            {memberApps.length} app{memberApps.length !== 1 ? "s" : ""}
-          </div>
+          <StatusBadge status={stack.status} />
+          <span>{memberApps.length} app{memberApps.length !== 1 ? "s" : ""}</span>
           {stack.last_operation_id != null && (
-            <>
-              <div className={`font-mono text-[9px] mt-0.5 ${stack.last_operation_failed ? "text-accent-red" : "text-muted"}`}>
-                Last stack operation #{stack.last_operation_id}: {stack.last_operation_status}
+            <span className={`inline-flex items-center gap-1.5 text-xs ${stack.last_operation_failed ? "text-danger" : "text-muted"}`}>
+              <span>
+                Last operation <span className="font-mono">#{stack.last_operation_id}</span>: {stack.last_operation_status}
                 {stack.operation_in_progress ? " (in progress)" : ""}
-              </div>
-              {(stack.last_operation_children || []).length > 0 && (
-                <div className="font-mono text-[9px] text-muted mt-0.5">
-                  Children: {stack.last_operation_children!.map((child) => `#${child.id} ${child.status}`).join(", ")}
-                </div>
-              )}
-            </>
+              </span>
+            </span>
+          )}
+          {stack.last_operation_id != null && (stack.last_operation_children || []).length > 0 && (
+            <span className="basis-full text-xs text-muted">
+              Children: <span className="font-mono">{stack.last_operation_children!.map((child) => `#${child.id} ${child.status}`).join(", ")}</span>
+            </span>
           )}
         </>}
-        actions={<div className="flex gap-1">
+        actions={<>
           {/* Promote only exists when there is something to promote — a stack
               with no staging siblings has no use for the button at all. */}
           {promotable > 0 && (
           <PermissionGate permission="stacks.promote" environmentId={stack.environment_id}>
             <Btn
-              size="xs"
               variant="primary"
               disabled={ops.isBusy}
               loading={actionLoading === "promote" || ops.isBusyWith("promote_stack")}
@@ -131,13 +128,12 @@ export function StackDetailPage({ stackId }: { stackId: number }) {
                   { action: "promote_stack", resourceType: "stack", resourceId: stackId },
                 ));
               }}
-            ><ArrowUpFromLine size={12} /> Promote</Btn>
+            ><ArrowUpFromLine size={14} /> Promote</Btn>
           </PermissionGate>
           )}
           <PermissionGate permission="stacks.destroy" environmentId={stack.environment_id}>
             <Btn
-              size="xs"
-              variant="danger"
+              variant="default"
               loading={actionLoading === "destroy" || ops.isBusyWith("destroy_stack")}
               disabled={ops.isBusy}
               onClick={async () => {
@@ -154,9 +150,9 @@ export function StackDetailPage({ stackId }: { stackId: number }) {
                   window.location.hash = "#/";
                 }
               }}
-            ><Trash2 size={12} /> Destroy</Btn>
+            ><Trash2 size={14} /> Destroy</Btn>
           </PermissionGate>
-        </div>}
+        </>}
       />
 
       <TabBar tabs={tabs} active={tab} onChange={setTab} />

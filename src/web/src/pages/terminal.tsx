@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuth } from "../stores/auth.ts";
 import { Btn, Spinner, PageShell, PageHeader, StatusBadge, InlineNotice } from "../components/ui.tsx";
 import { TerminalViewport, type TerminalViewportHandle } from "../components/terminal-viewport.tsx";
-import { ArrowLeft } from "lucide-react";
 
 type Props = {
   kind: "server" | "replica";
@@ -159,14 +158,13 @@ export function TerminalPage({ kind, id }: Props) {
     }
   }, []);
 
-  const statusColor =
-    status === "open" ? "text-accent-green"
-    : status === "connecting" || status === "disconnected" || status === "ended" ? "text-accent-amber"
-    : "text-accent-red";
-
   return (
-    <PageShell>
-      <PageHeader title={`Terminal: ${kind} #${id}`} actions={<StatusBadge status={status} />} />
+    <PageShell width="xl">
+      <PageHeader
+        eyebrow={kind === "server" ? "Server" : "Replica"}
+        title={`Terminal: ${kind} #${id}`}
+        actions={<StatusBadge status={status} />}
+      />
       {error && <InlineNotice tone="danger">{error}</InlineNotice>}
       <div className="relative">
         <TerminalViewport
@@ -175,14 +173,14 @@ export function TerminalPage({ kind, id }: Props) {
           onReady={connect}
           onData={handleData}
           onResize={handleResize}
-          className="h-[calc(100dvh-220px)] min-h-[320px] border-2 border-fg bg-black md:h-[70vh]"
+          className="h-[calc(100dvh-220px)] min-h-[320px] md:h-[70vh]"
         />
         {(status === "disconnected" || status === "connecting" || status === "ended") && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-            <div className="font-mono text-xs text-accent-amber uppercase tracking-wider text-center">
-              {status === "connecting" ? <span className="inline-flex items-center gap-1.5"><Spinner className="w-3 h-3" />Connecting</span>
-                : status === "ended" ? <>Session ended<br /><button className="mt-2 underline text-[10px] cursor-pointer" onClick={connect}>reconnect</button></>
-                : <><span className="inline-flex items-center gap-1.5"><Spinner className="w-3 h-3" />Disconnected, reconnecting</span><br /><button className="mt-2 underline text-[10px] cursor-pointer" onClick={() => { backoffRef.current = 500; connect(); }}>reconnect now</button></>
+          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/60 backdrop-blur-[1px]">
+            <div className="flex flex-col items-center gap-2 text-center text-sm font-medium text-zinc-200">
+              {status === "connecting" ? <span className="inline-flex items-center gap-2"><Spinner />Connecting</span>
+                : status === "ended" ? <>Session ended<button type="button" className="inline-flex h-8 items-center rounded-md border border-white/15 bg-white/10 px-3 text-sm font-medium text-white transition-colors hover:bg-white/20 max-md:h-11" onClick={connect}>Reconnect</button></>
+                : <><span className="inline-flex items-center gap-2"><Spinner />Disconnected, reconnecting</span><button type="button" className="inline-flex h-8 items-center rounded-md border border-white/15 bg-white/10 px-3 text-sm font-medium text-white transition-colors hover:bg-white/20 max-md:h-11" onClick={() => { backoffRef.current = 500; connect(); }}>Reconnect now</button></>
               }
             </div>
           </div>

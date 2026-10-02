@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { get, put } from "../../api/client.ts";
-import { Card, Btn, showToast, Badge, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
-import { ArrowLeft, Save, Key, ShieldCheck, Target, X } from "lucide-react";
+import { Card, CardHeader, Btn, Field, InlineNotice, showToast, Badge, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
+import { Check, Save, Key, Lock, ShieldCheck, Target, X } from "lucide-react";
 import { useAuth } from "../../stores/auth.ts";
 import type { AdminUser, AppData, EnvironmentData, PermissionGrant, UserPermissionsResponse } from "../../types.ts";
 
@@ -259,101 +259,99 @@ export function UserDetailPage({ userId }: { userId: string }) {
 
       {/* Permissions */}
       {!user.isAdmin && (
-        <Card className="p-5 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Key size={14} className="text-fg" />
-              <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Permissions</h3>
-            </div>
-            <Btn variant="primary" loading={saving} onClick={saveGrants}><Save size={13} /> Save</Btn>
-          </div>
-          <p className="font-mono text-[8px] text-muted mb-4 leading-relaxed">
+        <Card className="overflow-hidden">
+          <CardHeader
+            icon={<Key size={15} />}
+            title="Permissions"
+            description={`${grants.length} grant${grants.length === 1 ? "" : "s"}`}
+            actions={<Btn variant="primary" loading={saving} onClick={saveGrants}><Save size={14} /> Save</Btn>}
+          />
+          <p className="border-b px-4 py-3 text-sm text-fg-dim">
             Tick a permission to grant it fleet-wide. For the ones marked scopable, use
-            <span className="text-fg font-bold"> Scope </span>
+            <span className="font-medium text-fg"> Scope </span>
             to grant it on individual apps or environments instead — a fleet-wide tick supersedes those.
           </p>
-          <div className="space-y-6">
-            {PERMISSION_GROUPS.map((group) => {
-              const allSelected = group.permissions.every((p) => isGlobal(p.key));
-              return (
-                <div key={group.label}>
-                  <div className="flex items-center justify-between mb-2 border-b-2 border-fg pb-2">
-                    <span className="font-mono text-[9px] text-accent-blue font-bold uppercase tracking-wider">{group.label}</span>
-                    <button
-                      onClick={() => selectAllInGroup(group)}
-                      className="font-mono text-[9px] font-bold uppercase tracking-wider border-2 border-fg px-2 py-0.5 bg-bg-raised text-fg-dim shadow-neo-sm hover:bg-alt active:translate-x-0.5 active:translate-y-0.5 active:shadow-neo-none transition-all"
-                    >
-                      {allSelected ? "Deselect All" : "Select All"}
-                    </button>
+          {PERMISSION_GROUPS.map((group) => {
+            const allSelected = group.permissions.every((p) => isGlobal(p.key));
+            const grantedCount = group.permissions.filter((p) => isGlobal(p.key)).length;
+            return (
+              <section key={group.label} className="border-b last:border-b-0">
+                <div className="flex items-center justify-between gap-3 border-b bg-subtle/50 px-4 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-medium text-fg-dim">{group.label}</h4>
+                    <span className="text-xs tabular-nums text-muted">{grantedCount}/{group.permissions.length}</span>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {group.permissions.map((perm) => {
-                      const checked = isGlobal(perm.key);
-                      const scoped = scopedOf(perm.key);
-                      const kinds = scopeKinds[perm.key] ?? [];
-                      const open = scopeOpen === perm.key;
-                      return (
-                        <div
-                          key={perm.key}
-                          className={`border-2 border-fg shadow-neo-sm ${checked ? "bg-accent/20" : "bg-bg-raised"}`}
-                        >
-                          <div className="flex items-center gap-2.5 px-3 py-2">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleGlobal(perm.key)}
-                              className="flex-shrink-0"
-                              id={`perm-${perm.key}`}
-                            />
-                            <label htmlFor={`perm-${perm.key}`} className="cursor-pointer min-w-0 flex-1">
-                              <span className="font-mono text-[9px] text-fg font-bold uppercase">{perm.key}</span>
-                              <span className="block font-mono text-[8px] text-muted">{perm.label}</span>
-                            </label>
-                            {/* Only permissions the server reports as scopable
-                                get an affordance at all; the modal keeps the
-                                row's height fixed however many scopes exist. */}
-                            {kinds.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  scopeTriggerRef.current = e.currentTarget;
-                                  setScopeOpen(perm.key);
-                                }}
-                                title="Grant on individual apps or environments"
-                                aria-haspopup="dialog"
-                                aria-expanded={open}
-                                className={`flex-shrink-0 flex items-center gap-1 font-mono text-[8px] font-bold uppercase tracking-wider border-2 border-fg px-1.5 py-0.5 shadow-neo-sm transition-all ${
-                                  scoped.length > 0 ? "bg-accent text-fg" : "bg-bg-raised text-fg-dim hover:bg-alt"
-                                }`}
-                              >
-                                <Target size={9} />
-                                {scoped.length > 0 ? `Scoped · ${scoped.length}` : "Scope"}
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Existing narrower grants. A global tick makes them
-                              redundant, so they are struck through rather than
-                              silently dropped — untick global and they apply again. */}
-                          {scoped.length > 0 && (
-                            <div className="px-3 pb-2">
-                              <ScopeChips
-                                grants={scoped}
-                                superseded={checked}
-                                label={scopeLabel}
-                                onRemove={removeScoped}
-                              />
-                            </div>
-                          )}
-
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => selectAllInGroup(group)}
+                    className="rounded px-1.5 py-0.5 text-xs font-medium text-muted transition-colors hover:bg-subtle hover:text-fg"
+                  >
+                    {allSelected ? "Deselect all" : "Select all"}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+                <div className="divide-y">
+                  {group.permissions.map((perm) => {
+                    const checked = isGlobal(perm.key);
+                    const scoped = scopedOf(perm.key);
+                    const kinds = scopeKinds[perm.key] ?? [];
+                    const open = scopeOpen === perm.key;
+                    return (
+                      <div key={perm.key} className="px-4 py-2.5 transition-colors hover:bg-subtle/40">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleGlobal(perm.key)}
+                            className="flex-shrink-0"
+                            id={`perm-${perm.key}`}
+                          />
+                          <label htmlFor={`perm-${perm.key}`} className="min-w-0 flex-1 cursor-pointer">
+                            <span className={`block text-sm ${checked ? "font-medium text-fg" : "text-fg-dim"}`}>{perm.label}</span>
+                            <span className="block font-mono text-xs text-muted">{perm.key}</span>
+                          </label>
+                          {/* Only permissions the server reports as scopable
+                              get an affordance at all; the modal keeps the
+                              row's height fixed however many scopes exist. */}
+                          {kinds.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                scopeTriggerRef.current = e.currentTarget;
+                                setScopeOpen(perm.key);
+                              }}
+                              title="Grant on individual apps or environments"
+                              aria-haspopup="dialog"
+                              aria-expanded={open}
+                              className={`inline-flex h-7 flex-shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors ${
+                                scoped.length > 0 ? "border-info/25 bg-info/10 text-info hover:bg-info/15" : "border-line-strong bg-surface text-fg-dim hover:bg-subtle hover:text-fg"
+                              }`}
+                            >
+                              <Target size={12} />
+                              {scoped.length > 0 ? `Scoped · ${scoped.length}` : "Scope"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Existing narrower grants. A global tick makes them
+                            redundant, so they are struck through rather than
+                            silently dropped — untick global and they apply again. */}
+                        {scoped.length > 0 && (
+                          <div className="mt-2 pl-7">
+                            <ScopeChips
+                              grants={scoped}
+                              superseded={checked}
+                              label={scopeLabel}
+                              onRemove={removeScoped}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
         </Card>
       )}
 
@@ -379,13 +377,15 @@ export function UserDetailPage({ userId }: { userId: string }) {
 
       {/* Reset Password — hidden when viewing yourself; use the change-password card on the user list page instead. */}
       {!isSelf && (
-        <Card className="p-5">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider mb-3">Reset Password</h3>
-          <div className="flex gap-3 items-end">
-            <div className="flex-1">
+        <Card className="overflow-hidden">
+          <CardHeader icon={<Lock size={15} />} title="Reset password" description={`Set a new password for ${user.username}.`} />
+          <div className="px-4">
+            <Field label="New password">
               <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password (min 8 chars)" />
-            </div>
-            <Btn variant="default" loading={savingPassword} onClick={resetPassword}>Update Password</Btn>
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2 border-t bg-subtle/40 px-4 py-3">
+            <Btn variant="default" loading={savingPassword} onClick={resetPassword}>Update password</Btn>
           </div>
         </Card>
       )}
@@ -403,16 +403,17 @@ function ScopeChips({ grants, superseded, label, onRemove }: {
   onRemove: (g: PermissionGrant) => void;
 }) {
   return (
-    <div className={`flex flex-wrap gap-1 ${superseded ? "opacity-40" : ""}`}>
+    <div className={`flex flex-wrap gap-1.5 ${superseded ? "opacity-50" : ""}`}>
       {grants.map((g) => (
         <span
           key={grantKey(g)}
-          className={`inline-flex items-center gap-1 font-mono text-[8px] font-bold uppercase border border-fg px-1 py-0.5 bg-alt ${superseded ? "line-through" : ""}`}
+          className={`inline-flex h-6 items-center gap-1 rounded-md border bg-subtle pl-2 pr-0.5 text-xs text-fg ${superseded ? "line-through" : ""}`}
           title={superseded ? "Superseded by the fleet-wide grant" : undefined}
         >
-          {g.scopeType === "app" ? "app" : "env"}:{label(g)}
-          <button type="button" onClick={() => onRemove(g)} className="text-muted hover:text-accent-red">
-            <X size={9} />
+          <span className="text-muted">{g.scopeType === "app" ? "app" : "env"}</span>
+          <span className="font-mono">{label(g)}</span>
+          <button type="button" onClick={() => onRemove(g)} aria-label={`Remove ${label(g)}`} className="grid h-5 w-5 place-items-center rounded text-muted transition-colors hover:bg-danger/10 hover:text-danger">
+            <X size={12} />
           </button>
         </span>
       ))}
@@ -455,37 +456,35 @@ function ScopeModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-fg/40 animate-fade-in p-4"
+      className="fixed inset-0 z-[90] flex animate-fade-in items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={`Scope ${permission}`}
-        className="bg-bg-raised border-2 border-fg shadow-neo w-full max-w-lg max-h-[80vh] flex flex-col animate-slide-up"
+        className="flex max-h-[80vh] w-full max-w-lg animate-pop-in flex-col overflow-hidden rounded-xl border bg-surface shadow-pop"
       >
-        <div className="flex items-start gap-3 border-b-2 border-fg px-4 py-3">
-          <Target size={14} className="text-fg mt-0.5 flex-shrink-0" />
+        <div className="flex items-start gap-3 border-b px-5 py-4">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Target size={15} /></span>
           <div className="min-w-0 flex-1">
-            <h3 className="font-mono text-[10px] text-fg font-bold uppercase tracking-wider break-all">{permission}</h3>
-            {description && <p className="font-mono text-[8px] text-muted mt-0.5">{description}</p>}
+            <h3 className="break-all font-mono text-sm font-medium text-fg">{permission}</h3>
+            {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
           </div>
           <button
             ref={closeRef}
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex-shrink-0 border-2 border-fg bg-bg-raised text-fg-dim px-1.5 py-1 shadow-neo-sm hover:bg-alt active:translate-x-0.5 active:translate-y-0.5 active:shadow-neo-none transition-all"
+            className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-subtle hover:text-fg focus-visible:outline-none focus-visible:ring-2"
           >
-            <X size={12} />
+            <X size={16} />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-4 py-3 space-y-3">
+        <div className="space-y-4 overflow-y-auto px-5 py-4">
           {isGlobal && (
-            <p className="font-mono text-[8px] text-muted uppercase tracking-wider border-2 border-fg bg-alt px-2 py-1">
-              Granted fleet-wide; scopes below are ignored until you untick it.
-            </p>
+            <InlineNotice tone="info">Granted fleet-wide; scopes below are ignored until you untick it.</InlineNotice>
           )}
           {kinds.includes("environment") && (
             <ScopeList
@@ -505,20 +504,14 @@ function ScopeModal({
           )}
           {scoped.length > 0 && (
             <div>
-              <div className="font-mono text-[8px] text-muted font-bold uppercase tracking-wider mb-1">Granted on</div>
+              <div className="mb-1.5 text-xs font-medium text-muted">Granted on</div>
               <ScopeChips grants={scoped} superseded={isGlobal} label={scopeLabel} onRemove={onRemove} />
             </div>
           )}
         </div>
 
-        <div className="border-t-2 border-fg px-4 py-2 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="font-mono text-[9px] font-bold uppercase tracking-wider border-2 border-fg bg-accent text-fg px-3 py-1 shadow-neo-sm hover:bg-accent/80 active:translate-x-0.5 active:translate-y-0.5 active:shadow-neo-none transition-all"
-          >
-            Done
-          </button>
+        <div className="flex justify-end gap-2 border-t bg-subtle/50 px-5 py-3">
+          <Btn variant="primary" onClick={onClose}>Done</Btn>
         </div>
       </div>
     </div>,
@@ -534,22 +527,24 @@ function ScopeList({ title, items, selected, onToggle }: {
 }) {
   return (
     <div>
-      <div className="font-mono text-[8px] text-muted font-bold uppercase tracking-wider mb-1">{title}</div>
+      <div className="mb-1.5 text-xs font-medium text-muted">{title}</div>
       {items.length === 0 ? (
-        <div className="font-mono text-[8px] text-muted">none</div>
+        <div className="text-sm text-muted">None</div>
       ) : (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {items.map((it) => {
             const on = selected.includes(String(it.id));
             return (
               <button
                 key={it.id}
                 type="button"
+                aria-pressed={on}
                 onClick={() => onToggle(it.id)}
-                className={`font-mono text-[8px] font-bold uppercase border-2 border-fg px-1.5 py-0.5 transition-all ${
-                  on ? "bg-accent text-fg shadow-neo-sm" : "bg-bg-raised text-fg-dim hover:bg-alt"
+                className={`inline-flex h-7 items-center gap-1 rounded-md border px-2.5 font-mono text-xs transition-colors ${
+                  on ? "border-primary bg-primary text-primary-fg" : "border-line-strong bg-surface text-fg-dim hover:bg-subtle hover:text-fg"
                 }`}
               >
+                {on && <Check size={12} />}
                 {it.name}
               </button>
             );

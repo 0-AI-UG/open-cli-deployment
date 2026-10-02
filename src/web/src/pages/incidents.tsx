@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowRight, BellRing, RefreshCw } from "lucide-react";
+import { AlertTriangle, BellRing, ChevronRight, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
-import { Badge, Btn, Card, PageHeader, PageShell } from "../components/ui.tsx";
+import { Badge, Btn, Card, EmptyState, InlineNotice, PageHeader, PageShell, Spinner } from "../components/ui.tsx";
 import type { Incident as IncidentItem } from "../../../shared/incidents.ts";
 import { incidentDate as date, incidentDuration, incidentGuide } from "../lib/incidents.ts";
 
@@ -34,20 +34,44 @@ export function IncidentsPage() {
   }, [filter]);
   useEffect(() => { setItems([]); setNextOffset(null); void load(); return () => { request.current++; }; }, [load]);
 
+  const cols = "md:grid-cols-[minmax(0,1fr)_9rem_11rem_7rem_1rem]";
   return <PageShell>
-    <PageHeader title="Incidents" eyebrow="Operations" description="Monitor active conditions and review recovery history." actions={<Btn disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={13} /> Refresh</Btn>} />
-      <div className="flex flex-wrap gap-2" aria-label="Filter incidents">{filters.map(item => <button key={item.key} type="button" aria-pressed={filter === item.key} onClick={() => { request.current++; setLoading(true); setFilter(item.key); }} disabled={filter === item.key} className={`min-h-11 border-2 border-fg px-3 py-2 font-mono text-[10px] font-bold uppercase shadow-neo-sm ${filter === item.key ? "bg-accent" : "bg-bg-raised"}`}>{item.label} <span className="ml-1 opacity-60">{counts[item.key]}</span></button>)}</div>
-      {error && <div className="border-2 border-accent-red bg-bg-raised p-4 text-xs text-accent-red" role="alert">{error}</div>}
-      {loading ? <Card className="p-6 font-mono text-xs text-muted">Loading incidents…</Card> : items.length ? <div className="space-y-3">
-        <div className="hidden grid-cols-[minmax(0,1fr)_9rem_11rem_8rem_1.5rem] gap-4 px-4 font-mono text-[9px] font-bold uppercase tracking-wider text-muted md:grid"><span>Incident</span><span>Status</span><span>Opened</span><span>Duration</span><span /></div>
-        {items.map(item => <a key={item.incident_id} href={`#/incidents/${encodeURIComponent(item.incident_id)}`} className="grid min-w-0 gap-3 border-2 border-fg bg-bg-raised p-4 shadow-neo-sm transition-colors hover:bg-alt md:grid-cols-[minmax(0,1fr)_9rem_11rem_8rem_1.5rem] md:items-center md:gap-4">
-          <div className="flex min-w-0 items-start gap-3"><AlertTriangle size={16} className={item.resolved_at !== null ? "mt-0.5 shrink-0 text-muted" : "mt-0.5 shrink-0 text-accent-red"} /><div className="min-w-0"><div className="break-words font-mono text-xs font-bold">{item.title}</div><div className="mt-1 break-all font-mono text-[10px] text-muted">{incidentGuide(item.key).category}</div></div></div>
-          <div><Badge tone={item.resolved_at !== null ? "success" : "danger"}>{item.resolved_at !== null ? "Resolved" : "Active"}</Badge>{item.resolved_at !== null && <div className="mt-1 font-mono text-[9px] text-muted">Resolved {date(item.resolved_at)}</div>}</div>
-          <div className="font-mono text-[10px] text-muted"><span className="md:hidden">Opened </span>{date(item.opened_at ?? item.first_seen)}</div>
-          <div className="font-mono text-[10px] text-muted"><span className="md:hidden">Duration </span>{incidentDuration(item)}</div>
-          <ArrowRight size={17} className="hidden text-fg md:block" />
-        </a>)}
-        {nextOffset !== null && <div className="flex justify-center py-2"><Btn loading={moreBusy} disabled={moreBusy} onClick={() => void load(nextOffset)}>Load more</Btn></div>}
-      </div> : !error && <Card className="p-8 text-center"><BellRing size={22} className="mx-auto text-muted" /><h2 className="mt-3 font-mono text-xs font-bold">{filter === "all" ? "No incidents yet" : `No ${filter} incidents`}</h2><p className="mt-2 text-xs text-muted">Detected outages and recoveries will appear here.</p></Card>}
+    <PageHeader title="Incidents" eyebrow="Operations" description="Monitor active conditions and review recovery history." actions={<Btn disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>} />
+    <div className="inline-flex max-w-full rounded-md border bg-subtle p-0.5" role="group" aria-label="Filter incidents">
+      {filters.map(item => {
+        const active = filter === item.key;
+        return <button key={item.key} type="button" aria-pressed={active} onClick={() => { request.current++; setLoading(true); setFilter(item.key); }} disabled={active} className={`inline-flex h-7 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] px-3 text-sm font-medium transition-colors disabled:cursor-default max-md:h-10 ${active ? "bg-surface text-fg shadow-xs" : "text-muted hover:text-fg"}`}>
+          {item.label}
+          <span className={`rounded-full px-1.5 text-2xs tabular-nums ${active ? (item.key === "active" && counts.active > 0 ? "bg-danger/10 text-danger" : "bg-subtle text-fg-dim") : "text-muted"}`}>{counts[item.key]}</span>
+        </button>;
+      })}
+    </div>
+    {error && <InlineNotice tone="danger">{error}</InlineNotice>}
+    {loading ? <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading incidents…</Card> : items.length ? <Card className="overflow-hidden">
+      <div className={`hidden gap-4 border-b bg-subtle/50 px-4 py-2 text-xs font-medium text-muted md:grid ${cols}`}><span>Incident</span><span>Status</span><span>Opened</span><span>Duration</span><span /></div>
+      <div className="divide-y">
+        {items.map(item => {
+          const isResolved = item.resolved_at !== null;
+          return <a key={item.incident_id} href={`#/incidents/${encodeURIComponent(item.incident_id)}`} className={`group relative grid min-w-0 gap-2 px-4 py-3 transition-colors hover:bg-subtle/50 md:items-center md:gap-4 ${cols} ${isResolved ? "" : "bg-danger/[0.03]"}`}>
+            {!isResolved && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 bg-danger" />}
+            <div className="flex min-w-0 items-center gap-3">
+              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border ${isResolved ? "bg-subtle text-muted" : "border-danger/20 bg-danger/10 text-danger"}`}><AlertTriangle size={15} /></span>
+              <div className="min-w-0">
+                <div className="break-words text-sm font-medium text-fg group-hover:underline">{item.title}</div>
+                <div className="mt-0.5 break-all text-xs text-muted">{incidentGuide(item.key).category}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-11 md:block md:pl-0">
+              <Badge tone={isResolved ? "success" : "danger"}>{isResolved ? "Resolved" : "Active"}</Badge>
+              {isResolved && <div className="text-xs text-muted md:mt-1">Resolved {date(item.resolved_at)}</div>}
+            </div>
+            <div className="pl-11 text-xs tabular-nums text-muted md:pl-0"><span className="md:hidden">Opened </span>{date(item.opened_at ?? item.first_seen)}</div>
+            <div className="pl-11 text-xs tabular-nums text-muted md:pl-0"><span className="md:hidden">Duration </span>{incidentDuration(item)}</div>
+            <ChevronRight size={14} className="hidden text-muted transition-colors group-hover:text-fg md:block" />
+          </a>;
+        })}
+      </div>
+      {nextOffset !== null && <div className="flex justify-center border-t bg-subtle/40 px-4 py-3"><Btn loading={moreBusy} disabled={moreBusy} onClick={() => void load(nextOffset)}>Load more</Btn></div>}
+    </Card> : !error && <Card><EmptyState icon={BellRing} message={filter === "all" ? "No incidents yet" : `No ${filter} incidents`} description="Detected outages and recoveries will appear here." /></Card>}
   </PageShell>;
 }

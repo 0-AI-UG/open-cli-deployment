@@ -1,5 +1,5 @@
-import { Card, StatusBadge, Table, EmptyState } from "../../components/ui.tsx";
-import { Boxes, ExternalLink } from "lucide-react";
+import { Badge, Card, CardHeader, DataRow, StatusBadge, Table, EmptyState } from "../../components/ui.tsx";
+import { Boxes, ChevronRight, ExternalLink, Layers, Settings2 } from "lucide-react";
 import type { StackDetail, StackMemberApp, EnvironmentData } from "../../types.ts";
 
 /**
@@ -37,81 +37,76 @@ export function OverviewTab({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-4 space-y-3">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Configuration</h3>
-          <div className="space-y-2 text-[10px] font-mono">
-            <div className="flex justify-between"><span className="text-muted">Created</span><span className="text-fg">{new Date(stack.created_at).toLocaleString()}</span></div>
-            <div className="flex justify-between">
-              <span className="text-muted">Environment</span>
-              {prodEnv
-                ? <a href="#/environments" className="text-fg font-bold hover:underline">{prodEnv}</a>
-                : <span className="text-fg-dim">none</span>}
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Staging Environment</span>
-              <span className="text-fg font-bold">{envName(stack.staging_environment_id) ?? "none"}</span>
-            </div>
-          </div>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="overflow-hidden">
+          <CardHeader title="Configuration" icon={<Settings2 size={15} />} description="Declared in ocd-stack.json" />
+          <DataRow label="Created">{new Date(stack.created_at).toLocaleString()}</DataRow>
+          <DataRow label="Environment">
+            {prodEnv
+              ? <a href="#/environments" className="font-medium text-fg hover:underline">{prodEnv}</a>
+              : <span className="text-muted">None</span>}
+          </DataRow>
+          <DataRow label="Staging environment">
+            {envName(stack.staging_environment_id) != null
+              ? <span className="font-medium">{envName(stack.staging_environment_id)}</span>
+              : <span className="text-muted">None</span>}
+          </DataRow>
         </Card>
-        <Card className="p-4 space-y-3">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Rollout</h3>
-          <div className="space-y-2 text-[10px] font-mono">
-            <div className="flex justify-between"><span className="text-muted">Apps</span><span className="text-fg font-bold">{memberApps.length}</span></div>
-            <div className="flex justify-between">
-              <span className="text-muted">Members on staging</span>
-              <span className={staging > 0 ? "text-accent-amber font-bold" : "text-fg-dim"}>
-                {staging > 0 ? `${staging} of ${memberApps.length}` : "none"}
-              </span>
-            </div>
-            <div className="flex justify-between"><span className="text-muted">Status</span><span className="text-fg">{stack.status}</span></div>
-          </div>
+        <Card className="overflow-hidden">
+          <CardHeader title="Rollout" icon={<Layers size={15} />} description="Member state across environments" />
+          <DataRow label="Apps"><span className="tabular-nums">{memberApps.length}</span></DataRow>
+          <DataRow label="Members on staging">
+            {staging > 0
+              ? <Badge tone="warning">{staging} of {memberApps.length}</Badge>
+              : <span className="text-muted">None</span>}
+          </DataRow>
+          <DataRow label="Status"><StatusBadge status={stack.status} /></DataRow>
         </Card>
       </div>
 
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Boxes size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Apps ({memberApps.length})</h3>
-        </div>
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Apps"
+          icon={<Boxes size={15} />}
+          description={`${memberApps.length} member${memberApps.length === 1 ? "" : "s"}`}
+        />
         {memberApps.length === 0 ? (
-          <EmptyState message="This stack has no apps." icon={Boxes} />
+          <EmptyState message="This stack has no apps" icon={Boxes} description="Members are declared in ocd-stack.json." />
         ) : (
           <Table headers={["Name", "Status", "Domain", "Needs", "Staging", ""]}>
             {memberApps.map((a) => (
-              <tr key={a.id} className="hover:bg-alt/50">
-                <td className="py-2 px-3">
-                  <a href={`#/apps/${a.id}`} className="font-mono text-[10px] font-bold text-fg hover:underline">{a.name}</a>
+              <tr key={a.id}>
+                <td>
+                  <a href={`#/apps/${a.id}`} className="font-medium text-fg hover:underline">{a.name}</a>
                 </td>
-                <td className="py-2 px-3">
+                <td>
                   <StatusBadge
                     status={a.status}
                     subLabel={a.environment_stale ? "stale environment — redeploy required" : undefined}
                   />
                 </td>
-                <td className="py-2 px-3 font-mono text-[10px]">
+                <td>
                   {a.domain && a.public
-                    ? <a href={`https://${a.domain}`} target="_blank" rel="noopener" className="text-accent-blue hover:underline inline-flex items-center gap-1">{a.domain} <ExternalLink size={9} /></a>
-                    : <span className="text-fg-dim">private</span>}
+                    ? <a href={`https://${a.domain}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-mono text-xs text-fg-dim transition-colors hover:text-fg">{a.domain} <ExternalLink size={11} className="shrink-0 text-muted" /></a>
+                    : <Badge>Private</Badge>}
                 </td>
-                <td className="py-2 px-3 font-mono text-[10px] text-fg-dim">
-                  {needsOf(a).length ? needsOf(a).join(", ") : "—"}
+                <td className="font-mono text-xs text-fg-dim">
+                  {needsOf(a).length ? needsOf(a).join(", ") : <span className="text-muted">—</span>}
                 </td>
-                <td className="py-2 px-3 font-mono text-[10px]">
+                <td>
                   {stagingTargets.has(a.id)
-                    ? <span className="text-accent-amber font-bold">on</span>
-                    : <span className="text-fg-dim">off</span>}
+                    ? <Badge tone="warning">On</Badge>
+                    : <span className="text-xs text-muted">Off</span>}
                 </td>
-                <td className="py-2 px-3 text-right">
-                  <a href={`#/apps/${a.id}`} className="font-mono text-[9px] text-muted hover:text-fg uppercase tracking-wider">Open</a>
+                <td className="text-right">
+                  <a href={`#/apps/${a.id}`} className="inline-flex items-center gap-0.5 text-xs font-medium text-muted transition-colors hover:text-fg">Open <ChevronRight size={13} /></a>
                 </td>
               </tr>
             ))}
           </Table>
         )}
       </Card>
-
     </div>
   );
 }

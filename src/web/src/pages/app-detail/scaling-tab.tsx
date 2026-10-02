@@ -1,5 +1,5 @@
 import { runCliAction } from "../../api/cli-actions.ts";
-import { Card, Btn, Table } from "../../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, Stat, Table, humanize } from "../../components/ui.tsx";
 import { PermissionGate } from "../../components/permission-gate.tsx";
 import { Zap, Gauge, History } from "lucide-react";
 import type { ResourceOpsResult } from "../../hooks/useOperation.ts";
@@ -24,62 +24,66 @@ export function ScalingTab({
   action,
   ops,
 }: ScalingTabProps) {
+  const running = replicas.filter((replica) => replica.status !== "stopped").length;
+  const desired = app.desired_replicas ?? 1;
+  const policy = [
+    { label: "Min replicas", value: app.min_replicas ?? 1 },
+    { label: "Max replicas", value: app.max_replicas ?? 1 },
+    { label: "CPU threshold", value: `${app.autoscale_cpu_threshold ?? 80}%` },
+    { label: "Memory threshold", value: `${app.autoscale_mem_threshold ?? 85}%` },
+    { label: "Requests/min", value: app.autoscale_req_threshold ?? 0 },
+    { label: "Cooldown", value: `${app.autoscale_cooldown ?? 300}s` },
+  ];
+
   return (
-    <div className="space-y-4">
-      <Card className="p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Zap size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] font-bold uppercase tracking-wider text-fg">Replica state</h3>
-          <span className="ml-auto font-mono text-[9px] text-muted">
-            {replicas.filter((replica) => replica.status !== "stopped").length} running · desired {app.desired_replicas ?? 1}
-          </span>
+    <div className="space-y-6">
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Replica state"
+          icon={<Zap size={15} />}
+          description={app.status === "sleeping" ? "Scaled to zero; the next request wakes it" : undefined}
+          actions={app.status === "sleeping" && (
+            <PermissionGate permission="apps.restart" appId={appId} environmentId={app.environment_id}>
+              <Btn
+                variant="primary"
+                loading={actionLoading === "wake" || ops.isBusyWith("wake")}
+                disabled={ops.isBusy}
+                onClick={() => action("wake", () => runCliAction("scale.wake", { app: String(appId) }))}
+              >
+                Wake app
+              </Btn>
+            </PermissionGate>
+          )}
+        />
+        <div className="grid grid-cols-2 gap-px bg-line">
+          <Stat className="bg-surface px-4 py-3.5" label="Running" value={running} tone={running < desired ? "warning" : undefined} />
+          <Stat className="bg-surface px-4 py-3.5" label="Desired" value={desired} />
         </div>
-        {app.status === "sleeping" && (
-          <PermissionGate permission="apps.restart" appId={appId} environmentId={app.environment_id}>
-            <Btn
-              size="sm"
-              variant="primary"
-              loading={actionLoading === "wake" || ops.isBusyWith("wake")}
-              disabled={ops.isBusy}
-              onClick={() => action("wake", () => runCliAction("scale.wake", { app: String(appId) }))}
-            >
-              Wake app
-            </Btn>
-          </PermissionGate>
-        )}
       </Card>
 
-      <Card className="p-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Gauge size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] font-bold uppercase tracking-wider text-fg">Autoscale policy</h3>
-          <span className={`ml-auto border-2 border-fg px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider ${app.autoscale_enabled ? "bg-accent text-fg" : "bg-alt text-muted"}`}>
-            {app.autoscale_enabled ? "Active" : "Off"}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 font-mono text-[10px] sm:grid-cols-3">
-          <div><span className="text-muted">Min</span><div className="text-fg">{app.min_replicas ?? 1}</div></div>
-          <div><span className="text-muted">Max</span><div className="text-fg">{app.max_replicas ?? 1}</div></div>
-          <div><span className="text-muted">CPU</span><div className="text-fg">{app.autoscale_cpu_threshold ?? 80}%</div></div>
-          <div><span className="text-muted">Memory</span><div className="text-fg">{app.autoscale_mem_threshold ?? 85}%</div></div>
-          <div><span className="text-muted">Requests/min</span><div className="text-fg">{app.autoscale_req_threshold ?? 0}</div></div>
-          <div><span className="text-muted">Cooldown</span><div className="text-fg">{app.autoscale_cooldown ?? 300}s</div></div>
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Autoscale policy"
+          icon={<Gauge size={15} />}
+          actions={<Badge tone={app.autoscale_enabled ? "success" : "neutral"}>{app.autoscale_enabled ? "Active" : "Off"}</Badge>}
+        />
+        <div className={`grid grid-cols-2 gap-px bg-line sm:grid-cols-3 ${app.autoscale_enabled ? "" : "[&>*]:opacity-70"}`}>
+          {policy.map((item) => (
+            <Stat key={item.label} className="bg-surface px-4 py-3" label={item.label} value={item.value} />
+          ))}
         </div>
       </Card>
 
       {scalingEvents.length > 0 && (
-        <Card className="p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <History size={14} className="text-fg" />
-            <h3 className="font-mono text-[9px] font-bold uppercase tracking-wider text-fg">Recent scaling events</h3>
-          </div>
+        <Card className="overflow-hidden">
+          <CardHeader title="Recent scaling events" icon={<History size={15} />} description={`Latest ${Math.min(scalingEvents.length, 20)}`} />
           <Table headers={["When", "Event", "From → To", "Reason"]}>
             {scalingEvents.slice(0, 20).map((event) => (
               <tr key={event.id}>
-                <td className="px-3 py-2 text-[9px] text-muted">{new Date(`${event.created_at}Z`).toLocaleString()}</td>
-                <td className="px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-fg">{event.event_type}</td>
-                <td className="px-3 py-2 text-fg-dim">{event.from_count} → {event.to_count}</td>
-                <td className="px-3 py-2 text-[9px] text-fg-dim">{event.reason || "—"}</td>
+                <td className="whitespace-nowrap text-xs text-muted">{new Date(`${event.created_at}Z`).toLocaleString()}</td>
+                <td><Badge tone={event.to_count > event.from_count ? "info" : "neutral"}>{humanize(event.event_type)}</Badge></td>
+                <td className="whitespace-nowrap tabular-nums text-fg">{event.from_count} → {event.to_count}</td>
+                <td className="text-fg-dim">{event.reason || "—"}</td>
               </tr>
             ))}
           </Table>

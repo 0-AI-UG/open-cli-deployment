@@ -3,8 +3,8 @@ import type { StorageMount } from "../../../shared/storage-display.ts";
 import { useState, useEffect } from "react";
 import { get } from "../api/client.ts";
 import { runCliAction } from "../api/cli-actions.ts";
-import { Card, Btn, EmptyState, Table, StatusBadge, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
-import { Server, ArrowLeft, RefreshCw, Terminal, FileWarning, Network, Layers, Check, X } from "lucide-react";
+import { Badge, Card, CardHeader, Btn, CopyButton, DataRow, EmptyState, Stat, Table, StatusBadge, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
+import { Boxes, Server, RefreshCw, Terminal, FileWarning, Network, Layers, Check, X } from "lucide-react";
 import { PermissionGate } from "../components/permission-gate.tsx";
 import { NeoSelect } from "../components/neo-select.tsx";
 import { Sparkline, CpuUsage, MemUsage } from "./app-detail/shared.tsx";
@@ -79,19 +79,19 @@ type ServerDetail = {
 };
 
 function statusClass(s: string): string {
-  if (s === "running") return "text-accent-green";
-  if (s === "stopped" || s === "failed") return "text-accent-red";
+  if (s === "running") return "text-success";
+  if (s === "stopped" || s === "failed") return "text-danger";
   return "text-fg-dim";
 }
 
-function Bar({ value, color }: { value: number; color: string }) {
+function Bar({ value, tone }: { value: number; tone: string }) {
   const v = Math.max(0, Math.min(100, value || 0));
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 border border-fg/30 bg-alt overflow-hidden">
-        <div className="h-full" style={{ width: `${v}%`, background: color }} />
+    <div className="flex items-center gap-2.5">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${v}%` }} />
       </div>
-      <span className="font-mono text-[10px] text-fg-dim w-9 text-right">{v.toFixed(0)}%</span>
+      <span className="w-9 text-right text-xs tabular-nums text-muted">{v.toFixed(0)}%</span>
     </div>
   );
 }
@@ -114,11 +114,11 @@ function fmtMb(mb: number | null): string {
 
 // Public-facing well-known ports get a colored dot. Everything else stays neutral.
 function portDot(port: number, address: string): string {
-  if (port === 80 || port === 443) return "bg-accent-green";
-  if (port === 22) return "bg-accent-blue";
-  if (address === "127.0.0.1" || address === "::1") return "bg-fg/30";
-  if (address.startsWith("10.") || address.startsWith("172.") || address.startsWith("192.168.")) return "bg-accent-blue";
-  return "bg-accent-amber";
+  if (port === 80 || port === 443) return "bg-success";
+  if (port === 22) return "bg-info";
+  if (address === "127.0.0.1" || address === "::1") return "bg-muted/50";
+  if (address.startsWith("10.") || address.startsWith("172.") || address.startsWith("192.168.")) return "bg-info";
+  return "bg-warning";
 }
 
 // Fleet infrastructure ports show up as many near-identical listeners in a raw
@@ -238,17 +238,28 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
     .map((g) => ({ ...g, count: detail.host.ports.filter((p) => p.port >= g.lo && p.port <= g.hi).length }))
     .filter((g) => g.count > 0);
 
+  const metricCell = "bg-surface px-4 py-3.5";
+  const poolHint = "New replicas schedule onto servers in this pool. 'staging' isolates staging-target apps from production.";
+
   return (
     <PageShell>
-      <PageHeader backHref="#/resources" backLabel="Back to resources" eyebrow="Server" title={detail.name} meta={<StatusBadge status={detail.status} />} actions={<div className="flex items-center gap-1">
+      <PageHeader
+        backHref="#/resources"
+        backLabel="Back to resources"
+        eyebrow="Server"
+        title={detail.name}
+        meta={<>
+          <StatusBadge status={detail.status} />
+          <span className="font-mono text-xs">{detail.type.toUpperCase()}</span>
+          <span className="font-mono text-xs">{detail.location}</span>
+          {detail.ipv4 && <span className="font-mono text-xs">{detail.ipv4}</span>}
+        </>}
+        actions={<>
           <PermissionGate
             permission="servers.delete"
             fallback={
-              <span
-                title="New replicas schedule onto servers in this pool. 'staging' isolates staging-target apps from production."
-                className="inline-flex items-center gap-1 font-mono text-[9px] font-bold uppercase tracking-wider text-fg-dim border-2 border-fg/40 bg-alt px-1.5 py-[3px]"
-              >
-                <Layers size={10} /> {pool}
+              <span title={poolHint} className="inline-flex items-center gap-1.5 text-sm text-muted">
+                <Layers size={14} /> Pool <Badge>{pool}</Badge>
               </span>
             }
           >
@@ -263,148 +274,141 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
                   }}
                   placeholder="pool-name"
                   autoFocus
-                  className="w-24 bg-bg-raised border-2 border-fg px-1.5 py-[3px] font-mono text-[9px] text-fg placeholder:text-muted focus:outline-none focus:border-accent"
+                  aria-invalid={newPoolErr ? true : undefined}
+                  className="w-32 font-mono"
                 />
-                <button
-                  type="button"
-                  onClick={confirmNewPool}
-                  title="Move to this pool"
-                  className="flex items-center border-2 border-fg bg-accent-green text-black px-1 py-[3px] cursor-pointer"
-                >
-                  <Check size={11} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNewPoolMode(false)}
-                  title="Cancel"
-                  className="flex items-center border-2 border-fg bg-alt text-fg-dim hover:text-fg px-1 py-[3px] cursor-pointer"
-                >
-                  <X size={11} />
-                </button>
+                <Btn variant="primary" onClick={confirmNewPool} title="Move to this pool">
+                  <Check size={14} />
+                </Btn>
+                <Btn variant="ghost" onClick={() => setNewPoolMode(false)} title="Cancel">
+                  <X size={14} />
+                </Btn>
                 {newPoolErr && (
-                  <span className="absolute top-full left-0 mt-0.5 font-mono text-[8px] font-bold uppercase text-accent-red whitespace-nowrap">
+                  <span className="absolute left-0 top-full mt-1 whitespace-nowrap text-xs text-danger">
                     {newPoolErr}
                   </span>
                 )}
               </div>
             ) : (
-              <div
-                className="w-28"
-                title="New replicas schedule onto servers in this pool. 'staging' isolates staging-target apps from production."
-              >
-                <NeoSelect
-                  compact
-                  value={pool}
-                  disabled={poolSaving}
-                  onChange={onPoolSelect}
-                  options={[
-                    ...Array.from(new Set([...poolOptions, pool])).sort().map((p) => ({ value: p, label: p })),
-                    { value: NEW_POOL, label: "+ New pool…" },
-                  ]}
-                />
+              <div className="flex items-center gap-2" title={poolHint}>
+                <span className="inline-flex items-center gap-1.5 text-sm text-muted"><Layers size={14} /> Pool</span>
+                <div className="w-36">
+                  <NeoSelect
+                    value={pool}
+                    disabled={poolSaving}
+                    onChange={onPoolSelect}
+                    options={[
+                      ...Array.from(new Set([...poolOptions, pool])).sort().map((p) => ({ value: p, label: p })),
+                      { value: NEW_POOL, label: "+ New pool…" },
+                    ]}
+                  />
+                </div>
               </div>
             )}
           </PermissionGate>
           <PermissionGate permission="terminal.access">
-            <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/server/${detail.id}`; }}>
-              <Terminal size={11} /> Shell
+            <Btn onClick={() => { window.location.hash = `#/terminal/server/${detail.id}`; }}>
+              <Terminal size={14} /> Shell
             </Btn>
           </PermissionGate>
-          <Btn size="xs" variant="ghost" onClick={() => { setLoading(true); load(); }}>
-            <RefreshCw size={11} /> Refresh
+          <Btn onClick={() => { setLoading(true); load(); }}>
+            <RefreshCw size={14} /> Refresh
           </Btn>
-        </div>} />
+        </>}
+      />
 
-      <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Info label="Type" value={detail.type.toUpperCase()} />
-          <Info label="Location" value={detail.location} />
-          <Info label="Public IPv4" value={detail.ipv4 || "—"} />
-          <Info label="Private IPv4" value={detail.routing_address || "—"} />
-          <Info label="€/mo" value={detail.monthly_eur != null ? `€${detail.monthly_eur.toFixed(2)}` : "—"} />
-          <Info label="Uptime" value={fmtUptime(detail.host.uptime_seconds)} />
-          <Info label="Processes" value={detail.host.processes != null ? String(detail.host.processes) : "—"} />
-          <Info label="Created" value={new Date(detail.created_at).toLocaleDateString()} />
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-line shadow-xs md:grid-cols-3">
+        <div className={metricCell}>
+          <div className="flex items-end justify-between gap-3">
+            <Stat
+              label="CPU · last hour"
+              value={detail.cpu_percent != null && detail.host.cpu_cores
+                ? `${((detail.cpu_percent / 100) * detail.host.cpu_cores).toFixed(1)} / ${detail.host.cpu_cores} vCPU`
+                : detail.cpu_percent != null ? `${detail.cpu_percent}%` : "—"}
+              hint={detail.host.load1 != null
+                ? `Load ${detail.host.load1.toFixed(2)} · ${detail.host.load5?.toFixed(2)} · ${detail.host.load15?.toFixed(2)}${detail.host.cpu_cores ? ` / ${detail.host.cpu_cores}` : ""}`
+                : undefined}
+            />
+            <span className="shrink-0 pb-1 text-info"><Sparkline values={cpuSeries} color="currentColor" /></span>
+          </div>
+        </div>
+        <div className={metricCell}>
+          <div className="flex items-end justify-between gap-3">
+            <Stat
+              label="Memory · last hour"
+              value={detail.host.mem_total_mb != null
+                ? `${fmtMb(detail.host.mem_used_mb)} / ${fmtMb(detail.host.mem_total_mb)}`
+                : detail.memory_percent != null ? `${detail.memory_percent}%` : "—"}
+              hint={detail.host.mem_total_mb != null
+                ? `${detail.memory_percent != null ? `${detail.memory_percent}% used` : ""}${detail.host.swap_total_mb ? ` · swap ${fmtMb(detail.host.swap_used_mb)}` : ""}` || undefined
+                : undefined}
+            />
+            <span className="shrink-0 pb-1 text-warning"><Sparkline values={memSeries} color="currentColor" /></span>
+          </div>
+        </div>
+        <div className={metricCell}>
+          {detail.disk_total_gb != null && detail.disk_free_gb != null ? (
+            <>
+              <Stat
+                label="Disk"
+                value={`${detail.disk_free_gb} GB free`}
+                hint={`of ${detail.disk_total_gb} GB`}
+                tone={detail.disk_free_gb < 2 ? "danger" : detail.disk_free_gb < 5 ? "warning" : undefined}
+              />
+              <div className="mt-2">
+                <Bar
+                  value={((detail.disk_total_gb - detail.disk_free_gb) / detail.disk_total_gb) * 100}
+                  tone={detail.disk_free_gb < 2 ? "bg-danger" : detail.disk_free_gb < 5 ? "bg-warning" : "bg-info"}
+                />
+              </div>
+            </>
+          ) : (
+            <Stat label="Disk" value="—" hint="No data" />
+          )}
+        </div>
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader title="Details" icon={<Server size={15} />} />
+        <div className="grid md:grid-cols-2 md:divide-x">
+          <div>
+            <DataRow label="Type" mono>{detail.type.toUpperCase()}</DataRow>
+            <DataRow label="Location" mono>{detail.location}</DataRow>
+            <DataRow label="Public IPv4" mono>{detail.ipv4 || "—"}{detail.ipv4 && <CopyButton text={detail.ipv4} />}</DataRow>
+            <DataRow label="Private IPv4" mono>{detail.routing_address || "—"}{detail.routing_address && <CopyButton text={detail.routing_address} />}</DataRow>
+          </div>
+          <div className="max-md:border-t">
+            <DataRow label="Monthly cost"><span className="tabular-nums">{detail.monthly_eur != null ? `€${detail.monthly_eur.toFixed(2)}` : "—"}</span></DataRow>
+            <DataRow label="Uptime"><span className="tabular-nums">{fmtUptime(detail.host.uptime_seconds)}</span></DataRow>
+            <DataRow label="Processes"><span className="tabular-nums">{detail.host.processes != null ? String(detail.host.processes) : "—"}</span></DataRow>
+            <DataRow label="Created">{new Date(detail.created_at).toLocaleDateString()}</DataRow>
+          </div>
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-4">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider mb-2">CPU (1h)</h3>
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-lg font-bold text-fg">
-              {detail.cpu_percent != null && detail.host.cpu_cores
-                ? `${((detail.cpu_percent / 100) * detail.host.cpu_cores).toFixed(1)} / ${detail.host.cpu_cores} vCPU`
-                : detail.cpu_percent != null ? `${detail.cpu_percent}%` : "—"}
-            </span>
-            <Sparkline values={cpuSeries} />
-          </div>
-          {detail.host.load1 != null && (
-            <div className="font-mono text-[9px] text-muted mt-1">
-              load {detail.host.load1.toFixed(2)} · {detail.host.load5?.toFixed(2)} · {detail.host.load15?.toFixed(2)}
-              {detail.host.cpu_cores ? ` / ${detail.host.cpu_cores}` : ""}
-            </div>
-          )}
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider mb-2">Memory (1h)</h3>
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-lg font-bold text-fg">
-              {detail.host.mem_total_mb != null
-                ? `${fmtMb(detail.host.mem_used_mb)} / ${fmtMb(detail.host.mem_total_mb)}`
-                : detail.memory_percent != null ? `${detail.memory_percent}%` : "—"}
-            </span>
-            <Sparkline values={memSeries} color="#f59e0b" />
-          </div>
-          {detail.host.mem_total_mb != null && (
-            <div className="font-mono text-[9px] text-muted mt-1">
-              {detail.memory_percent != null ? `${detail.memory_percent}% used` : ""}
-              {detail.host.swap_total_mb ? ` · swap ${fmtMb(detail.host.swap_used_mb)}` : ""}
-            </div>
-          )}
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider mb-2">Disk</h3>
-          {detail.disk_total_gb != null && detail.disk_free_gb != null ? (
-            <>
-              <div className="flex items-baseline gap-1">
-                <span className="font-mono text-lg font-bold text-fg">{detail.disk_free_gb}</span>
-                <span className="font-mono text-[10px] text-muted">/ {detail.disk_total_gb} GB free</span>
-              </div>
-              <Bar
-                value={((detail.disk_total_gb - detail.disk_free_gb) / detail.disk_total_gb) * 100}
-                color={detail.disk_free_gb < 2 ? "#ef4444" : detail.disk_free_gb < 5 ? "#f59e0b" : "#3b82f6"}
-              />
-            </>
-          ) : (
-            <span className="font-mono text-[10px] text-muted">no data</span>
-          )}
-        </Card>
-      </div>
-
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Network size={14} className="text-fg" />
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Ports</h3>
-          {detail.host.net && (
-            <span className="ml-auto font-mono text-[9px] text-muted">
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Listening ports"
+          icon={<Network size={15} />}
+          actions={detail.host.net ? (
+            <span className="text-xs tabular-nums text-muted" title={`Network totals on ${detail.host.net.iface}`}>
               ↓ {(detail.host.net.rx_bytes / 1024 / 1024 / 1024).toFixed(1)}G · ↑ {(detail.host.net.tx_bytes / 1024 / 1024 / 1024).toFixed(1)}G
             </span>
-          )}
-        </div>
+          ) : undefined}
+        />
         {detail.host.error ? (
           <EmptyState message="Probe failed" icon={FileWarning} />
         ) : !detail.host.ports.length ? (
-          <EmptyState message="No listening ports" />
+          <EmptyState message="No listening ports" icon={Network} />
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 p-4">
             {singlePorts.map((p, i) => (
               <span
                 key={i}
                 title={`${p.address}:${p.port}${p.process ? ` (${p.process})` : ""}`}
-                className="inline-flex items-center gap-1.5 border border-fg/40 bg-alt px-2 py-0.5 font-mono text-[10px] font-bold text-fg"
+                className="inline-flex h-6 items-center gap-1.5 rounded-md border bg-subtle/60 px-2 font-mono text-xs text-fg"
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${portDot(p.port, p.address)}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${portDot(p.port, p.address)}`} />
                 {p.port}
               </span>
             ))}
@@ -412,9 +416,9 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
               <span
                 key={g.key}
                 title={`${g.count} listening in ${g.lo}-${g.hi}: ${g.note}, held for the fleet's lifetime`}
-                className="inline-flex items-center gap-1.5 border border-accent-blue/40 bg-alt px-2 py-0.5 font-mono text-[10px] font-bold text-fg"
+                className="inline-flex h-6 items-center gap-1.5 rounded-md border border-info/30 bg-info/5 px-2 font-mono text-xs text-fg"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-accent-blue" />
+                <span className="h-1.5 w-1.5 rounded-full bg-info" />
                 {g.key} {g.lo}-{g.hi} · {g.count}
               </span>
             ))}
@@ -424,13 +428,16 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
 
       <StorageMounts mounts={detail.local_storage || []} title="Server storage" />
 
-      <Card className="p-4">
-        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider mb-2">
-          Replicas ({detail.replicas.length})
-        </h3>
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Replicas"
+          icon={<Boxes size={15} />}
+          description={`${detail.replicas.length} replica${detail.replicas.length === 1 ? "" : "s"} scheduled on this server`}
+        />
         {!detail.replicas.length ? (
-          <p className="text-[10px] text-muted font-mono py-4 text-center uppercase tracking-wider">No replicas on this server</p>
+          <EmptyState message="No replicas on this server" icon={Boxes} />
         ) : (
+          <div className="max-md:p-3">
           <Table headers={["ID", "Container", "App", "Port", "Status", "CPU", "Memory", "CPU (1h)", ""]}>
             {detail.replicas.map((r) => {
               const series = detail.replica_metrics
@@ -438,22 +445,22 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
                 .map((s) => s.cpu_percent);
               return (
                 <tr key={r.id}>
-                  <td className="py-2 px-3 text-fg font-bold">#{r.id}</td>
-                  <td className="py-2 px-3 text-fg-dim">{r.container_name}</td>
-                  <td className="py-2 px-3 text-[9px]">
-                    <a href={`#/apps/${r.app_id}`} className="text-accent-blue font-bold hover:underline">
+                  <td className="font-mono text-xs text-muted">#{r.id}</td>
+                  <td className="max-w-[16rem] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
+                  <td>
+                    <a href={`#/apps/${r.app_id}`} className="font-medium text-fg hover:underline">
                       {r.app_name}
                     </a>
                   </td>
-                  <td className="py-2 px-3 text-fg-dim">{r.host_port}</td>
-                  <td className="py-2 px-3"><StatusBadge status={r.status} /></td>
-                  <td className="py-2 px-3 text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
-                  <td className="py-2 px-3 text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
-                  <td className="py-2 px-3"><Sparkline values={series} /></td>
-                  <td className="py-2 px-3">
+                  <td className="font-mono text-xs text-fg-dim">{r.host_port}</td>
+                  <td><StatusBadge status={r.status} /></td>
+                  <td className="whitespace-nowrap text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
+                  <td className="whitespace-nowrap text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
+                  <td className="text-info"><Sparkline values={series} color="currentColor" /></td>
+                  <td className="text-right">
                     <PermissionGate permission="terminal.access">
                       <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
-                        <Terminal size={12} /> Shell
+                        <Terminal size={13} /> Shell
                       </Btn>
                     </PermissionGate>
                   </td>
@@ -461,18 +468,10 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
               );
             })}
           </Table>
+          </div>
         )}
       </Card>
 
     </PageShell>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-2 border-fg p-2 bg-alt">
-      <div className="font-mono text-[9px] text-muted uppercase tracking-wider mb-1">{label}</div>
-      <div className="font-mono text-xs font-bold text-fg truncate" title={value}>{value}</div>
-    </div>
   );
 }

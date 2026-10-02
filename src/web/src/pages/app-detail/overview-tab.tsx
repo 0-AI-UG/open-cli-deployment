@@ -4,9 +4,9 @@ import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { get } from "../../api/client.ts";
 import { runCliAction } from "../../api/cli-actions.ts";
-import { Card, Btn, StatusBadge, showToast, Table, CopyButton, portalAnchorRect } from "../../components/ui.tsx";
+import { Badge, Card, CardHeader, DataRow, EmptyState, Stat, Btn, StatusBadge, showToast, Table, CopyButton, portalAnchorRect } from "../../components/ui.tsx";
 import { PermissionGate } from "../../components/permission-gate.tsx";
-import { RefreshCw, ExternalLink, Server as ServerIcon, Terminal, ArrowRightLeft } from "lucide-react";
+import { RefreshCw, ExternalLink, Server as ServerIcon, Terminal, ArrowRightLeft, Settings2, Globe, Database, Bell, HardDrive, Layers, Lock } from "lucide-react";
 import { Sparkline, InfoTip, CpuUsage, MemUsage } from "./shared.tsx";
 import { type ResourceOpsResult } from "../../hooks/useOperation.ts";
 import type { AppData, ReplicaData, MetricSample, ServerData } from "../../types.ts";
@@ -64,63 +64,67 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
     }
   };
 
-  return (
-    <div className="space-y-4">
-      {storage ? <StorageMounts mounts={storage.mounts} /> : <Card className="p-4 space-y-3">
-        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Storage</h3>
-        <p className="font-mono text-[10px] text-muted">Storage inventory unavailable</p>
-      </Card>}
-      {Object.keys(app.notifications ?? {}).length > 0 && <Card className="p-4 space-y-2">
-        <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Notification bindings</h3>
-        <div className="divide-y divide-fg/10 border-t border-fg/10">
-          {Object.entries(app.notifications ?? {}).map(([name, binding]) => <div key={name} className="flex flex-wrap items-center gap-2 py-2 font-mono text-[10px]">
-            <span className="min-w-0 flex-1 break-all font-bold">{name}</span>
-            <div className="flex flex-wrap gap-1">{binding.permissions.map(permission => <span key={permission} className="border border-fg bg-alt px-1.5 py-0.5 text-[8px] font-bold uppercase">{permission}</span>)}</div>
-            <span className="text-[9px] text-muted" title="Credential generation">v{binding.generation}</span>
-          </div>)}
-        </div>
-      </Card>}
+  const manifestDiffers = (app.last_manifest_config_revision ?? 0) !== (app.config_revision ?? 1);
+  const meetsTarget = availability?.current.meetsTarget ?? true;
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-4 space-y-3">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Configuration</h3>
-          <div className="space-y-2 text-[10px] font-mono">
-            <div className="flex justify-between gap-4">
-              <span className="text-muted">Immutable Image</span>
-              <span className="text-fg font-bold truncate" title={app.image_ref}>
-                {app.image_ref || "—"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted">Configuration</span>
-              <span className="text-fg">OCD revision {app.config_revision ?? 1}</span>
-            </div>
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-4">
+        <Stat
+          className="bg-surface px-4 py-3.5"
+          label="Uptime · 24h"
+          value={availability?.uptimePct == null ? "—" : `${availability.uptimePct.toFixed(3)}%`}
+          hint={availability ? `${availability.sampleCount} samples` : "Availability data unavailable"}
+        />
+        <Stat
+          className="bg-surface px-4 py-3.5"
+          label="Mean recovery · 24h"
+          value={availability?.mttrSeconds == null ? "—" : `${Math.round(availability.mttrSeconds)}s`}
+        />
+        <Stat
+          className="bg-surface px-4 py-3.5"
+          label="Placement now"
+          value={availability ? `${availability.current.running}/${availability.current.desired}` : "—"}
+          tone={availability && !meetsTarget ? "danger" : undefined}
+          hint={availability
+            ? `replicas · ${availability.current.distinctHosts} hosts · ${availability.current.distinctLocations} locations`
+            : undefined}
+        />
+        <Stat
+          className="bg-surface px-4 py-3.5"
+          label="Configuration"
+          value={`r${app.config_revision ?? 1}`}
+          hint={app.deployed_by_username ? `Deployed by ${app.deployed_by_username}` : "OCD revision"}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card className="min-w-0 overflow-hidden">
+          <CardHeader title="Configuration" icon={<Settings2 size={15} />} />
+          <div>
+            <DataRow label="Immutable image" mono>
+              <span className="truncate" title={app.image_ref}>{app.image_ref || "—"}</span>
+              {app.image_ref && <CopyButton text={app.image_ref} />}
+            </DataRow>
+            <DataRow label="Configuration">OCD revision {app.config_revision ?? 1}</DataRow>
             {app.last_manifest_path && (
-              <div className="flex justify-between gap-4">
-                <span className="text-muted">Last Manifest</span>
-                <span
-                  className={(app.last_manifest_config_revision ?? 0) === (app.config_revision ?? 1) ? "text-fg" : "text-accent-amber font-bold"}
-                  title={app.last_manifest_hash ?? undefined}
-                >
-                  {app.last_manifest_path}
-                  {(app.last_manifest_config_revision ?? 0) !== (app.config_revision ?? 1) ? " · differs" : ""}
-                </span>
-              </div>
+              <DataRow label="Last manifest">
+                <span className="truncate font-mono text-xs" title={app.last_manifest_hash ?? undefined}>{app.last_manifest_path}</span>
+                {manifestDiffers && <Badge tone="warning">Differs</Badge>}
+              </DataRow>
             )}
-            <div className="flex justify-between"><span className="text-muted">Container Port</span><span className="text-fg">{app.container_port}</span></div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted">Readiness</span>
-              <span className="text-fg text-right" title={app.health_check_command || app.health_check_file}>
+            <DataRow label="Container port" mono>{app.container_port}</DataRow>
+            <DataRow label="Readiness">
+              <span className="truncate" title={app.health_check_command || app.health_check_file}>
                 {app.health_check_mode || (app.health_check ? "http" : "container")}
-                {app.health_check_file ? ` · ${app.health_check_file} ≤ ${app.health_check_max_age_seconds}s` : ""}
+                {app.health_check_file ? <span className="font-mono text-xs text-fg-dim">{` · ${app.health_check_file} ≤ ${app.health_check_max_age_seconds}s`}</span> : ""}
               </span>
-            </div>
+            </DataRow>
             {replicas[0]?.host_port != null && (
-              <div className="flex justify-between"><span className="text-muted">Host Port</span><span className="text-fg">{replicas[0].host_port}</span></div>
+              <DataRow label="Host port" mono>{replicas[0].host_port}</DataRow>
             )}
-            <div className="flex justify-between gap-4">
-              <span className="text-muted">Volume intent</span>
-              <span className="text-fg text-right">
+            <DataRow label="Volume intent">
+              <span className="text-right">
                 {String(app.volume_id || "").startsWith("local:")
                   ? "Server-local directory · shares server disk"
                   : (app.desired_volume_size ?? 0) < 0
@@ -129,95 +133,60 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
                   ? `${app.desired_volume_id ? `adopt ${app.desired_volume_id}` : "managed"} · ${app.desired_volume_size} GB → ${app.desired_volume_path || "/data"}`
                   : "none"}
               </span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted">Volume actual</span>
-              <span className={app.volume_id ? "text-fg text-right" : "text-fg-dim"}>
-                {app.volume_id ? `${app.volume_id} · ${app.volume_mount}` : "none"}
-              </span>
-            </div>
-            {app.auth_enabled && <div className="flex justify-between"><span className="text-muted">Auth</span><span className="text-accent-amber font-bold">Password protected</span></div>}
-            {app.deployed_by_username && <div className="flex justify-between"><span className="text-muted">Last deployed by</span><span className="text-fg">{app.deployed_by_username}</span></div>}
-            {app.environment_name && <div className="flex justify-between"><span className="text-muted">Environment</span><a href="#/environments" className="text-fg font-bold hover:underline">{app.environment_name}</a></div>}
+            </DataRow>
+            <DataRow label="Volume actual">
+              {app.volume_id
+                ? <span className="break-all text-right font-mono text-xs">{app.volume_id} · {app.volume_mount}</span>
+                : <span className="text-muted">none</span>}
+            </DataRow>
+            {app.auth_enabled && <DataRow label="Auth"><Badge tone="warning"><Lock size={11} /> Password protected</Badge></DataRow>}
+            {app.deployed_by_username && <DataRow label="Last deployed by">{app.deployed_by_username}</DataRow>}
+            {app.environment_name && <DataRow label="Environment"><a href="#/environments" className="font-medium text-fg hover:underline">{app.environment_name}</a></DataRow>}
           </div>
         </Card>
-        <Card className="p-4 space-y-3">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Connection</h3>
-          <div className="space-y-2 text-[10px] font-mono">
+
+        <Card className="min-w-0 self-start overflow-hidden">
+          <CardHeader title="Connection" icon={<Globe size={15} />} />
+          <div>
             {app.domain && app.public ? (
-              <div className="flex justify-between items-center"><span className="text-muted">Public URL</span><span className="flex items-center gap-1"><a href={`https://${app.domain}`} target="_blank" rel="noopener" className="text-accent-blue font-bold hover:underline">https://{app.domain}</a><CopyButton text={`https://${app.domain}`} /><a href={`https://${app.domain}`} target="_blank" rel="noopener" className="p-1 text-muted hover:text-fg"><ExternalLink size={10} /></a></span></div>
+              <DataRow label="Public URL">
+                <a href={`https://${app.domain}`} target="_blank" rel="noopener" className="truncate font-mono text-xs text-fg hover:underline">https://{app.domain}</a>
+                <CopyButton text={`https://${app.domain}`} />
+                <a href={`https://${app.domain}`} target="_blank" rel="noopener" title="Open in new tab" className="inline-grid shrink-0 place-items-center rounded p-1 text-muted transition-colors hover:bg-subtle hover:text-fg"><ExternalLink size={12} /></a>
+              </DataRow>
             ) : (
-              <div className="flex justify-between items-center"><span className="text-muted">Public Domain</span><span className="flex items-center gap-1"><span className="text-fg-dim font-bold">Disabled</span><span className="font-mono text-[8px] font-bold border border-fg px-1 uppercase">Private</span></span></div>
+              <DataRow label="Public domain">
+                <span className="text-fg-dim">Disabled</span>
+                <Badge>Private</Badge>
+              </DataRow>
             )}
-            <div className="flex justify-between items-center">
-              <span className="text-muted flex items-center gap-1">Internal URL <InfoTip text="Reachable from other apps on the private network. Set this in env vars when one app needs to call another." /></span>
-              <span className="flex items-center gap-1">
-                <span className="text-fg font-bold">{internalUrl}</span>
-                <CopyButton text={internalUrl} />
-              </span>
-            </div>
+            <DataRow label={<span className="inline-flex items-center gap-1">Internal URL <InfoTip text="Reachable from other apps on the private network. Set this in env vars when one app needs to call another." /></span>}>
+              <span className="truncate font-mono text-xs">{internalUrl}</span>
+              <CopyButton text={internalUrl} />
+            </DataRow>
           </div>
-          {app.dns_instruction && <DnsInstructionView value={app.dns_instruction} />}
+          {app.dns_instruction && <div className="border-t px-4 py-3"><DnsInstructionView value={app.dns_instruction} /></div>}
         </Card>
       </div>
 
-      {(app.storage_bindings || []).length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {(app.storage_bindings || []).map(binding => (
-            <Card key={binding.name} className="p-4 space-y-3 min-w-0">
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Object storage · {binding.name}</h3>
-                <span className="font-mono text-[8px] font-bold border border-fg px-1 uppercase shrink-0" title="Injected by OCD. Configure this binding in the app manifest.">OCD managed</span>
-              </div>
-              <div className="space-y-2 text-[10px] font-mono">
-                <div className="flex justify-between gap-4"><span className="text-muted">Bucket</span><span className="text-fg font-bold text-right break-all">{binding.bucket}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-muted">Prefix</span><span className="text-fg text-right break-all">{binding.prefix || "Bucket root"}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-muted">Permissions</span><span className="text-fg text-right">{binding.permissions.join(", ")}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-muted">Token</span><span className="text-fg text-right break-all" title={binding.variables.token}>{binding.variables.token} · ••••••••</span></div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="p-4 space-y-3">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Availability · trailing 24h</h3>
-          {availability ? <div className="space-y-2 font-mono text-[10px]">
-            <div className="flex justify-between"><span className="text-muted">Uptime</span><span className="font-bold">{availability.uptimePct == null ? "—" : `${availability.uptimePct.toFixed(3)}%`}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Mean recovery</span><span>{availability.mttrSeconds == null ? "—" : `${Math.round(availability.mttrSeconds)}s`}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Placement now</span><span className={availability.current.meetsTarget ? "text-fg" : "text-accent-red"}>{availability.current.running}/{availability.current.desired} replicas · {availability.current.distinctHosts} hosts · {availability.current.distinctLocations} locations</span></div>
-            <div className="flex justify-between"><span className="text-muted">Samples</span><span>{availability.sampleCount}</span></div>
-          </div> : <p className="font-mono text-[10px] text-muted">Availability data unavailable</p>}
-        </Card>
-        <Card className="p-4 space-y-3">
-          <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Image storage</h3>
-          {storage ? <div className="space-y-2 font-mono text-[10px]">
-            <div className="flex justify-between"><span className="text-muted">Current artifact</span><span>{bytes(storage.current?.image_size_bytes)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Rollback artifact</span><span>{bytes(storage.rollback?.image_size_bytes)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Reclaimable upper bound</span><span>{bytes(storage.reclaimable_image_bytes_upper_bound)}</span></div>
-            <p className="pt-1 text-[9px] text-muted normal-case">{storage.caveat}</p>
-          </div> : <p className="font-mono text-[10px] text-muted">Storage inventory unavailable</p>}
-        </Card>
-      </div>
-
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <ServerIcon size={14} className="text-fg" />
-            <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Active Replicas</h3>
-          </div>
-          <Btn size="xs" variant="ghost" onClick={async () => {
-            try {
-              setReplicas(await get(`/api/apps/${appId}/metrics`));
-              showToast("Metrics refreshed", "info");
-            } catch (err) {
-              console.error("Failed to refresh metrics:", err);
-            }
-          }}><RefreshCw size={12} /> Refresh Metrics</Btn>
-        </div>
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Active replicas"
+          icon={<ServerIcon size={15} />}
+          description={replicas.length > 0 ? `${replicas.length} replica${replicas.length === 1 ? "" : "s"} · CPU sparkline covers the last hour` : undefined}
+          actions={
+            <Btn size="xs" variant="ghost" onClick={async () => {
+              try {
+                setReplicas(await get(`/api/apps/${appId}/metrics`));
+                showToast("Metrics refreshed", "info");
+              } catch (err) {
+                console.error("Failed to refresh metrics:", err);
+              }
+            }}><RefreshCw size={12} /> Refresh metrics</Btn>
+          }
+        />
         {replicas.length === 0 ? (
-          <p className="text-[10px] text-muted font-mono py-4 text-center uppercase tracking-wider">No replicas yet</p>
+          <EmptyState message="No replicas yet" icon={ServerIcon} className="!py-10" />
         ) : (
           <Table headers={["ID", "Container", "Server", "Port", "Status", "CPU", "Memory", "CPU (1h)", ""]}>
             {replicas.map((r) => {
@@ -227,18 +196,16 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
               const srv = allServers.find((s) => s.id === r.server_id);
               return (
                 <tr key={r.id}>
-                  <td className="py-2 px-3 text-fg font-bold">#{r.id}</td>
-                  <td className="py-2 px-3 text-fg-dim">{r.container_name}</td>
-                  <td className="py-2 px-3 text-[9px]">
-                    <div className="text-fg-dim">{srv?.name || `srv#${r.server_id}`}</div>
-                  </td>
-                  <td className="py-2 px-3 text-fg-dim">{r.host_port}</td>
-                  <td className="py-2 px-3"><StatusBadge status={r.status} /></td>
-                  <td className="py-2 px-3 text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
-                  <td className="py-2 px-3 text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
-                  <td className="py-2 px-3"><Sparkline values={series} /></td>
-                  <td className="py-2 px-3">
-                    <div className="flex items-center gap-1">
+                  <td className="font-mono text-xs font-medium text-fg">#{r.id}</td>
+                  <td className="max-w-[220px] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
+                  <td className="whitespace-nowrap text-fg-dim">{srv?.name || `srv#${r.server_id}`}</td>
+                  <td className="font-mono text-xs text-fg-dim">{r.host_port}</td>
+                  <td><StatusBadge status={r.status} /></td>
+                  <td className="text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
+                  <td className="text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
+                  <td><Sparkline values={series} /></td>
+                  <td className="text-right">
+                    <div className="flex items-center justify-end gap-1">
                       <PermissionGate permission="terminal.container" appId={appId} environmentId={app.environment_id}>
                         <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
                           <Terminal size={12} /> Shell
@@ -268,6 +235,66 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
         )}
       </Card>
 
+      {(app.storage_bindings || []).length > 0 && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {(app.storage_bindings || []).map(binding => (
+            <Card key={binding.name} className="min-w-0 overflow-hidden">
+              <CardHeader
+                title={<>Object storage · <span className="font-mono text-xs">{binding.name}</span></>}
+                icon={<Database size={15} />}
+                actions={<span title="Injected by OCD. Configure this binding in the app manifest."><Badge>OCD managed</Badge></span>}
+              />
+              <div>
+                <DataRow label="Bucket" mono><span className="break-all">{binding.bucket}</span></DataRow>
+                <DataRow label="Prefix" mono={!!binding.prefix}>
+                  {binding.prefix ? <span className="break-all">{binding.prefix}</span> : <span className="text-muted">Bucket root</span>}
+                </DataRow>
+                <DataRow label="Permissions">
+                  <span className="flex flex-wrap justify-end gap-1">{binding.permissions.map((permission) => <Badge key={permission}>{permission}</Badge>)}</span>
+                </DataRow>
+                <DataRow label="Token" mono><span className="break-all" title={binding.variables.token}>{binding.variables.token} · ••••••••</span></DataRow>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {Object.keys(app.notifications ?? {}).length > 0 && (
+        <Card className="overflow-hidden">
+          <CardHeader title="Notification bindings" icon={<Bell size={15} />} />
+          <div className="divide-y">
+            {Object.entries(app.notifications ?? {}).map(([name, binding]) => (
+              <div key={name} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+                <span className="min-w-0 flex-1 break-all font-mono text-xs font-medium text-fg">{name}</span>
+                <div className="flex flex-wrap gap-1">{binding.permissions.map((permission) => <Badge key={permission}>{permission}</Badge>)}</div>
+                <span className="font-mono text-xs text-muted" title="Credential generation">v{binding.generation}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {storage ? <div className="min-w-0"><StorageMounts mounts={storage.mounts} /></div> : (
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader title="Storage" icon={<HardDrive size={15} />} />
+            <p className="px-4 py-3 text-sm text-muted">Storage inventory unavailable</p>
+          </Card>
+        )}
+        <Card className="min-w-0 self-start overflow-hidden">
+          <CardHeader title="Image storage" icon={<Layers size={15} />} />
+          {storage ? (
+            <>
+              <div>
+                <DataRow label="Current artifact" mono>{bytes(storage.current?.image_size_bytes)}</DataRow>
+                <DataRow label="Rollback artifact" mono>{bytes(storage.rollback?.image_size_bytes)}</DataRow>
+                <DataRow label="Reclaimable upper bound" mono>{bytes(storage.reclaimable_image_bytes_upper_bound)}</DataRow>
+              </div>
+              <p className="border-t bg-subtle/40 px-4 py-2.5 text-xs text-muted">{storage.caveat}</p>
+            </>
+          ) : <p className="px-4 py-3 text-sm text-muted">Storage inventory unavailable</p>}
+        </Card>
+      </div>
     </div>
   );
 }
@@ -321,16 +348,17 @@ function MoveMenu({ targets, loading, disabled, onPick }: {
         title="Migrate replica to another server"
         onClick={() => setOpen((o) => !o)}
       >
-        <ArrowRightLeft size={11} /> Move
+        <ArrowRightLeft size={12} /> Move
       </Btn>
       {open && !disabled && pos && createPortal(
         <div
           ref={menuRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, transform: "translateX(-100%)" }}
-          className="z-50 bg-bg-raised border-2 border-fg shadow-neo min-w-40"
+          className="z-50 min-w-44 animate-pop-in rounded-lg border bg-surface p-1 shadow-pop"
         >
+          <div className="px-2.5 pb-1 pt-1.5 text-xs text-muted">Move to server</div>
           {targets.length === 0 ? (
-            <div className="px-3 py-2 font-mono text-[10px] text-fg-dim uppercase tracking-wider">
+            <div className="px-2.5 py-1.5 text-sm text-fg-dim">
               No other servers
             </div>
           ) : (
@@ -338,8 +366,9 @@ function MoveMenu({ targets, loading, disabled, onPick }: {
               <button
                 key={s.id}
                 onClick={() => { setOpen(false); onPick(String(s.id)); }}
-                className="block w-full text-left px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-fg hover:bg-alt border-b border-fg/20 last:border-b-0"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-fg transition-colors hover:bg-subtle"
               >
+                <ServerIcon size={14} className="shrink-0 text-muted" />
                 {s.name.replace(/^ocd-/, "")}
               </button>
             ))

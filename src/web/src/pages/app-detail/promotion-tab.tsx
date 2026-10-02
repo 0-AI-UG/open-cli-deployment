@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { get } from "../../api/client.ts";
-import { Card, Btn, StatusBadge, confirm, showToast } from "../../components/ui.tsx";
+import { Card, CardHeader, DataRow, EmptyState, Btn, StatusBadge, confirm, showToast } from "../../components/ui.tsx";
 import { PermissionGate } from "../../components/permission-gate.tsx";
 import { type ResourceOpsResult } from "../../hooks/useOperation.ts";
 import { ArrowUpCircle, ExternalLink, Rocket } from "lucide-react";
@@ -51,31 +51,45 @@ export function PromotionTab({ app, appId, action, ops }: PromotionTabProps) {
   };
 
   return (
-    <Card className="p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Rocket size={14} className="text-fg" />
-        <h3 className="font-mono text-[9px] font-bold uppercase tracking-wider text-fg">Staging promotion</h3>
-        {sibling && <StatusBadge status={sibling.status} />}
-        {sibling && (
-          <a href={`#/apps/${sibling.id}`} className="ml-auto flex items-center gap-1 font-mono text-[9px] font-bold uppercase tracking-wider text-accent-blue hover:underline">
-            Open <ExternalLink size={11} />
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="Staging promotion"
+        icon={<Rocket size={15} />}
+        description="Ship the exact image running in staging to this app"
+        actions={sibling && <>
+          <StatusBadge status={sibling.status} />
+          <a href={`#/apps/${sibling.id}`} className="inline-flex items-center gap-1 rounded text-sm font-medium text-fg-dim transition-colors hover:text-fg">
+            Open <ExternalLink size={12} />
           </a>
-        )}
-      </div>
+        </>}
+      />
       {!sibling ? (
-        <p className="font-mono text-[10px] text-muted">No staging sibling is connected to this app.</p>
+        <EmptyState message="No staging sibling is connected to this app." icon={Rocket} className="!py-10" />
       ) : (
         <>
-          <div className="mb-3 space-y-1 font-mono text-[10px]">
-            <div className="flex justify-between"><span className="text-muted">Source app</span><span>{sibling.name}</span></div>
-            {sibling.domain && <div className="flex justify-between"><span className="text-muted">Staging URL</span><a href={`https://${sibling.domain}`} target="_blank" rel="noreferrer" className="text-accent-blue hover:underline">{sibling.domain}</a></div>}
+          <div>
+            <DataRow label="Source app">
+              <a href={`#/apps/${sibling.id}`} className="font-medium text-fg hover:underline">{sibling.name}</a>
+            </DataRow>
+            {sibling.domain && (
+              <DataRow label="Staging URL">
+                <a href={`https://${sibling.domain}`} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 text-fg hover:underline">
+                  <span className="truncate font-mono text-xs">{sibling.domain}</span>
+                  <ExternalLink size={11} className="shrink-0 text-muted" />
+                </a>
+              </DataRow>
+            )}
           </div>
-          <PermissionGate permission="apps.promote" appId={appId} environmentId={app.environment_id}>
-            <Btn size="xs" variant="primary" disabled={ops.isBusy || !canPromote} loading={ops.isBusyWith("promote")} onClick={promote}>
-              <ArrowUpCircle size={13} /> Promote exact image
-            </Btn>
-          </PermissionGate>
-          {!canPromote && <p className="mt-2 font-mono text-[10px] text-muted">The staging app must be running before it can be promoted.</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-subtle/40 px-4 py-3">
+            <p className="text-sm text-muted">
+              {canPromote ? "Production receives the staging image digest unchanged." : "The staging app must be running before it can be promoted."}
+            </p>
+            <PermissionGate permission="apps.promote" appId={appId} environmentId={app.environment_id}>
+              <Btn variant="primary" disabled={ops.isBusy || !canPromote} loading={ops.isBusyWith("promote")} onClick={promote}>
+                <ArrowUpCircle size={14} /> Promote exact image
+              </Btn>
+            </PermissionGate>
+          </div>
         </>
       )}
     </Card>

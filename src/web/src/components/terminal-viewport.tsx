@@ -31,7 +31,15 @@ type Props = {
 const DEFAULT_OPTIONS: ITerminalOptions = {
   fontFamily: "Geist Mono Variable, monospace",
   fontSize: 12,
-  theme: { background: "#000000" },
+  lineHeight: 1.2,
+  // A fixed dark well in both light and dark panel themes (see the logs style).
+  theme: {
+    background: "#0B0B0C",
+    foreground: "#E4E4E7",
+    cursor: "#E4E4E7",
+    cursorAccent: "#0B0B0C",
+    selectionBackground: "#3F3F46",
+  },
   cursorBlink: true,
   scrollback: 5000,
 };
@@ -112,7 +120,7 @@ export const TerminalViewport = forwardRef<TerminalViewportHandle, Props>(functi
   return (
     <div
       ref={containerRef}
-      className={className}
+      className={`overflow-hidden rounded-lg border bg-[#0B0B0C] p-2 shadow-xs ${className ?? ""}`}
       style={style}
       onPointerDown={() => terminalRef.current?.focus()}
     />

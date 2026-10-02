@@ -1,13 +1,16 @@
 import { useEffect, useRef, useMemo } from "react";
 import { Spinner } from "./ui.tsx";
 
-// ANSI color code to CSS color mapping
+// ANSI color code to CSS color mapping. The viewer is a near-black well in
+// both themes, so these are tuned for contrast on #0B0B0C (zinc/tailwind 400s).
 const ANSI_COLORS: Record<number, string> = {
-  30: "#4A4A4A", 31: "#FF4444", 32: "#4ADE80", 33: "#FFB800",
-  34: "#5B8DEF", 35: "#C084FC", 36: "#22D3EE", 37: "#E5E5E5",
-  90: "#8A8A8A", 91: "#FF6B6B", 92: "#6EE7A0", 93: "#FFD54F",
-  94: "#7BABFF", 95: "#D8A8FF", 96: "#5EEAD4", 97: "#FFFFFF",
+  30: "#71717A", 31: "#F87171", 32: "#4ADE80", 33: "#FBBF24",
+  34: "#60A5FA", 35: "#C084FC", 36: "#22D3EE", 37: "#E4E4E7",
+  90: "#A1A1AA", 91: "#FCA5A5", 92: "#86EFAC", 93: "#FDE68A",
+  94: "#93C5FD", 95: "#D8B4FE", 96: "#67E8F9", 97: "#FAFAFA",
 };
+
+const DIM = "#71717A";
 
 interface Span {
   text: string;
@@ -42,10 +45,10 @@ function parseAnsi(raw: string): Span[] {
 
 // Detect log level keywords and assign colors
 const LEVEL_PATTERNS: [RegExp, string][] = [
-  [/\b(ERROR|FATAL|PANIC|CRIT)\b/i, "#FF4444"],
-  [/\b(WARN|WARNING)\b/i, "#FFB800"],
-  [/\b(INFO)\b/i, "#5B8DEF"],
-  [/\b(DEBUG|TRACE)\b/i, "#8A8A8A"],
+  [/\b(ERROR|FATAL|PANIC|CRIT)\b/i, "#F87171"],
+  [/\b(WARN|WARNING)\b/i, "#FBBF24"],
+  [/\b(INFO)\b/i, "#93C5FD"],
+  [/\b(DEBUG|TRACE)\b/i, DIM],
 ];
 
 const TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[\d.Z+:-]*)\s*/;
@@ -67,7 +70,7 @@ function colorizeLine(line: string, tagColors?: Record<string, string>): { spans
   // Extract and dim the timestamp
   const tsMatch = line.match(TIMESTAMP_RE);
   if (tsMatch) {
-    spans.push({ text: tsMatch[1], color: "#8A8A8A" });
+    spans.push({ text: tsMatch[1], color: DIM });
     line = line.slice(tsMatch[0].length);
     spans.push({ text: " " });
   }
@@ -79,7 +82,7 @@ function colorizeLine(line: string, tagColors?: Record<string, string>): { spans
     const m = line.match(TAG_RE);
     if (m && tagColors[m[2]]) {
       tag = m[2];
-      if (m[1]) spans.push({ text: m[1], color: "#8A8A8A" });
+      if (m[1]) spans.push({ text: m[1], color: DIM });
       spans.push({ text: `[${tag}]`, color: tagColors[tag], bold: true });
       spans.push({ text: m[3] });
       line = line.slice(m[0].length);
@@ -109,7 +112,7 @@ function renderSpans(spans: Span[]) {
     if (!s.color && !s.bold && !s.dim) return s.text;
     const style: React.CSSProperties = {};
     if (s.color) style.color = s.color;
-    if (s.bold) style.fontWeight = 700;
+    if (s.bold) style.fontWeight = 600;
     if (s.dim) style.opacity = 0.6;
     return <span key={i} style={style}>{s.text}</span>;
   });
@@ -164,13 +167,14 @@ export function LogViewer({ logs, className, tagColors }: LogViewerProps) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className={`bg-[#111] border-2 border-fg rounded p-3 max-h-[500px] overflow-auto font-mono text-[11px] leading-[1.6] text-[#ccc] ${className || ""}`}
+      className={`max-h-[500px] overflow-auto rounded-lg border bg-[#0B0B0C] p-3 font-mono text-xs leading-relaxed text-zinc-200 [color-scheme:dark] ${className || ""}`}
       style={{ tabSize: 4 }}
     >
-      {rendered || <span className="text-muted inline-flex items-center gap-1.5"><Spinner className="w-3 h-3" />Loading</span>}
+      {rendered || <span className="inline-flex items-center gap-1.5 text-zinc-400"><Spinner className="!text-zinc-400" />Loading</span>}
       <style>{`
         .log-line:hover { background: rgba(255,255,255,0.04); }
-        .log-line { padding: 0 4px; white-space: pre-wrap; word-break: break-all; border-left: 2px solid transparent; }
+        .log-line { padding: 0 6px; border-radius: 3px; white-space: pre-wrap; word-break: break-all; border-left: 2px solid transparent; }
+        .log-line::selection, .log-line *::selection { background: rgba(129,140,248,0.35); }
       `}</style>
     </div>
   );

@@ -60,49 +60,51 @@ export function DeviceAuthPage() {
 
   if (confirmed) {
     return (
-      <AuthShell icon={<Check size={32} />} title="CLI Authorized">
-          <Card className="p-8 text-center">
-            <p className="font-mono text-[11px] text-muted">You can close this page and return to your terminal.</p>
-          </Card>
+      <AuthShell title="CLI authorized" description="You can close this page and return to your terminal.">
+        <Card className="flex flex-col items-center gap-3 p-6 text-center">
+          <span className="grid h-12 w-12 place-items-center rounded-full bg-success/10 text-success">
+            <Check size={22} />
+          </span>
+          <p className="text-sm text-fg-dim">Your CLI session is now signed in.</p>
+        </Card>
       </AuthShell>
     );
   }
 
   return (
-    <AuthShell icon={<Terminal size={24} />} title="CLI Login">
-        <Card className="p-4 sm:p-6">
-          <p className="font-mono text-[11px] text-muted mb-5">Enter the code shown in your terminal to authorize the CLI.</p>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="flex items-center justify-center gap-0.5 sm:gap-1" onPaste={handlePaste}>
-              {code.map((char, i) => (
-                <span key={i} className="contents">
-                  {i === 4 && <span className="mx-0.5 font-mono text-lg font-bold text-fg sm:mx-1">-</span>}
-                  <input
-                    ref={(el) => { inputRefs.current[i] = el; }}
-                    type="text"
-                    inputMode="text"
-                    maxLength={1}
-                    aria-label={`Code character ${i + 1}`}
-                    value={char}
-                    onChange={(e) => handleInput(i, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(i, e)}
-                    className="h-11 !w-7 px-0 text-center font-mono text-lg font-bold uppercase text-fg transition-colors focus:border-accent focus:outline-none sm:!w-9"
-                  />
-                </span>
-              ))}
-            </div>
-            <Btn
-              type="submit"
-              variant="primary"
-              size="md"
-              loading={loading}
-              disabled={!isComplete}
-              className="w-full justify-center"
-            >
-              Authorize CLI
-            </Btn>
-          </form>
-        </Card>
+    <AuthShell title="CLI login" description="Enter the code shown in your terminal to authorize the CLI." width="md">
+      <Card className="p-4 sm:p-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="flex items-center justify-center gap-1 sm:gap-1.5" onPaste={handlePaste}>
+            {code.map((char, i) => (
+              <span key={i} className="contents">
+                {i === 4 && <span aria-hidden="true" className="mx-0.5 font-mono text-lg text-muted sm:mx-1">–</span>}
+                <input
+                  ref={(el) => { inputRefs.current[i] = el; }}
+                  type="text"
+                  inputMode="text"
+                  maxLength={1}
+                  aria-label={`Code character ${i + 1}`}
+                  value={char}
+                  onChange={(e) => handleInput(i, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(i, e)}
+                  className="!h-11 !w-8 !px-0 text-center font-mono !text-lg font-semibold sm:!h-12 sm:!w-10"
+                />
+              </span>
+            ))}
+          </div>
+          <Btn
+            type="submit"
+            variant="primary"
+            size="md"
+            loading={loading}
+            disabled={!isComplete}
+            className="w-full"
+          >
+            <Terminal size={14} /> Authorize CLI
+          </Btn>
+        </form>
+      </Card>
     </AuthShell>
   );
 }

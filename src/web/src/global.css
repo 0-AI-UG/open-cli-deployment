@@ -1,94 +1,152 @@
-    * { box-sizing: border-box; }
-    html { zoom: 1.2; }
-    body {
-      background-color: #FFFDF5;
-      color: #1A1A1A;
-      font-size: 12px;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: clip;
-    }
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #1A1A1A; }
-    /* Focus */
-    :focus-visible { outline: 2px solid #BAFF39; outline-offset: 0; }
-    /* Neo-brutalist inputs */
-    input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea {
-      background: #FFFFFF;
-      border: 2px solid #1A1A1A;
-      color: #1A1A1A;
-      padding: 7px 10px;
-      font: 400 10px/1.3 'Geist Mono Variable', monospace;
-      outline: none;
-      width: 100%;
-      transition: box-shadow .1s, transform .1s;
-    }
-    input:focus, select:focus, textarea:focus {
-      box-shadow: 2px 2px 0 #1A1A1A;
-      transform: translate(-1px, -1px);
-    }
-    input::placeholder, textarea::placeholder { color: #8A8A8A; }
-    select { cursor: pointer; appearance: none; }
-    /* Checkbox — brutalist style */
-    input[type="checkbox"] {
-      appearance: none; -webkit-appearance: none;
-      width: 16px; height: 16px; min-width: 16px;
-      border: 2px solid #1A1A1A; background: #FFFFFF;
-      cursor: pointer; position: relative; display: inline-block; vertical-align: middle;
-    }
-    input[type="checkbox"]:checked { background: #BAFF39; }
-    input[type="checkbox"]:checked::after {
-      content: ''; position: absolute; top: 2px; left: 2px; width: 8px; height: 8px; background: #1A1A1A;
-    }
-    input[type="checkbox"]:hover { background: #F0EBE1; }
-    input[type="checkbox"]:checked:hover { background: #A8E830; }
-    /* Animations */
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .pulse { animation: pulse 1.2s ease-in-out infinite; }
-    .spin { animation: spin .6s linear infinite; }
-    /* Rocket takeoff */
-    @keyframes flame-flicker {
-      0%, 100% { transform: scaleY(1) scaleX(1); }
-      50%      { transform: scaleY(0.78) scaleX(1.12); }
-    }
-    @keyframes smoke-drift {
-      0%   { transform: translateY(0) scale(1);   opacity: 0; }
-      30%  { opacity: 0.6; }
-      100% { transform: translateY(8px) scale(1.6); opacity: 0; }
-    }
-    .group:hover .flame-flicker { animation: flame-flicker 0.18s ease-in-out infinite; transform-origin: top center; }
-    .group:hover .smoke-puff    { animation: smoke-drift 0.9s ease-out infinite; }
+/* Fonts are declared here rather than via @fontsource's index.css: Bun's CSS
+   bundler rewrites its format('woff2-variations') unquoted, which Chrome
+   rejects, silently dropping every face. Latin + Latin Extended cover the UI. */
+@font-face {
+  font-family: "Geist Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "Geist Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url("../../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "Geist Mono Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
+  src: url("../../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-ext-wght-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
 
-    /* Phone UI has its own component tree. These rules provide the native-feeling
-       viewport, safe areas and input sizing that the mobile components build on. */
-    @media (max-width: 767px) {
-      html { zoom: 1; }
-      body {
-        font-size: 14px;
-        padding-bottom: calc(62px + env(safe-area-inset-bottom));
-        overscroll-behavior-y: none;
-      }
-      [class~="text-[8px]"] { font-size: 10px; }
-      [class~="text-[9px]"] { font-size: 11px; }
-      [class~="text-[10px]"] { font-size: 12px; }
-      button, a { -webkit-tap-highlight-color: transparent; }
-      input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea {
-        min-height: 44px;
-        padding: 10px 12px;
-        font-size: 16px;
-      }
-      input[type="checkbox"] { width: 22px; height: 22px; min-width: 22px; }
-      input[type="checkbox"]:checked::after { top: 3px; left: 3px; width: 12px; height: 12px; }
-      ::-webkit-scrollbar { display: none; }
-    }
+/* Design tokens. Values are RGB channels so Tailwind opacity modifiers work.
+   The light theme is the default; dark applies via the OS preference unless the
+   user forced a theme (data-theme on <html>, see stores/theme.ts). */
+:root {
+  color-scheme: light;
+  --canvas: 250 250 250;
+  --surface: 255 255 255;
+  --subtle: 244 244 245;
+  --fg: 24 24 27;
+  --fg-dim: 82 82 91;
+  --muted: 113 113 122;
+  --line: 228 228 231;
+  --line-strong: 212 212 216;
+  --primary: 24 24 27;
+  --primary-fg: 250 250 250;
+  --brand: 186 255 57;
+  --brand-fg: 24 24 27;
+  --ring: 99 102 241;
+  --success: 21 128 61;
+  --warning: 180 83 9;
+  --danger: 220 38 38;
+  --danger-solid: 220 38 38;
+  --info: 37 99 235;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.04), 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06);
+}
 
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        scroll-behavior: auto !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-      }
-    }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --canvas: 10 10 11;
+    --surface: 19 19 21;
+    --subtle: 31 31 35;
+    --fg: 244 244 245;
+    --fg-dim: 190 190 198;
+    --muted: 140 140 150;
+    --line: 39 39 44;
+    --line-strong: 58 58 64;
+    --primary: 244 244 245;
+    --primary-fg: 19 19 21;
+    --ring: 129 140 248;
+    --success: 74 222 128;
+    --warning: 251 191 36;
+    --danger: 248 113 113;
+    --danger-solid: 220 38 38;
+    --info: 96 165 250;
+    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5);
+    --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.06), 0 12px 32px -4px rgb(0 0 0 / 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: 10 10 11;
+  --surface: 19 19 21;
+  --subtle: 31 31 35;
+  --fg: 244 244 245;
+  --fg-dim: 190 190 198;
+  --muted: 140 140 150;
+  --line: 39 39 44;
+  --line-strong: 58 58 64;
+  --primary: 244 244 245;
+  --primary-fg: 19 19 21;
+  --ring: 129 140 248;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+  --danger-solid: 220 38 38;
+  --info: 96 165 250;
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.06), 0 12px 32px -4px rgb(0 0 0 / 0.6);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background-color: rgb(var(--canvas));
+  color: rgb(var(--fg));
+  font-size: 13px;
+  line-height: 20px;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+::selection { background: rgb(var(--ring) / 0.25); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line-strong)); border: 3px solid transparent; background-clip: padding-box; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--muted)); }
+
+/* Focus */
+:focus-visible { outline: 2px solid rgb(var(--ring)); outline-offset: 2px; border-radius: 4px; }
+
+/* Form control styles live in tailwind.css (@layer base) so they always
+   follow preflight regardless of how the bundler orders stylesheets. */
+
+/* Animations */
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pulse { animation: pulse 1.4s ease-in-out infinite; }
+.spin { animation: spin .6s linear infinite; }
+
+/* Phone UI has its own component tree. These rules provide the native-feeling
+   viewport, safe areas and input sizing that the mobile components build on. */
+@media (max-width: 767px) {
+  body {
+    font-size: 14px;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+    overscroll-behavior-y: none;
+  }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  ::-webkit-scrollbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

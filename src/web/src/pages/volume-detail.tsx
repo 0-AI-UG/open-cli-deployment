@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { get } from "../api/client.ts";
-import { Card, Btn, Spinner, EmptyState, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, CopyButton, DataRow, Spinner, EmptyState, Stat, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
 import { PermissionGate } from "../components/permission-gate.tsx";
-import { Database, Folder, FileText, ArrowLeft, ChevronRight, RefreshCw, FileWarning } from "lucide-react";
+import { Folder, FileText, ChevronRight, RefreshCw, FileWarning } from "lucide-react";
 
 type VolumeDetail = {
   id: string;
@@ -118,29 +118,40 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
   if (!detail) return <PageState title="Loading volume" />;
 
   const crumbs = path.split("/").filter(Boolean);
+  const local = detail.storage_kind === "local-directory";
 
   return (
     <PageShell>
-      <PageHeader backHref="#/resources" backLabel="Back to resources" eyebrow="Volume" title={detail.name} />
+      <PageHeader
+        backHref="#/resources"
+        backLabel="Back to resources"
+        eyebrow="Volume"
+        title={detail.name}
+        meta={<>
+          {detail.attached ? <Badge tone="success">Attached</Badge> : <Badge>Not attached</Badge>}
+          <span>{local ? "Server-local directory" : "Hetzner block volume"}</span>
+          {detail.location && <span className="font-mono text-xs">{detail.location}</span>}
+        </>}
+      />
 
-      <Card className="p-4">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Info label="Size" value={`${detail.storage_kind === "local-directory" ? "Shares server disk · no quota" : `${detail.size} GB`}`} />
-          <Info label="Location" value={detail.location} />
-          <Info label="Server" value={detail.server_name || "—"} />
-          <Info label="App" value={detail.app_name || "—"} accent={!!detail.app_name} />
-          <Info label="€/mo" value={detail.storage_kind === "local-directory" ? "No separate storage charge" : detail.monthly_eur != null ? `€${detail.monthly_eur.toFixed(2)}` : "—"} />
-        </div>
-        {detail.host_path && (
-          <div className="mt-3 pt-3 border-t border-fg/15 font-mono text-[10px] text-fg-dim">
-            <span className="text-muted uppercase tracking-wider mr-2 text-[9px]">Host path</span>
-            <span className="text-fg">{detail.host_path}</span>
-          </div>
-        )}
-      </Card>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-4">
+        <Stat label="Size" value={local ? "Shared" : `${detail.size} GB`} hint={local ? "Shares server disk · no quota" : undefined} className="bg-surface px-4 py-3.5" />
+        <Stat label="Monthly cost" value={local ? "—" : detail.monthly_eur != null ? `€${detail.monthly_eur.toFixed(2)}` : "—"} hint={local ? "No separate storage charge" : "€/mo"} className="bg-surface px-4 py-3.5" />
+        <Stat label="Server" value={<span title={detail.server_name || undefined}>{detail.server_name || "—"}</span>} hint={`Location ${detail.location || "—"}`} className="bg-surface px-4 py-3.5" />
+        <Stat label="App" value={<span title={detail.app_name || undefined}>{detail.app_name || "—"}</span>} hint={detail.app_name ? "Mounted by this app" : "Not in use"} className="bg-surface px-4 py-3.5" />
+      </div>
+
+      {detail.host_path && (
+        <Card>
+          <DataRow label="Host path" mono>
+            <span className="min-w-0 break-all">{detail.host_path}</span>
+            <CopyButton text={detail.host_path} />
+          </DataRow>
+        </Card>
+      )}
 
       {!detail.attached ? (
-        <Card className="p-6">
+        <Card>
           <EmptyState
             message="Volume is not attached to a server. Attach it to an app to inspect its contents."
             icon={FileWarning}
@@ -152,52 +163,50 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
         <PermissionGate
           permission="volumes.files.read"
           fallback={
-            <Card className="p-6">
+            <Card>
               <EmptyState message="Viewing volume contents requires the volumes.files.read permission." icon={FileWarning} />
             </Card>
           }
         >
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
           {/* File browser */}
-          <Card className="p-3 md:col-span-2">
-            <div className="flex items-center gap-2 mb-3">
-              <Folder size={13} className="text-fg" />
-              <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">Files</h3>
-              <Btn variant="ghost" size="xs" onClick={() => loadDir(path)} className="ml-auto" title="Refresh">
-                <RefreshCw size={11} />
-              </Btn>
-            </div>
+          <Card className="flex min-w-0 flex-col overflow-hidden md:col-span-2">
+            <CardHeader
+              title="Files"
+              icon={<Folder size={15} />}
+              actions={<Btn variant="ghost" size="xs" onClick={() => loadDir(path)} title="Refresh"><RefreshCw size={14} /></Btn>}
+            />
 
             {/* Breadcrumbs */}
-            <div className="flex items-center flex-wrap gap-1 font-mono text-[10px] mb-2 px-1">
+            <nav aria-label="Path" className="flex flex-wrap items-center gap-0.5 border-b bg-subtle/40 px-3 py-2 font-mono text-xs">
               <button
                 onClick={() => { setPath(""); setFilePath(null); setFileView(null); }}
-                className="text-accent-blue hover:underline"
+                className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${crumbs.length ? "text-fg-dim" : "font-medium text-fg"}`}
               >
                 /
               </button>
               {crumbs.map((c, i) => (
-                <span key={i} className="flex items-center gap-1">
-                  <ChevronRight size={10} className="text-muted" />
-                  <button onClick={() => jumpTo(i)} className="text-accent-blue hover:underline">{c}</button>
+                <span key={i} className="flex items-center gap-0.5">
+                  <ChevronRight size={12} className="text-muted" />
+                  <button onClick={() => jumpTo(i)} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${i === crumbs.length - 1 ? "font-medium text-fg" : "text-fg-dim"}`}>{c}</button>
                 </span>
               ))}
-            </div>
+            </nav>
 
             {listLoading ? (
-              <div className="py-8 flex justify-center"><Spinner /></div>
+              <div className="flex justify-center py-10"><Spinner /></div>
             ) : listErr ? (
               <EmptyState message={listErr} icon={FileWarning} />
             ) : !entries?.length ? (
-              <EmptyState message="Empty directory" />
+              <EmptyState message="Empty directory" icon={Folder} />
             ) : (
-              <div className="border-2 border-fg max-h-[60vh] overflow-y-auto">
+              <div className="max-h-[60vh] divide-y overflow-y-auto">
                 {path && (
                   <button
                     onClick={goUp}
-                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 font-mono text-[10px] hover:bg-alt border-b border-fg/15 text-fg-dim"
+                    className="flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg"
                   >
-                    <Folder size={11} /> ..
+                    <Folder size={14} className="text-muted" /> ..
                   </button>
                 )}
                 {entries.map((e) => {
@@ -207,11 +216,12 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
                     <button
                       key={e.name}
                       onClick={() => isDir ? goInto(e.name) : openFile(e.name)}
-                      className={`w-full text-left flex items-center gap-2 px-2 py-1.5 font-mono text-[10px] border-b border-fg/10 last:border-b-0 ${active ? "bg-accent text-fg" : "hover:bg-alt"}`}
+                      aria-current={active ? "true" : undefined}
+                      className={`flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs transition-colors ${active ? "bg-subtle text-fg" : "text-fg-dim hover:bg-subtle/50 hover:text-fg"}`}
                     >
-                      {isDir ? <Folder size={11} className="text-fg" /> : <FileText size={11} className="text-fg-dim" />}
-                      <span className={`flex-1 truncate ${isDir ? "font-bold" : ""}`}>{e.name}{e.type === "l" ? " →" : ""}</span>
-                      <span className="text-muted text-[9px]">{isDir ? "" : fmtSize(e.size)}</span>
+                      {isDir ? <Folder size={14} className="shrink-0 text-muted" /> : <FileText size={14} className="shrink-0 text-muted" />}
+                      <span className={`flex-1 truncate ${isDir || active ? "font-medium text-fg" : ""}`}>{e.name}{e.type === "l" ? " →" : ""}</span>
+                      <span className="shrink-0 tabular-nums text-muted">{isDir ? "" : fmtSize(e.size)}</span>
                     </button>
                   );
                 })}
@@ -220,44 +230,33 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
           </Card>
 
           {/* File viewer */}
-          <Card className="p-3 md:col-span-3">
-            <div className="flex items-center gap-2 mb-3">
-              <FileText size={13} className="text-fg" />
-              <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider truncate">
-                {filePath || "Select a file"}
-              </h3>
-              {fileView && (
-                <span className="ml-auto font-mono text-[9px] text-muted uppercase">
+          <Card className="min-w-0 overflow-hidden md:col-span-3">
+            <CardHeader
+              title={filePath ? <span className="font-mono text-xs">{filePath}</span> : "Select a file"}
+              icon={<FileText size={15} />}
+              actions={fileView ? (
+                <span className="whitespace-nowrap text-xs tabular-nums text-muted">
                   {fmtSize(fileView.size)}{fileView.truncated ? ` · truncated @ ${fmtSize(fileView.max_bytes)}` : ""}
                 </span>
-              )}
-            </div>
+              ) : undefined}
+            />
             {fileLoading ? (
-              <div className="py-8 flex justify-center"><Spinner /></div>
+              <div className="flex justify-center py-10"><Spinner /></div>
             ) : !filePath ? (
-              <EmptyState message="Click a file on the left to view its contents" />
+              <EmptyState message="Click a file on the left to view its contents" icon={FileText} />
             ) : fileView?.binary ? (
               <EmptyState message="Binary file: preview not available" icon={FileWarning} />
             ) : (
-              <pre className="border-2 border-fg bg-alt/40 p-3 font-mono text-[11px] leading-relaxed max-h-[60vh] overflow-auto whitespace-pre-wrap break-all">
-                {fileView?.content || ""}
-              </pre>
+              <div className="p-4">
+                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-subtle/60 p-3 font-mono text-xs leading-relaxed text-fg">
+                  {fileView?.content || ""}
+                </pre>
+              </div>
             )}
           </Card>
         </div>
         </PermissionGate>
       )}
     </PageShell>
-  );
-}
-
-function Info({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="border-2 border-fg p-2 bg-alt">
-      <div className="font-mono text-[9px] text-muted uppercase tracking-wider mb-1">{label}</div>
-      <div className={`font-mono text-xs font-bold ${accent ? "text-accent-blue" : "text-fg"} truncate`} title={value}>
-        {value}
-      </div>
-    </div>
   );
 }

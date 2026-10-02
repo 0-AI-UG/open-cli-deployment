@@ -37,7 +37,7 @@ export function MobileActionSheet({
     <div className="fixed inset-0 z-[85] flex items-end" role="presentation">
       <button
         aria-label="Close actions"
-        className="absolute inset-0 bg-fg/45 animate-fade-in"
+        className="absolute inset-0 animate-fade-in bg-black/40 backdrop-blur-[2px]"
         onClick={onClose}
       />
       <section
@@ -45,18 +45,18 @@ export function MobileActionSheet({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 w-full max-h-[82dvh] overflow-y-auto rounded-t-[22px] border-2 border-b-0 border-fg bg-bg-raised px-4 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] shadow-[0_-5px_0_#1A1A1A] animate-slide-up"
+        className="relative z-10 w-full max-h-[82dvh] animate-slide-up overflow-y-auto rounded-t-2xl border border-b-0 bg-canvas px-4 pb-[calc(18px+env(safe-area-inset-bottom))] pt-3 shadow-pop"
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fg/25" />
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line-strong" />
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate font-mono text-sm font-bold uppercase text-fg">{title}</h2>
-            {subtitle && <p className="mt-1 truncate font-mono text-[10px] text-muted">{subtitle}</p>}
+            <h2 className="truncate text-lg font-semibold text-fg">{title}</h2>
+            {subtitle && <p className="mt-0.5 truncate text-sm text-muted">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-fg active:bg-alt"
+            className="-mr-1 -mt-1 grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted active:bg-subtle"
           >
             <X size={20} />
           </button>
@@ -90,14 +90,14 @@ export function MobileSheetAction({
     <button
       onClick={onClick}
       disabled={disabled || loading}
-      className={`flex min-h-14 w-full items-center gap-3 border-2 border-fg px-4 py-3 text-left font-mono shadow-neo-sm transition-transform active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40 ${
-        danger ? "bg-accent-red text-white" : primary ? "bg-accent text-fg" : "bg-bg-raised text-fg"
+      className={`flex min-h-14 w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors disabled:opacity-50 ${
+        danger ? "border-danger/25 bg-danger/5 text-danger active:bg-danger/10" : primary ? "border-primary bg-primary text-primary-fg active:opacity-90" : "bg-surface text-fg active:bg-subtle"
       }`}
     >
-      <span className={loading ? "animate-spin" : ""}>{icon}</span>
+      <span className={`shrink-0 ${loading ? "animate-spin" : ""} ${danger || primary ? "" : "text-muted"}`}>{icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[11px] font-bold uppercase tracking-wide">{loading ? `${label}…` : label}</span>
-        {detail && <span className={`mt-0.5 block text-[9px] normal-case ${danger ? "text-white/75" : "text-muted"}`}>{detail}</span>}
+        <span className="block text-base font-medium">{loading ? `${label}…` : label}</span>
+        {detail && <span className={`mt-0.5 block text-sm ${danger ? "text-danger/80" : primary ? "text-primary-fg/70" : "text-muted"}`}>{detail}</span>}
       </span>
     </button>
   );

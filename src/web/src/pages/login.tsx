@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { post } from "../api/client.ts";
 import { login, setTempToken } from "../stores/auth.ts";
-import { showToast, Field, Card, Btn, AuthShell } from "../components/ui.tsx";
-import { Terminal, ArrowRight } from "lucide-react";
+import { showToast, Card, Btn, AuthShell } from "../components/ui.tsx";
+import { ArrowRight } from "lucide-react";
 
 export function LoginPage() {
   const [username, setUsername] = useState("");
@@ -32,35 +32,25 @@ export function LoginPage() {
   };
 
   return (
-    <AuthShell icon={<Terminal size={24} />} title="Open CLI Deployment">
-        <Card className="p-6">
-          <h2 className="font-mono text-sm font-bold text-fg uppercase mb-4">Sign In</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Username">
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required autoFocus />
-            </Field>
-            <Field label="Password">
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
-            </Field>
-            <Btn
-              type="submit"
-              variant="primary"
-              size="md"
-              loading={loading}
-              className="w-full justify-center"
-            >
-              <span>Sign In</span><ArrowRight size={14} />
-            </Btn>
-          </form>
-          <div className="mt-4 text-center">
-            <a
-              href="#/password-reset"
-              className="font-mono text-[9px] uppercase tracking-wider text-muted hover:text-fg"
-            >
-              Forgot password?
-            </a>
-          </div>
-        </Card>
+    <AuthShell title="Sign in to OCD" description="Open CLI Deployment control panel">
+      <Card className="p-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="block space-y-1.5">
+            <span className="block text-sm font-medium text-fg">Username</span>
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required autoFocus />
+          </label>
+          <label className="block space-y-1.5">
+            <span className="block text-sm font-medium text-fg">Password</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+          </label>
+          <Btn type="submit" variant="primary" size="md" loading={loading} className="mt-2 w-full">
+            <span>Sign in</span><ArrowRight size={14} />
+          </Btn>
+        </form>
+      </Card>
+      <p className="mt-4 text-center text-xs text-muted">
+        <a href="#/password-reset" className="transition-colors hover:text-fg">Forgot password?</a>
+      </p>
     </AuthShell>
   );
 }

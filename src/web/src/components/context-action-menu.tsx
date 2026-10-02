@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, MoreVertical } from "lucide-react";
+import { Loader2, MoreHorizontal } from "lucide-react";
 import { portalAnchorRect } from "./ui.tsx";
 
 const MENU_WIDTH = 208;
@@ -74,9 +74,9 @@ export function ContextActionMenu({
         aria-expanded={open}
         title={label}
         onClick={() => setOpen((value) => !value)}
-        className={`inline-grid h-[27px] w-[30px] shrink-0 place-items-center border-2 border-fg bg-bg-raised text-fg-dim shadow-neo-sm transition-all hover:bg-alt active:translate-x-0.5 active:translate-y-0.5 active:shadow-none ${open ? "bg-alt" : ""}`}
+        className={`inline-grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-subtle hover:text-fg ${open ? "bg-subtle text-fg" : ""}`}
       >
-        <MoreVertical size={14} />
+        <MoreHorizontal size={16} />
       </button>
 
       {open && position && createPortal(
@@ -85,7 +85,7 @@ export function ContextActionMenu({
           role="menu"
           aria-label={label}
           style={{ position: "fixed", top: position.top, left: position.left, width: MENU_WIDTH }}
-          className="z-[70] max-h-[min(380px,calc(100vh-16px))] overflow-y-auto border-2 border-fg bg-bg-raised p-1 shadow-neo"
+          className="z-[70] max-h-[min(380px,calc(100vh-16px))] animate-pop-in overflow-y-auto rounded-lg border bg-surface p-1 shadow-pop"
         >
           {children(close)}
         </div>,
@@ -116,10 +116,10 @@ export function ContextActionItem({
       role="menuitem"
       disabled={disabled || loading}
       onClick={onClick}
-      className={`flex w-full items-center gap-2 px-2.5 py-2 text-left font-mono text-[9px] font-bold uppercase tracking-wider transition-colors hover:bg-alt focus:bg-alt focus:outline-none disabled:cursor-not-allowed disabled:opacity-35 ${danger ? "text-accent-red" : "text-fg"}`}
+      className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${danger ? "text-danger hover:bg-danger/10 focus:bg-danger/10" : "text-fg hover:bg-subtle focus:bg-subtle"}`}
     >
-      <span className="grid h-4 w-4 shrink-0 place-items-center">
-        {loading ? <Loader2 size={12} className="animate-spin" /> : icon}
+      <span className={`grid h-4 w-4 shrink-0 place-items-center ${danger ? "" : "text-muted"}`}>
+        {loading ? <Loader2 size={14} className="animate-spin" /> : icon}
       </span>
       <span className="truncate">{label}</span>
     </button>

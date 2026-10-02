@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import "@fontsource-variable/geist-mono/index.css";
+import "./stores/theme.ts";
 import "./tailwind.generated.css";
 import "./global.css";
 import { App } from "./app.tsx";

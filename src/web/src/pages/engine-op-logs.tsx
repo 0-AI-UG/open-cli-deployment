@@ -1,7 +1,7 @@
-import { ArrowLeft, Download, ScrollText, RefreshCw } from "lucide-react";
+import { Download, ScrollText, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { get } from "../api/client.ts";
-import { Card, Btn, Spinner, PageShell, PageHeader } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, Spinner, PageShell, PageHeader, StatusBadge } from "../components/ui.tsx";
 import { LogViewer } from "../components/log-viewer.tsx";
 import { useOperation, TERMINAL_STATUSES } from "../hooks/useOperation.ts";
 
@@ -79,38 +79,38 @@ export function EngineOpLogsPage({ opId }: { opId: number }) {
         title={op ? `${op.kind} #${opId}` : `Operation #${opId}`}
         meta={op && (
             <>
-              {(op.resource_labels ?? op.resource_keys).join(", ")} · status {op.status}
-              {active ? " · live" : ""}
+              <StatusBadge status={op.status} />
+              <span className="min-w-0 break-words font-mono text-xs">{(op.resource_labels ?? op.resource_keys).join(", ")}</span>
+              {active ? <Badge tone="info"><span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />Live</Badge> : null}
             </>
         )}
       />
 
       {!loaded && !op ? (
-        <div className="min-h-[200px] flex items-center justify-center">
+        <div className="flex min-h-[200px] items-center justify-center">
           <Spinner />
         </div>
       ) : (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ScrollText size={14} className="text-fg" />
-              <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">
-                Engine Logs ({rows.length} lines)
-              </h3>
-            </div>
-            <div className="flex items-center gap-2">
+        <Card className="overflow-hidden">
+          <CardHeader
+            title="Engine logs"
+            icon={<ScrollText size={15} />}
+            description={`${rows.length} line${rows.length === 1 ? "" : "s"}`}
+            actions={<>
               <Btn size="xs" onClick={downloadLogs} disabled={rows.length === 0}>
-                <Download size={12} /> Download
+                <Download size={13} /> Download
               </Btn>
               <Btn size="xs" onClick={() => setReloadTick((t) => t + 1)}>
-                <RefreshCw size={12} /> Refresh
+                <RefreshCw size={13} /> Refresh
               </Btn>
-            </div>
-          </div>
-          <LogViewer
-            logs={logsText || (loaded ? "No log lines captured yet." : "")}
-            className="max-h-[70vh]"
+            </>}
           />
+          <div className="p-3">
+            <LogViewer
+              logs={logsText || (loaded ? "No log lines captured yet." : "")}
+              className="max-h-[70vh]"
+            />
+          </div>
         </Card>
       )}
     </PageShell>
