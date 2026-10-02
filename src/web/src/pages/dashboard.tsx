@@ -64,6 +64,8 @@ export function DashboardPage() {
     try { localStorage.setItem(APP_VIEW_KEY, view); } catch { /* per-browser convenience only */ }
   };
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // Cards view opens one stack at a time; the list keeps its own expanded set.
+  const [openStack, setOpenStack] = useState<number | null>(null);
   const seenStacks = useRef<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -338,7 +340,52 @@ export function DashboardPage() {
     );
   };
 
-  const renderStackGroup = (stack: StackData, members: { apps: AppData[] }, view: AppView = "list") => {
+  // A stack as a card: brand-tinted, with a solid stack icon, so it stands
+  // apart from the app cards around it. Clicking it opens its apps in a
+  // tinted panel below; one stack is open at a time.
+  const renderStackCard = (stack: StackData, members: AppData[]) => {
+    const open = openStack === stack.id;
+    const kind = stackBusyKind(stack.id);
+    const busy = !!kind || members.some((a) => !!appBusyKind(a.id));
+    const destroying = actionLoading === `stack-delete-${stack.id}` || kind === "destroy_stack";
+    const toggle = () => setOpenStack(open ? null : stack.id);
+    return (
+      <div
+        key={`stack-card-${stack.id}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={toggle}
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
+        className={`group flex min-h-[136px] min-w-0 cursor-pointer flex-col gap-3 p-4 transition-colors ${open ? "bg-brand/20" : "bg-brand/10 hover:bg-brand/15"}`}
+      >
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand text-brand-fg"><Boxes size={16} /></span>
+          <div className="min-w-0 flex-1">
+            <a href={`#/stacks/${stack.id}`} onClick={(event) => event.stopPropagation()} className="block truncate text-sm font-semibold text-fg hover:underline">{stack.name}</a>
+            <div className="mt-0.5 truncate text-xs text-muted">Stack · {members.length} app{members.length === 1 ? "" : "s"}</div>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
+            <PermissionGate permission="stacks.destroy" environmentId={stack.environment_id}>
+              <Btn variant="ghost" title="Destroy stack" loading={destroying} disabled={busy} onClick={() => stackDestroy(stack)}>
+                <Trash2 size={15} />
+              </Btn>
+            </PermissionGate>
+            <Btn variant="ghost" title={open ? "Close" : "Open"} onClick={toggle}>
+              <ChevronDown size={15} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+            </Btn>
+          </div>
+        </div>
+        <div className="mt-auto flex min-w-0 flex-wrap items-center gap-1.5">
+          <StatusBadge status={stack.status} />
+          {members.slice(0, 3).map((app) => <Badge key={app.id} className="max-w-[140px]"><span className="truncate font-mono">{app.name}</span></Badge>)}
+          {members.length > 3 && <Badge>+{members.length - 3}</Badge>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderStackGroup = (stack: StackData, members: { apps: AppData[] }) => {
     const isOpen = expanded.has(stack.id);
     const memberApps = members.apps;
     const memberBusy = memberApps.some((a) => !!appBusyKind(a.id));
@@ -350,7 +397,7 @@ export function DashboardPage() {
 
     return (
       // A stack reads as one group: a tinted band with an accent bar down its
-      // left edge, holding its header and its members (rows or cards).
+      // left edge, holding its header and its member rows.
       <div key={`stack-${stack.id}`} className={`relative ${busy ? "bg-subtle/60" : "bg-subtle/30"}`}>
         <span aria-hidden="true" className="absolute inset-y-0 left-0 z-[1] w-[3px] bg-primary" />
         <div
@@ -390,15 +437,11 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {isOpen && total > 0 && (view === "cards" ? (
-          <div className="card-grid grid border-t bg-canvas/50 sm:grid-cols-2 xl:grid-cols-3">
-            {memberApps.map(renderAppCard)}
-          </div>
-        ) : (
+        {isOpen && total > 0 && (
           <div className="divide-y border-t bg-canvas/50">
             {memberApps.map((app) => renderAppRow(app, { nested: true }))}
           </div>
-        ))}
+        )}
         {isOpen && total === 0 && (
           <div className="border-t py-3 pl-12 pr-4 text-sm text-muted">No members</div>
         )}
@@ -649,18 +692,29 @@ export function DashboardPage() {
             description={<>Deploy your first app from the CLI with <code className="rounded bg-subtle px-1 py-0.5 font-mono text-xs text-fg">ocd deploy</code>; it will show up here.</>}
           />
         ) : appView === "cards" ? (
-          <div className="divide-y border-b">
-            {standaloneApps.length > 0 && (
-              <div className="card-grid grid sm:grid-cols-2 xl:grid-cols-3">
-                {standaloneApps.map(renderAppCard)}
-              </div>
-            )}
-            {stacks.map((stack) => renderStackGroup(stack, { apps: appsByStack.get(stack.id) ?? [] }, "cards"))}
+          // Dense flow: the open stack's panel spans a full row, and the cards
+          // after it backfill the rest of the stack card's row.
+          <div className="card-grid grid grid-flow-row-dense border-b sm:grid-cols-2 xl:grid-cols-3">
+            {stacks.flatMap((stack) => {
+              const members = appsByStack.get(stack.id) ?? [];
+              const card = renderStackCard(stack, members);
+              if (openStack !== stack.id) return [card];
+              return [card, (
+                <div key={`stack-panel-${stack.id}`} className="col-span-full bg-brand/10">
+                  {members.length === 0 ? <p className="px-4 py-5 text-sm text-muted">No members</p> : (
+                    <div className="card-grid grid sm:grid-cols-2 xl:grid-cols-3">
+                      {members.map(renderAppCard)}
+                    </div>
+                  )}
+                </div>
+              )];
+            })}
+            {standaloneApps.map(renderAppCard)}
           </div>
         ) : (
           <div className="divide-y border-b">
             {standaloneApps.map((app) => renderAppRow(app))}
-            {stacks.map((stack) => renderStackGroup(stack, { apps: appsByStack.get(stack.id) ?? [] }, "list"))}
+            {stacks.map((stack) => renderStackGroup(stack, { apps: appsByStack.get(stack.id) ?? [] }))}
           </div>
         )}
       </section>
