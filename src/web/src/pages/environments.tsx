@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { get, post, put } from "../api/client.ts";
-import { Card, CardHeader, Btn, Field, showToast, confirm, EmptyState, PageShell, PageHeader } from "../components/ui.tsx";
+import { Card, CardHeader, Btn, Field, showToast, confirm, EmptyState, PageShell, PageHeader, SkeletonCard } from "../components/ui.tsx";
 import { EnvVarEditor, type EnvVarRow } from "../components/env-var-editor.tsx";
 import { trackOperationInToast, useActiveOperations } from "../hooks/useOperation.ts";
 import { NeoSelect } from "../components/neo-select.tsx";
@@ -16,6 +16,7 @@ export function EnvironmentsPage() {
   const [editVars, setEditVars] = useState<EnvVarRow[]>([]);
   const [rollout, setRollout] = useState<"restart" | "none">("restart");
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [attachedApps, setAttachedApps] = useState<Record<number, AttachedApp[]>>({});
   const ops = useActiveOperations(
     (op) => op.kind === "cascade_redeploy",
@@ -23,7 +24,7 @@ export function EnvironmentsPage() {
   );
 
   const load = () => {
-    get("/api/environments").then(setEnvironments).catch(() => {});
+    get("/api/environments").then(setEnvironments).catch(() => {}).finally(() => setLoaded(true));
     get("/api/environments/deleted").then(setDeletedEnvironments).catch(() => {});
   };
 
@@ -168,7 +169,9 @@ export function EnvironmentsPage() {
         </>}
       />
 
-      {environments.length > 0 || expanded === "new" ? (
+      {!loaded ? (
+        <SkeletonCard rows={3} label="Loading environments" />
+      ) : environments.length > 0 || expanded === "new" ? (
         <Card className="overflow-hidden">
           <CardHeader
             title="Environments"

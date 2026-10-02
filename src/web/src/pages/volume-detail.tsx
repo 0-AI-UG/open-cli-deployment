@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { get } from "../api/client.ts";
-import { Badge, Card, CardHeader, Btn, CopyButton, DataRow, Spinner, EmptyState, Stat, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, CopyButton, DataRow, SkeletonLines, SkeletonRows, EmptyState, Stat, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
 import { Folder, FileText, ChevronRight, RefreshCw, FileWarning } from "lucide-react";
 
 type VolumeDetail = {
@@ -183,7 +183,7 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
             </nav>
 
             {listLoading ? (
-              <div className="flex justify-center py-10"><Spinner /></div>
+              <SkeletonRows rows={6} dense label="Loading directory" />
             ) : listErr ? (
               <EmptyState message={listErr} icon={FileWarning} />
             ) : !entries?.length ? (
@@ -230,7 +230,7 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
               ) : undefined}
             />
             {fileLoading ? (
-              <div className="flex justify-center py-10"><Spinner /></div>
+              <div className="p-4"><SkeletonLines label="Loading file" /></div>
             ) : !filePath ? (
               <EmptyState message="Click a file on the left to view its contents" icon={FileText} />
             ) : fileView?.binary ? (

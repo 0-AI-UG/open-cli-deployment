@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { get, post } from "../../api/client.ts";
-import { Card, CardHeader, Btn, Badge, DataRow, EmptyState, StatusBadge, CopyButton, showToast, confirm } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, Badge, DataRow, EmptyState, SkeletonCard, StatusBadge, CopyButton, showToast, confirm } from "../../components/ui.tsx";
 import { History, RefreshCw, Server as ServerIcon } from "lucide-react";
 import { PanelProtection } from "./panel-protection.tsx";
 import { NtfyServiceSettings } from "../../components/ntfy-settings.tsx";
@@ -10,7 +10,8 @@ import type { PanelApp, DeploymentRecord } from "../../types.ts";
 type LatestPanelRelease = { commit: string; image: string; currentImage: string; upToDate: boolean };
 
 export function PanelSettings() {
-  const [panel, setPanel] = useState<PanelApp | null>(null);
+  // undefined until /api/panel answers; null when this is not a self-hosted panel.
+  const [panel, setPanel] = useState<PanelApp | null | undefined>(undefined);
   const [server, setServer] = useState<{ id: number; name: string; ipv4: string } | null>(null);
   const [deployments, setDeployments] = useState<DeploymentRecord[]>([]);
   const [latest, setLatest] = useState<LatestPanelRelease | null>(null);
@@ -28,7 +29,7 @@ export function PanelSettings() {
             .catch((error) => { setLatest(null); setLatestError(error instanceof Error ? error.message : "Could not find the latest main image"); });
         }
       })
-      .catch(() => {});
+      .catch(() => setPanel((current) => current === undefined ? null : current));
     get("/api/panel/deployments").then((data) => setDeployments(data || [])).catch(() => {});
   };
 
@@ -62,12 +63,12 @@ export function PanelSettings() {
     <>
       <PanelProtection />
       <NtfyServiceSettings />
-      {!panel ? <Card><EmptyState icon={ServerIcon} message="Not a self-hosted panel" description="This instance is not managed as a self-hosted panel app." /></Card> : (
+      {panel === undefined ? <SkeletonCard rows={4} label="Loading panel" /> : !panel ? <Card><EmptyState icon={ServerIcon} message="Not a self-hosted panel" description="This instance is not managed as a self-hosted panel app." /></Card> : (
         <Card className="overflow-hidden">
           <CardHeader icon={<ServerIcon size={15} />} title="Panel (self-hosted)" description="Redeploys automatically when main is pushed" actions={<StatusBadge status={panel.status} />} />
           <div>
-            <DataRow label="Domain" mono>
-              <a href={`https://${panel.domain}`} target="_blank" rel="noreferrer" className="break-all text-fg underline decoration-line-strong underline-offset-2">{panel.domain}</a>
+            <DataRow label="Domain" mono className="relative transition-colors hover:bg-subtle/50">
+              <a href={`https://${panel.domain}`} target="_blank" rel="noreferrer" className="stretched-link break-all text-fg underline decoration-line-strong underline-offset-2">{panel.domain}</a>
             </DataRow>
             <DataRow label="Server" mono>{server ? `${server.name} (${server.ipv4})` : "—"}</DataRow>
             <DataRow label="Image" mono><span className="min-w-0 break-all">{image}</span>{image !== "—" && <CopyButton text={image} />}</DataRow>

@@ -36,9 +36,9 @@ export function OverviewTab({
         <Card className="overflow-hidden">
           <CardHeader title="Configuration" icon={<Settings2 size={15} />} description="Declared in ocd-stack.json" />
           <DataRow label="Created">{new Date(stack.created_at).toLocaleString()}</DataRow>
-          <DataRow label="Environment">
+          <DataRow label="Environment" className={prodEnv ? "relative transition-colors hover:bg-subtle/50" : ""}>
             {prodEnv
-              ? <a href="#/environments" className="font-medium text-fg">{prodEnv}</a>
+              ? <a href="#/environments" className="stretched-link font-medium text-fg">{prodEnv}</a>
               : <span className="text-muted">None</span>}
           </DataRow>
         </Card>
@@ -60,7 +60,7 @@ export function OverviewTab({
         ) : (
           <Table headers={["Name", "Status", "Domain", "Needs", ""]}>
             {memberApps.map((a) => (
-              <tr key={a.id}>
+              <tr key={a.id} className="cursor-pointer" onClick={() => { window.location.hash = `#/apps/${a.id}`; }}>
                 <td>
                   <a href={`#/apps/${a.id}`} className="font-medium text-fg">{a.name}</a>
                 </td>
@@ -72,7 +72,7 @@ export function OverviewTab({
                 </td>
                 <td>
                   {a.domain && a.public
-                    ? <a href={`https://${a.domain}`} target="_blank" rel="noopener" className="inline-flex items-center gap-1 font-mono text-xs text-fg-dim transition-colors hover:text-fg">{a.domain} <ExternalLink size={11} className="shrink-0 text-muted" /></a>
+                    ? <a href={`https://${a.domain}`} target="_blank" rel="noopener" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1 font-mono text-xs text-fg-dim transition-colors hover:text-fg">{a.domain} <ExternalLink size={11} className="shrink-0 text-muted" /></a>
                     : <Badge>Private</Badge>}
                 </td>
                 <td className="font-mono text-xs text-fg-dim">

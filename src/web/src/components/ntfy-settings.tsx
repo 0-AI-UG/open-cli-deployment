@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { get, put, post } from "../api/client.ts";
-import { Card, CardHeader, Badge, Btn, Field, InlineNotice, Spinner, StatusBadge, showToast } from "./ui.tsx";
+import { Card, CardHeader, Badge, Btn, Field, InlineNotice, SkeletonRows, StatusBadge, showToast } from "./ui.tsx";
 import { NeoSelect } from "./neo-select.tsx";
 import { Bell, BellRing, Check, Copy, ExternalLink, RefreshCw, Send, Server } from "lucide-react";
 import type { NtfyPreferences, NtfySettings } from "../../../shared/ntfy-schema.ts";
@@ -54,12 +54,12 @@ export function NtfyServiceSettings() {
   return <Card className="overflow-hidden">
     <CardHeader icon={<BellRing size={15} />} title="Shared notifications" description="OCD alerts and private app topics" actions={state?.app ? <StatusBadge status={state.app.status} /> : undefined} />
     {error && <div className="px-4 pt-4"><InlineNotice tone="danger">{error}</InlineNotice></div>}
-    {!state ? <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted"><Spinner /> Loading notifications…</div> : state.app ? <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+    {!state ? <SkeletonRows rows={2} label="Loading notifications" /> : state.app ? <div className="group relative transition-colors hover:bg-subtle/50 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
       <div className="flex min-w-0 items-center gap-3">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Bell size={15} /></span>
         <div className="min-w-0"><div className="truncate text-sm font-medium text-fg">{state.app.name}</div><div className="truncate font-mono text-xs text-muted">{state.app.domain}</div></div>
       </div>
-      <a href={`#/apps/${state.app.id}`} className="inline-flex items-center gap-1 text-sm text-fg-dim hover:text-fg">Open app <ExternalLink size={13} /></a>
+      <a href={`#/apps/${state.app.id}`} className="stretched-link inline-flex items-center gap-1 text-sm text-fg-dim group-hover:text-fg">Open app <ExternalLink size={13} /></a>
     </div> : <div className="border-b">
       <div className="px-4 pt-4"><h3 className="text-sm font-semibold text-fg">Create notification app</h3><p className="mt-0.5 text-xs text-muted">Deploy a private ntfy server for OCD alerts.</p></div>
       <div className="px-4">
@@ -81,7 +81,7 @@ export function NtfyServiceSettings() {
       </div>
     </>}
     {!!(form.app_id || state?.opId || state?.delivery?.pending || state?.delivery?.failed) && <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-subtle/40 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">{state?.opId && <a className="font-medium text-fg" href={`#/engine/op/${state.opId}`}>View operation →</a>}{!!state?.delivery?.pending && <span className="tabular-nums">{state.delivery.pending} queued</span>}{!!state?.delivery?.failed && <span className="tabular-nums text-danger">{state.delivery.failed} failed</span>}</div>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">{state?.opId && <a className="font-medium text-fg-dim transition-colors hover:text-fg" href={`#/engine/op/${state.opId}`}>View operation →</a>}{!!state?.delivery?.pending && <span className="tabular-nums">{state.delivery.pending} queued</span>}{!!state?.delivery?.failed && <span className="tabular-nums text-danger">{state.delivery.failed} failed</span>}</div>
       {!!form.app_id && <Btn variant="primary" loading={busy} onClick={() => apply()}>Save settings</Btn>}
     </div>}
   </Card>;
@@ -100,7 +100,7 @@ export function UserNtfySettings() {
   return <Card className="overflow-hidden">
     <CardHeader icon={<Bell size={15} />} title="Notifications" description="Alerts delivered to your ntfy client" actions={state ? <Badge tone={on ? "success" : "neutral"}>{on ? "On" : "Off"}</Badge> : undefined} />
     {error && <div className="px-4 pt-4"><InlineNotice tone="danger">{error}</InlineNotice></div>}
-    {!state ? <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted"><Spinner /> Loading notifications…</div> : <>
+    {!state ? <SkeletonRows rows={3} label="Loading notifications" /> : <>
       {!state.available && <div className="px-4 pt-4"><InlineNotice tone="warning">Shared notifications are unavailable. Enable them in Settings → Panel.</InlineNotice></div>}
       <div className="px-4">
         <ToggleRow label="Send me OCD alerts" checked={form.enabled} disabled={!state.available && !form.enabled} onChange={enabled => setForm({ ...form, enabled })} />

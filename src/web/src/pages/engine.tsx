@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { get } from "../api/client.ts";
 import { Activity, Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, RotateCcw, XCircle } from "lucide-react";
-import { Badge, Btn, Card, Spinner, StatusBadge } from "../components/ui.tsx";
+import { Badge, Btn, Card, Skeleton, SkeletonCard, SkeletonRows, StatusBadge } from "../components/ui.tsx";
 import { useHashParam } from "../hooks/use-hash-param.ts";
 import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
 import { humanizeStep, type OperationView } from "../hooks/useOperation.ts";
@@ -83,7 +83,14 @@ export function OperationsPanel() {
     };
   }, [filter, page]);
 
-  if (!snap) return <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading operations…</Card>;
+  if (!snap) return (
+    <div className="space-y-6">
+      <div className="flex gap-2"><Skeleton className="h-5 w-40" /><Skeleton className="h-5 w-24" /></div>
+      <SkeletonCard rows={1} label="Loading operations" />
+      <SkeletonCard rows={1} />
+      <SkeletonCard rows={4} />
+    </div>
+  );
 
   const hb = heartbeatLabel(snap.engine.heartbeat);
   const historyLoading = loadedHistoryKey !== historyKey;
@@ -151,10 +158,10 @@ export function OperationsPanel() {
         ) : undefined}
       >
         {historyLoading ? (
-          <div role="status" className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted">
-            <Spinner />
-            {historyError ? "Could not load history. Retrying…" : "Loading history…"}
-          </div>
+          <>
+            {historyError && <div className="border-b px-4 py-2.5 text-xs text-danger">Could not load history. Retrying…</div>}
+            <SkeletonRows rows={4} label="Loading history" />
+          </>
         ) : snap.recent.length === 0 ? (
           <EmptyState label="No operations in this view" />
         ) : (

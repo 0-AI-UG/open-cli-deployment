@@ -30,10 +30,18 @@ export function ReplicasTable({
   cpuSeries: (replicaId: number) => number[];
 }) {
   const other = context === "app" ? "Server" : "App";
+  // A row opens the replica's server (app detail) or app (server detail).
+  const href = (r: ReplicaRow) => context === "app"
+    ? r.server && `#/resources/servers/${r.server.id}`
+    : r.app && `#/apps/${r.app.id}`;
   return (
     <Table headers={["ID", "Container", other, "Port", "Status", "CPU", "Memory", "CPU (1h)", ""]}>
       {replicas.map((r) => (
-        <tr key={r.id}>
+        <tr
+          key={r.id}
+          className={href(r) ? "cursor-pointer" : undefined}
+          onClick={href(r) ? () => { window.location.hash = href(r)!; } : undefined}
+        >
           <td className="font-mono text-xs font-medium text-fg">#{r.id}</td>
           <td className="max-w-[220px] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
           <td className="whitespace-nowrap">
@@ -50,7 +58,7 @@ export function ReplicasTable({
           <td className="whitespace-nowrap text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
           <td className="whitespace-nowrap text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
           <td className="text-info"><Sparkline values={cpuSeries(r.id)} color="currentColor" /></td>
-          <td className="text-right">
+          <td className="text-right" onClick={(event) => event.stopPropagation()}>
             <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
               <Terminal size={12} /> Shell
             </Btn>

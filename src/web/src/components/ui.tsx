@@ -491,38 +491,88 @@ export function SectionHeader({
   );
 }
 
-// While a page loads it shows its grid with skeleton cells in place of content,
-// so the reveal that follows resolves the same blocks into the real page.
-function SkeletonBar({ className = "" }: { className?: string }) {
-  return <span aria-hidden="true" className={`skeleton block ${className}`} />;
+// --- Skeletons ---
+// Every loading state is a skeleton shaped like the content it stands in for,
+// built from these pieces so all bars share one color, pulse and row rhythm.
+// A spinner is only for actions in flight (buttons, a passkey prompt), never
+// for content that is loading.
+export function Skeleton({ className = "", inverse = false }: { className?: string; inverse?: boolean }) {
+  return <span aria-hidden="true" className={`skeleton block ${inverse ? "skeleton-inverse" : ""} ${className}`} />;
 }
 
+// Bar widths cycle through these so stacked rows read as varied content.
+const SKELETON_WIDTHS = ["w-40", "w-28", "w-48", "w-32", "w-36"];
+const SKELETON_LINE_WIDTHS = ["w-11/12", "w-3/4", "w-5/6", "w-2/3", "w-full", "w-1/2"];
+
+/** List rows inside a Card: an icon tile, a title over a subline, and a
+ *  trailing value, the shape of the panel's card lists. `dense` is the
+ *  one-line row of a file browser. */
+export function SkeletonRows({ rows = 3, dense = false, label = "Loading" }: { rows?: number; dense?: boolean; label?: string }) {
+  return (
+    <div role="status" className="divide-y">
+      <span className="sr-only">{label}</span>
+      {Array.from({ length: rows }, (_, i) => dense ? (
+        <div key={i} className="flex items-center gap-2.5 px-4 py-2.5">
+          <Skeleton className="h-3.5 w-3.5 shrink-0" />
+          <Skeleton className={`h-3 ${SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]} max-w-[60%]`} />
+          <Skeleton className="ml-auto h-3 w-10 shrink-0" />
+        </div>
+      ) : (
+        <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
+          <Skeleton className="h-8 w-8 shrink-0" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className={`h-3.5 ${SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]} max-w-full`} />
+            <Skeleton className={`h-3 ${SKELETON_WIDTHS[(i + 2) % SKELETON_WIDTHS.length]} max-w-full`} />
+          </div>
+          <Skeleton className="h-3.5 w-14 shrink-0" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Lines of text, for a file or log preview. `inverse` sits on a dark surface. */
+export function SkeletonLines({ lines = 8, inverse = false, label = "Loading" }: { lines?: number; inverse?: boolean; label?: string }) {
+  return (
+    <div role="status" className="space-y-2 py-1">
+      <span className="sr-only">{label}</span>
+      {Array.from({ length: lines }, (_, i) => <Skeleton key={i} inverse={inverse} className={`h-3 ${SKELETON_LINE_WIDTHS[i % SKELETON_LINE_WIDTHS.length]}`} />)}
+    </div>
+  );
+}
+
+/** A Card standing in for a whole section that is still loading: a header
+ *  bar the height of CardHeader, then rows. */
+export function SkeletonCard({ rows = 3, label, className = "" }: { rows?: number; label?: string; className?: string }) {
+  return (
+    <Card className={className}>
+      <div className="flex min-h-12 items-center gap-2.5 border-b px-4 py-2.5">
+        <Skeleton className="h-4 w-4 shrink-0" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <SkeletonRows rows={rows} label={label} />
+    </Card>
+  );
+}
+
+// While a page loads it shows its grid with skeleton cells in place of content,
+// so the reveal that follows resolves the same blocks into the real page.
 // `width` must match the loaded page's PageShell, or the skeleton grid is a
 // different size from the page that replaces it.
 export function PageSkeleton({ title, width }: { title?: ReactNode; width?: "md" | "lg" | "xl" }) {
   return (
     <PageShell reveal="skeleton" width={width}>
-      <PageHeader title={<SkeletonBar className="h-7 w-48" />} description={<SkeletonBar className="mt-1 h-4 w-72 max-w-full" />} />
-      <div role="status" className="space-y-6">
-        <span className="sr-only">{title ?? "Loading"}</span>
+      <PageHeader title={<Skeleton className="h-7 w-48" />} description={<Skeleton className="mt-1 h-4 w-72 max-w-full" />} />
+      <div className="space-y-6">
         <div className="frame grid grid-cols-2 bg-surface sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="space-y-2 px-5 py-4">
-              <SkeletonBar className="h-3 w-16" />
-              <SkeletonBar className="h-6 w-20" />
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-6 w-20" />
             </div>
           ))}
         </div>
-        <div className="frame bg-surface">
-          <div className="border-b border-line px-5 py-4"><SkeletonBar className="h-4 w-32" /></div>
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-4 border-b border-line px-5 py-3.5 last:border-b-0">
-              <SkeletonBar className="h-4 w-40" />
-              <SkeletonBar className="h-4 flex-1" />
-              <SkeletonBar className="h-4 w-16" />
-            </div>
-          ))}
-        </div>
+        <SkeletonCard rows={4} label={typeof title === "string" ? title : "Loading"} />
       </div>
     </PageShell>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { get, post, put, del } from "../../api/client.ts";
-import { Card, CardHeader, Btn, Badge, Table, Field, InfoTip, InlineNotice, EmptyState, StatusBadge, CopyButton, showToast, confirm } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, Badge, Table, Field, InfoTip, InlineNotice, EmptyState, SkeletonCard, StatusBadge, CopyButton, showToast, confirm } from "../../components/ui.tsx";
 import { Hammer, Key, Package, GitBranch, Webhook, Trash2 } from "lucide-react";
 import { GitHubIcon } from "../../components/brand-icons";
 
@@ -23,6 +23,7 @@ export function BuildSettings() {
   const [registry, setRegistry] = useState<Connection>({ connected: false });
   const [source, setSource] = useState<Connection>({ connected: false });
   const [shownWebhook, setShownWebhook] = useState<{ url: string; secret: string } | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const refresh = () => Promise.all([
     get("/api/runners").then((data) => setWorkers(data || [])),
@@ -31,7 +32,7 @@ export function BuildSettings() {
       setRegistry(c.registry ?? { connected: false });
       setSource(c.source ?? { connected: false });
     }),
-  ]).catch(() => {});
+  ]).catch(() => {}).finally(() => setLoaded(true));
 
   useEffect(() => { refresh(); }, []);
 
@@ -45,6 +46,8 @@ export function BuildSettings() {
       showToast(err.message, "error");
     }
   };
+
+  if (!loaded) return <><SkeletonCard rows={2} label="Loading build settings" /><SkeletonCard rows={2} /><SkeletonCard rows={2} /></>;
 
   return (
     <>

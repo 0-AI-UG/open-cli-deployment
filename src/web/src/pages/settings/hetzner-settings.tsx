@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { get, put } from "../../api/client.ts";
-import { Card, CardHeader, Btn, Badge, Field, DataRow, PageState, showToast } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, Badge, Field, DataRow, SkeletonCard, showToast } from "../../components/ui.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { Globe, Save } from "lucide-react";
 import { HetznerIcon } from "../../components/brand-icons";
@@ -54,7 +54,7 @@ export function HetznerSettings() {
     }
   };
 
-  if (loading) return <PageState title="Loading settings" />;
+  if (loading) return <><SkeletonCard rows={2} label="Loading settings" /><SkeletonCard rows={1} /></>;
 
   return (
     <>

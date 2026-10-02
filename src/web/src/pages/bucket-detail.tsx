@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Cloud, FileText, FileWarning, Folder, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
-import { Btn, Card, CardHeader, CopyButton, DataRow, EmptyState, PageHeader, PageShell, PageState, Spinner, showToast } from "../components/ui.tsx";
+import { Btn, Card, CardHeader, CopyButton, DataRow, EmptyState, PageHeader, PageShell, PageState, SkeletonLines, SkeletonRows, showToast } from "../components/ui.tsx";
 
 type BucketDetail = {
   name: string;
@@ -142,7 +142,7 @@ export function BucketDetailPage({ bucketName }: { bucketName: string }) {
           </nav>
 
           {listLoading && !page ? (
-            <div className="flex justify-center py-10"><Spinner /></div>
+            <SkeletonRows rows={6} dense label="Loading objects" />
           ) : listErr ? (
             <EmptyState message={listErr} icon={FileWarning} />
           ) : !entries.length ? (
@@ -186,7 +186,7 @@ export function BucketDetailPage({ bucketName }: { bucketName: string }) {
             actions={objectView ? <span className="whitespace-nowrap text-xs tabular-nums text-muted">{fmtSize(objectView.size)}{objectView.truncated ? ` · truncated @ ${fmtSize(objectView.maxBytes)}` : ""}</span> : undefined}
           />
           {objectLoading ? (
-            <div className="flex justify-center py-10"><Spinner /></div>
+            <div className="p-4"><SkeletonLines label="Loading object" /></div>
           ) : !objectKey ? (
             <EmptyState message="Click an object on the left to view its contents" icon={FileText} />
           ) : objectView?.binary ? (

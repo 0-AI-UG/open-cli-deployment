@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ArrowRight, CheckCircle2, History, RefreshCw } from "lucide-react";
 import { get, post } from "../api/client.ts";
-import { Badge, Btn, Card, CardHeader, InlineNotice, PageHeader, PageShell, Spinner } from "../components/ui.tsx";
+import { Badge, Btn, Card, CardHeader, InlineNotice, PageHeader, PageShell, SkeletonCard } from "../components/ui.tsx";
 import type { Incident } from "../../../shared/incidents.ts";
 import { incidentDate, incidentDuration, incidentGuide } from "../lib/incidents.ts";
 
@@ -68,7 +68,7 @@ export function IncidentPage({ id }: { id: string }) {
       <Btn disabled={loading || resolving} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>
     </>} />
     {error && <InlineNotice tone="danger">{error}{incident && " Displaying the last loaded state."}</InlineNotice>}
-    {!incident && loading && <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading incident…</Card>}
+    {!incident && loading && <SkeletonCard rows={3} label="Loading incident" />}
     {incident && guide && <>
       <Card className={`overflow-hidden ${resolved ? "" : "border-danger/30"}`}>
         <div className={`flex items-start gap-3 p-4 ${resolved ? "" : "bg-danger/5"}`}>
@@ -82,11 +82,9 @@ export function IncidentPage({ id }: { id: string }) {
         <dl className="border-t">
           {[ ["Opened", incidentDate(incident.opened_at ?? incident.first_seen)], ["Resolved", incident.resolved_at === null ? "Still active" : incidentDate(incident.resolved_at)], ["Duration", incidentDuration(incident)] ].map(([label, value]) => <div key={label} className="flex min-h-11 items-center justify-between gap-4 border-b px-4 py-2.5 last:border-b-0"><dt className="shrink-0 text-sm text-muted">{label}</dt><dd className="min-w-0 text-right text-sm tabular-nums text-fg">{value}</dd></div>)}
         </dl>
-        <div className="border-t bg-subtle/40 px-4 py-2">
-          <a className="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-fg max-md:min-h-11" href={`#${incident.path}`}>
-            {guide.linkLabel} <ArrowRight size={14} />
-          </a>
-        </div>
+        <a className="flex min-h-[3.25rem] items-center gap-1.5 border-t bg-subtle/40 px-4 py-2 text-sm font-medium text-fg transition-colors hover:bg-subtle max-md:min-h-[3.75rem]" href={`#${incident.path}`}>
+          {guide.linkLabel} <ArrowRight size={14} />
+        </a>
       </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Timeline" icon={<History size={15} />} />

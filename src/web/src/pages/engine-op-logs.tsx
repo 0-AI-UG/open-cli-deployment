@@ -1,7 +1,7 @@
 import { Download, ScrollText, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { get } from "../api/client.ts";
-import { Badge, Card, CardHeader, Btn, Spinner, PageShell, PageHeader, StatusBadge } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, SkeletonCard, PageShell, PageHeader, StatusBadge } from "../components/ui.tsx";
 import { LogViewer } from "../components/log-viewer.tsx";
 import { useOperation, TERMINAL_STATUSES } from "../hooks/useOperation.ts";
 
@@ -87,9 +87,7 @@ export function EngineOpLogsPage({ opId }: { opId: number }) {
       />
 
       {!loaded && !op ? (
-        <div className="flex min-h-[200px] items-center justify-center">
-          <Spinner />
-        </div>
+        <SkeletonCard rows={4} label="Loading logs" />
       ) : (
         <Card className="overflow-hidden">
           <CardHeader

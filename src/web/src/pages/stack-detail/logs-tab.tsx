@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { get } from "../../api/client.ts";
-import { Card, CardHeader, Btn, SegmentedControl, Spinner } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, SegmentedControl, SkeletonLines } from "../../components/ui.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { LogViewer } from "../../components/log-viewer.tsx";
 import { ScrollText, RefreshCw } from "lucide-react";
@@ -189,7 +189,7 @@ export function StackLogsTab({ stackId }: { stackId: number }) {
         )}
 
         {loading && members.length === 0 && source === "live"
-          ? <div className="flex justify-center py-10"><Spinner /></div>
+          ? <div className="rounded-lg border bg-[#0B0B0C] p-3"><SkeletonLines inverse label="Loading logs" /></div>
           : <LogViewer logs={source === "live" ? merged : deployLog} tagColors={source === "live" ? colorOf : undefined} />}
       </div>
     </Card>

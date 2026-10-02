@@ -1,7 +1,7 @@
 import { UserNtfySettings } from "../components/ntfy-settings.tsx";
 import { useState, useEffect } from "react";
 import { get, post } from "../api/client.ts";
-import { Badge, Card, CardHeader, Btn, Spinner, showToast, PageShell, PageHeader } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, Btn, SkeletonCard, showToast, PageShell, PageHeader } from "../components/ui.tsx";
 import { Shield, Fingerprint, Trash2, LogOut, Plus } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { logout } from "../stores/auth.ts";
@@ -54,7 +54,7 @@ function SecuritySection() {
     }
   };
 
-  if (loading) return <Card className="flex justify-center p-6"><Spinner /></Card>;
+  if (loading) return <SkeletonCard rows={2} label="Loading security" />;
 
   return (
     <Card className="overflow-hidden">

@@ -138,20 +138,20 @@ export function DashboardPage() {
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <a href={`#/apps/${app.id}`} className="truncate text-sm font-medium text-fg">{app.name}</a>
+              <a href={`#/apps/${app.id}`} className="stretched-link truncate text-sm font-medium text-fg">{app.name}</a>
               {address.private && <Badge>Private</Badge>}
               {(app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0) > 1 && <Badge>{(app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0)} replicas</Badge>}
             </div>
             <div className="mt-0.5 flex min-w-0 items-center gap-1 text-muted">
               {address.href ? (
-                <a href={address.href} target="_blank" rel="noopener" className="flex min-w-0 items-center gap-1 transition-colors hover:text-fg" title={address.label}>
+                <a href={address.href} target="_blank" rel="noopener" className="relative z-10 flex min-w-0 items-center gap-1 transition-colors hover:text-fg" title={address.label}>
                   <span className="truncate font-mono text-xs">{address.label}</span>
                   <ExternalLink size={11} className="shrink-0" />
                 </a>
               ) : (
                 <span className="truncate font-mono text-xs" title={address.label}>{address.label}</span>
               )}
-              <span className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              <span className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                 <CopyButton text={address.copy} size={11} />
               </span>
             </div>
@@ -177,21 +177,21 @@ export function DashboardPage() {
       ? "bg-brand/5 hover:bg-brand/10"
       : busy ? "bg-subtle/40 hover:bg-subtle/50" : "hover:bg-subtle/50";
     return (
-      <div key={`app-card-${app.id}`} className={`group flex min-h-[136px] min-w-0 flex-col gap-3 p-4 transition-colors ${tone}`}>
+      <div key={`app-card-${app.id}`} className={`group relative flex min-h-[136px] min-w-0 flex-col gap-3 p-4 transition-colors ${tone}`}>
         <div className="flex items-start gap-3">
           <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border bg-subtle text-muted ${app.status === "paused" ? "opacity-60" : ""}`}><Box size={16} /></span>
           <div className="min-w-0 flex-1">
-            <a href={`#/apps/${app.id}`} className="block truncate text-sm font-semibold text-fg">{app.name}</a>
+            <a href={`#/apps/${app.id}`} className="stretched-link block truncate text-sm font-semibold text-fg">{app.name}</a>
             <div className="mt-0.5 flex min-w-0 items-center gap-1 text-muted">
               {address.href ? (
-                <a href={address.href} target="_blank" rel="noopener" className="flex min-w-0 items-center gap-1 transition-colors hover:text-fg" title={address.label}>
+                <a href={address.href} target="_blank" rel="noopener" className="relative z-10 flex min-w-0 items-center gap-1 transition-colors hover:text-fg" title={address.label}>
                   <span className="truncate font-mono text-xs">{address.label}</span>
                   <ExternalLink size={11} className="shrink-0" />
                 </a>
               ) : (
                 <span className="truncate font-mono text-xs" title={address.label}>{address.label}</span>
               )}
-              <span className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              <span className="relative z-10 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                 <CopyButton text={address.copy} size={11} />
               </span>
             </div>
@@ -362,7 +362,7 @@ export function DashboardPage() {
       <Stat label="Apps" value={apps.length} hint={`${running} running${paused > 0 ? ` · ${paused} paused` : ""}`} className="px-6 py-5" />
       <Stat label="Servers" value={servers ? servers.length : "—"} hint={servers ? `${readyServers} ready` : "No access"} className="px-6 py-5" />
       <Stat label="Need attention" value={attention} tone={attention > 0 ? "danger" : undefined} hint={attention > 0 ? "Failing or degraded" : "None"} className="px-6 py-5" />
-      <Stat label="Open incidents" value={activeIncidents ?? "—"} tone={incidents > 0 ? "danger" : undefined} hint={activeIncidents == null ? "No access" : incidents > 0 ? <a href="#/incidents">Review now →</a> : "None"} className="px-6 py-5" />
+      <Stat label="Open incidents" value={activeIncidents ?? "—"} tone={incidents > 0 ? "danger" : undefined} hint={activeIncidents == null ? "No access" : incidents > 0 ? <a href="#/incidents" className="stretched-link">Review now →</a> : "None"} className={`px-6 py-5 ${incidents > 0 ? "relative transition-colors hover:bg-subtle/50" : ""}`} />
     </div>
   );
 

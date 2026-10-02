@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { get, post, put } from "../../api/client.ts";
-import { Card, CardHeader, Btn, Field, Badge, Table, EmptyState, InlineNotice, Spinner, humanize, showToast } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, Field, Badge, Table, EmptyState, InlineNotice, SkeletonCard, humanize, showToast } from "../../components/ui.tsx";
 
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { AlertTriangle, Archive, Download, KeyRound, RefreshCw, Settings2, ShieldCheck } from "lucide-react";
@@ -44,7 +44,7 @@ export function PanelProtection() {
   };
   useEffect(() => { void load().catch(e => setError(e.message)); const timer = setInterval(() => void load().catch(() => {}), 10000); return () => clearInterval(timer); }, []);
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(""); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Action failed"); } finally { setBusy(false); } };
-  if (!form || !state) return <Card className="p-4">{error ? <InlineNotice tone="danger">{error}</InlineNotice> : <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Loading panel protection…</div>}</Card>;
+  if (!form || !state) return error ? <Card className="p-4"><InlineNotice tone="danger">{error}</InlineNotice></Card> : <SkeletonCard rows={3} label="Loading panel protection" />;
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm({ ...form, [key]: value });
   const bucketsLoading = bucketList === null;
   const buckets = bucketList?.names ?? [];

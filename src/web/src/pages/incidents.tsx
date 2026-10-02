@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, BellRing, ChevronRight, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
-import { Badge, Btn, Card, EmptyState, InlineNotice, Spinner } from "../components/ui.tsx";
+import { Badge, Btn, Card, EmptyState, InlineNotice, SkeletonRows } from "../components/ui.tsx";
 import type { Incident as IncidentItem } from "../../../shared/incidents.ts";
 import { useHashParam } from "../hooks/use-hash-param.ts";
 import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
@@ -53,7 +53,7 @@ export function IncidentsPanel() {
     <Btn size="xs" disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={12} /> Refresh</Btn>
     </div>
     {error && <InlineNotice tone="danger">{error}</InlineNotice>}
-    {loading ? <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading incidents…</Card> : items.length ? <Card className="overflow-hidden">
+    {loading ? <Card><SkeletonRows rows={4} label="Loading incidents" /></Card> : items.length ? <Card className="overflow-hidden">
       <div className={`hidden gap-4 border-b bg-subtle/50 px-4 py-2 text-xs font-medium text-muted md:grid ${cols}`}><span>Incident</span><span>Status</span><span>Opened</span><span>Duration</span><span /></div>
       <div className="divide-y">
         {items.map(item => {

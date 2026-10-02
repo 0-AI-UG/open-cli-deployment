@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo } from "react";
-import { Spinner } from "./ui.tsx";
+import { SkeletonLines } from "./ui.tsx";
 
 // ANSI color code to CSS color mapping. The viewer is a near-black well in
 // both themes, so these are tuned for contrast on #0B0B0C (zinc/tailwind 400s).
@@ -170,7 +170,7 @@ export function LogViewer({ logs, className, tagColors }: LogViewerProps) {
       className={`max-h-[500px] overflow-auto rounded-lg border bg-[#0B0B0C] p-3 font-mono text-xs leading-relaxed text-zinc-200 [color-scheme:dark] ${className || ""}`}
       style={{ tabSize: 4 }}
     >
-      {rendered || <span className="inline-flex items-center gap-1.5 text-zinc-400"><Spinner className="!text-zinc-400" />Loading</span>}
+      {rendered || <SkeletonLines inverse label="Loading logs" />}
       <style>{`
         .log-line:hover { background: rgba(255,255,255,0.04); }
         .log-line { padding: 0 6px; border-radius: 3px; white-space: pre-wrap; word-break: break-all; border-left: 2px solid transparent; }

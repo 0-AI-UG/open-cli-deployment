@@ -480,8 +480,9 @@ body {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .pulse { animation: pulse 1.4s ease-in-out infinite; }
-/* Skeleton blocks in the loading shell (PageSkeleton). */
+/* Skeleton bars (Skeleton in ui.tsx), for every loading state. */
 .skeleton { background: rgb(var(--line)); animation: pulse 1.4s ease-in-out .6s infinite; }
+.skeleton-inverse { background: rgb(255 255 255 / 0.1); }
 
 /* Page entrance (hooks/use-grid-reveal.ts): while data-grow is set, the rails,
    the content panel and the hero sheet grow downward, and each divider runs
@@ -529,3 +530,7 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Stretched link: covers its nearest positioned ancestor so the whole row or
+   card is clickable. Other controls inside need `relative z-10` to stay on top. */
+.stretched-link::after { content: ""; position: absolute; inset: 0; }

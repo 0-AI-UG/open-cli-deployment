@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { get, post, put, del } from "../../api/client.ts";
-import { Card, CardHeader, Btn, Field, EmptyState, PageState, showToast, confirm } from "../../components/ui.tsx";
+import { Card, CardHeader, Btn, Field, EmptyState, SkeletonCard, showToast, confirm } from "../../components/ui.tsx";
 import { useAuth } from "../../stores/auth.ts";
 import { Users, Plus, Trash2, Lock, ShieldAlert, Fingerprint } from "lucide-react";
 
@@ -100,7 +100,7 @@ export function UsersSettings() {
     }
   };
 
-  if (loading) return <PageState title="Loading users" />;
+  if (loading) return <SkeletonCard rows={3} label="Loading users" />;
 
   return (
     <Card className="overflow-hidden">
