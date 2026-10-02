@@ -116,7 +116,7 @@ export async function ensureFirewallAttached(firewallId: string | number, server
       }),
     });
   } catch (error) {
-    if (/already applied|already assigned|conflict/i.test(error instanceof Error ? error.message : String(error))) return;
+    if (/firewall_already_applied|already (been )?applied|already assigned|conflict/i.test(error instanceof Error ? error.message : String(error))) return;
     throw error;
   }
 }
