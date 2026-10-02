@@ -7,7 +7,7 @@ export function StorageMounts({ mounts, title = "Storage" }: { mounts: StorageMo
     {!mounts.length && <p className="font-mono text-[10px] text-muted">No persistent directories recorded.</p>}
     {mounts.map((mount, index) => <div key={`${mount.id}:${index}`} className={`space-y-2 text-[10px] font-mono${index > 0 ? " border-t border-fg/10 pt-3" : ""}`}>
       <div className="flex items-start justify-between gap-4">
-        <span className="text-muted">{mount.kind === "local-directory" ? "Server-local directory" : "Provider block volume"}</span>
+        <span className="text-muted">{mount.kind === "local-directory" ? "Server-local directory" : "Hetzner block volume"}</span>
         <span className="flex flex-wrap items-center justify-end gap-2 min-w-0">
           <span className="text-fg font-bold break-all text-right">{mount.app_name}</span>
           <span className="text-[8px] font-bold border border-fg px-1 uppercase shrink-0">{mount.state}</span>

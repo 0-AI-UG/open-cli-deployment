@@ -18,7 +18,7 @@ compute._mocks.volumeAttach.mockImplementation(async (_id: string, serverId: str
 compute._mocks.volumeDetach.mockImplementation(async () => {
   observedProviderServerId = null;
 });
-mock.module("../../shared/providers/index.ts", () => ({ hetzner: compute }));
+mock.module("../../shared/hetzner/index.ts", () => ({ hetzner: compute }));
 
 const recreateAppContainer = mock(async () => ({ ok: true } as { ok: boolean; error?: string }));
 mock.module("../deploy/index.ts", () => ({ recreateAppContainer }));
@@ -30,7 +30,6 @@ const realSleep = Bun.sleep;
 (Bun as any).sleep = () => Promise.resolve();
 
 import * as db from "../../shared/db.ts";
-import { __replaceInfrastructureProvidersForTest } from "../../shared/providers/registry.ts";
 import reattachVolumeOp from "./reattach-volume.ts";
 import { __setBindImplForTest, __resetBindImplForTest } from "./_volumes.ts";
 
@@ -62,7 +61,7 @@ function stepByName(name: string) {
   return step;
 }
 
-function makeApp(location: string, withVolume: string | null, connected = false) {
+function makeApp(location: string, withVolume: string | null) {
   const server = db.insertServer({
     name: `srv-${randomSuffix()}`,
     provider_id: `h-${randomSuffix()}`,
@@ -71,8 +70,6 @@ function makeApp(location: string, withVolume: string | null, connected = false)
     type: "cx22",
     location,
     status: "ready",
-    provider: connected ? "external" : "hetzner",
-    ownership: connected ? "connected" : "managed",
   });
   const name = `ra-${randomSuffix()}`;
   const { app } = db.insertAppWithFirstReplica(
@@ -90,7 +87,6 @@ async function validateFor(from: ReturnType<typeof makeApp>, to: ReturnType<type
 }
 
 beforeEach(() => {
-  __replaceInfrastructureProvidersForTest([compute]);
   observedProviderServerId = null;
   compute._mocks.volumeAttach.mockClear();
   compute._mocks.volumeDetach.mockClear();
@@ -122,13 +118,6 @@ describe("reattach_volume: validate", () => {
     const to = makeApp("nbg1", null);
     const { ctx } = makeCtx({ volumeId: "v-1", fromAppId: from.app.id, toAppId: to.app.id });
     expect(stepByName("validate").run(ctx, {})).rejects.toThrow(/Cannot reattach/i);
-  });
-
-  test("rejects provider-volume reattachment onto a connected host", async () => {
-    const from = makeApp("fsn1", "v-1");
-    const to = makeApp("fsn1", null, true);
-    const { ctx } = makeCtx({ volumeId: "v-1", fromAppId: from.app.id, toAppId: to.app.id });
-    expect(stepByName("validate").run(ctx, {})).rejects.toThrow(/does not support both servers/);
   });
 
   test("rejects a source that does not own the requested volume", async () => {

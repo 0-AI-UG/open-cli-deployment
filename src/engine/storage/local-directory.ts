@@ -12,17 +12,8 @@ function parse(volumeId: string): { serverId: number; name: string; hostPath: st
   return { serverId: Number(match[1]), name: match[2], hostPath: `${ROOT}/${match[2]}` };
 }
 
-function connection(server: ServerRow) {
-  return {
-    address: server.management_address || server.ipv4,
-    hostKey: server.ssh_host_key || undefined,
-    options: { user: server.ssh_user || "root", port: server.ssh_port || 22 },
-  };
-}
-
 async function exec(server: ServerRow, command: string): Promise<string> {
-  const c = connection(server);
-  const result = await sshExec(c.address, command, c.hostKey, c.options);
+  const result = await sshExec(server.ipv4, command, server.ssh_host_key || undefined);
   if (result.exitCode !== 0) throw new Error(result.stderr || result.stdout || "Remote storage command failed");
   return result.stdout.trim();
 }
@@ -31,7 +22,6 @@ export const localDirectoryStorage: StorageDriver = {
   id: "local-directory",
   name: "Server-local directory",
   portable: false,
-  supports: () => true,
 
   async create({ server, name, sizeGb }) {
     if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(name)) throw new Error(`Invalid local volume name: ${name}`);
@@ -58,7 +48,7 @@ export const localDirectoryStorage: StorageDriver = {
 
   async list() {
     // Local volumes are inventoried from OCD's database because every server
-    // has an independent filesystem and there is no provider control plane.
+    // has an independent filesystem and no Hetzner API inventory.
     return [];
   },
 

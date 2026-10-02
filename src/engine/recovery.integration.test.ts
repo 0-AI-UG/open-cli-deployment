@@ -20,7 +20,7 @@ if (RUN) useTempDataDir();
 // ---- Provider + remote stubs (must register before importing ops) ----------
 
 const compute = makeFakeComputeProvider();
-if (RUN) mock.module("../shared/providers/index.ts", () => ({
+if (RUN) mock.module("../shared/hetzner/index.ts", () => ({
   hetzner: compute,
 }));
 

@@ -16,8 +16,6 @@ function publicWorker(worker: db.BuildWorkerRow) {
       ipv4: server.ipv4,
       status: server.status,
       pool: server.pool,
-      provider: server.provider,
-      ownership: server.ownership,
     } : null,
   };
 }

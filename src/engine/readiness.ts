@@ -1,6 +1,5 @@
 import * as db from "../shared/db.ts";
-import { getInfrastructureToken, secretStore } from "../shared/secret-store.ts";
-import { defaultInfrastructureProvider } from "../shared/infrastructure.ts";
+import { getHetznerToken, secretStore } from "../shared/secret-store.ts";
 import { probeBuildWorker } from "./build-worker.ts";
 import { imageMatchesRegistryScope } from "./registry-config.ts";
 import { repositoryHost } from "./source-config.ts";
@@ -8,7 +7,7 @@ import { repositoryHost } from "./source-config.ts";
 export type ReadinessStatus = "ready" | "warning" | "blocked";
 export type DeployReadiness = {
   ready: boolean;
-  provider: { status: ReadinessStatus; configured: boolean };
+  hetzner: { status: ReadinessStatus; configured: boolean };
   defaults: { status: ReadinessStatus; server_type: string; location: string };
   worker: {
     status: ReadinessStatus;
@@ -49,8 +48,7 @@ export async function inspectDeployReadiness(input: {
 } = {}): Promise<DeployReadiness> {
   const buildDelivery = !!input.repository;
   const settings = db.getSettings();
-  const provider = defaultInfrastructureProvider(settings);
-  const providerConfigured = !!provider && !!await getInfrastructureToken(provider.id).catch(() => "");
+  const hetznerConfigured = !!await getHetznerToken().catch(() => "");
   const workers = buildDelivery ? db.getBuildWorkers() : [];
   let online = 0;
   for (const worker of workers) {
@@ -83,14 +81,14 @@ export async function inspectDeployReadiness(input: {
 
   return {
     ready: !buildDelivery || (online > 0 && registryConfigured && coversTarget !== false),
-    provider: { status: providerConfigured ? "ready" : "warning", configured: providerConfigured },
+    hetzner: { status: hetznerConfigured ? "ready" : "warning", configured: hetznerConfigured },
     defaults: {
       status: defaultsConfigured ? "ready" : "warning",
       server_type: settings.default_server_type || "",
       location: settings.default_location || "",
     },
     worker: {
-      status: !buildDelivery ? "ready" : online ? "ready" : candidate || (providerConfigured && defaultsConfigured) ? "warning" : "blocked",
+      status: !buildDelivery ? "ready" : online ? "ready" : candidate || (hetznerConfigured && defaultsConfigured) ? "warning" : "blocked",
       online,
       total: workers.length,
       candidate_server: candidate ? { id: candidate.id, name: candidate.name } : null,

@@ -42,9 +42,6 @@ const loadAndValidate: Step<MigrateInput, ValidateOut> = {
       if (!driver.portable) {
         throw new Error(`Volume ${app.volume_id} uses non-portable storage driver ${driver.id}`);
       }
-      if (!driver.supports(source) || !driver.supports(target)) {
-        throw new Error(`Storage driver ${driver.id} does not support both migration servers`);
-      }
     }
     if (replica.server_id === ctx.input.targetServerId) {
       throw new Error("Replica is already on the target server");

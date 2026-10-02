@@ -1,14 +1,9 @@
 import { getSettings } from "../../shared/db.ts";
-import { getInfrastructureToken } from "../../shared/secret-store.ts";
+import { getHetznerToken } from "../../shared/secret-store.ts";
 import { withRetry, isRetryableHttpError } from "../../shared/retry.ts";
 
 function log(context: string, ...args: unknown[]) {
   console.log(`[${new Date().toISOString()}] [hetzner:${context}]`, ...args);
-}
-
-/** The Hetzner adapter credential. */
-export async function hetznerApiToken(): Promise<string> {
-  return getInfrastructureToken("hetzner");
 }
 
 function friendlyHetznerError(status: number, body: string, method: string, apiPath: string): string {
@@ -41,7 +36,7 @@ export async function hetznerApi(
   options: RequestInit = {}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<Record<string, any>> {
-  const token = await hetznerApiToken();
+  const token = await getHetznerToken();
   if (!token) throw new Error("Hetzner API token not configured");
   return withRetry(async () => {
     const method = options.method || "GET";

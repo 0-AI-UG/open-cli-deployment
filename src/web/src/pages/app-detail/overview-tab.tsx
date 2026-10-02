@@ -170,7 +170,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
                 <span className="font-mono text-[8px] font-bold border border-fg px-1 uppercase shrink-0" title="Injected by OCD. Configure this binding in the app manifest.">OCD managed</span>
               </div>
               <div className="space-y-2 text-[10px] font-mono">
-                <div className="flex justify-between gap-4"><span className="text-muted">Connection</span><span className="text-fg text-right break-all">{binding.connection_name}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-muted">Bucket</span><span className="text-fg font-bold text-right break-all">{binding.bucket}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-muted">Prefix</span><span className="text-fg text-right break-all">{binding.prefix || "Bucket root"}</span></div>
                 <div className="flex justify-between gap-4"><span className="text-muted">Permissions</span><span className="text-fg text-right">{binding.permissions.join(", ")}</span></div>

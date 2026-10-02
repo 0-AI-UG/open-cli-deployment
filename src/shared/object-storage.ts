@@ -2,14 +2,13 @@ import { StorageBindingsSchema, type StorageBindings } from "./storage-schema.ts
 export { StorageBindingsSchema, type StorageBindings };
 import { createHash, randomBytes } from "node:crypto";
 import * as db from "./db.ts";
-import { storageConnection } from "./provider-connections.ts";
 import { encryptValue, decryptValue } from "./secret-store.ts";
-import { getS3Credentials, listBuckets, validateBucketName } from "../engine/object-storage/s3.ts";
+import { getS3Credentials, hetznerS3Endpoint, hetznerS3Region, listBuckets, validateBucketName } from "../engine/object-storage/s3.ts";
 import { validObjectKey } from "../engine/object-storage/presign.ts";
 
 export type StorageMethod = "GET" | "HEAD" | "PUT" | "DELETE" | "LIST";
 export type StorageGrant = {
-  id: string; app: string; providerId: string; endpoint: string; region: string;
+  id: string; app: string; endpoint: string; region: string;
   bucket: string; prefix: string; methods: StorageMethod[]; tokenHash: string; createdAt: string;
   appId?: number; binding?: string; specKey?: string; encrypted_value?: string; iv?: string;
   reader?: string;
@@ -28,13 +27,16 @@ export function saveAppStorage(id: number, bindings: StorageBindings, initial = 
   })();
 }
 export const storageTokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
+/** Grants are tied to the Hetzner Object Storage region they were issued for. */
+function storageLocation(): { endpoint: string; region: string } {
+  const region = hetznerS3Region(db.getSettings());
+  return { endpoint: hetznerS3Endpoint(region), region };
+}
 const specKey = (binding: StorageBindings[string]) => storageTokenHash(JSON.stringify(binding));
-export function resolveStorageBindings(input: StorageBindings = {}, previous: StorageBindings = {}): StorageBindings {
+export function resolveStorageBindings(input: StorageBindings = {}): StorageBindings {
   const parsed = StorageBindingsSchema.parse(input);
   return Object.fromEntries(Object.entries(parsed).sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => {
-    const connection = storageConnection(value.connection ?? previous[name]?.connection);
-    if (!connection) throw new Error(`Select an object storage connection for ${name}`);
-    return [name, { connection: connection.id, bucket: value.bucket, prefix: value.prefix, permissions: [...new Set(value.permissions)].sort(), generation: value.generation ?? 0 }];
+    return [name, { bucket: value.bucket, prefix: value.prefix, permissions: [...new Set(value.permissions)].sort(), generation: value.generation ?? 0 }];
   }));
 }
 export function storageVariableNames(name: string): { token: string; url: string } {
@@ -58,34 +60,34 @@ export async function prepareStorageBindings(app: { id: number; name: string }, 
       (other.id === owner.target_of || other.target_of === owner.id || (owner.target_of && other.target_of === owner.target_of)) &&
       (other.target || "production") !== (owner.target || "production"));
     for (const relative of family) for (const destination of Object.values(getAppStorage(relative.id))) {
-      if (Object.values(bindings).some(b => b.connection === destination.connection && b.bucket === destination.bucket &&
+      if (Object.values(bindings).some(b => b.bucket === destination.bucket &&
         (b.prefix.startsWith(destination.prefix) || destination.prefix.startsWith(b.prefix)))) {
         throw new Error(`Storage scope overlaps ${relative.name}; select a separate bucket or prefix for each deploy target`);
       }
     }
   }
   for (const [name, spec] of Object.entries(bindings)) {
-    const connection = storageConnection(spec.connection);
-    if (!connection) throw new Error(`Storage connection missing for ${name}`);
+    const location = storageLocation();
     const current = getStorageGrants().find(g => g.appId === app.id && g.binding === name && g.specKey === specKey(spec));
-    if (current && current.endpoint === connection.config.endpoint && current.region === connection.config.region) continue;
-    const credentials = await getS3Credentials(connection.id);
-    if (!credentials || !(await listBuckets(credentials)).some(b => b.name === spec.bucket)) throw new Error(`Storage binding ${name}: bucket unavailable on ${connection.name}`);
+    if (current && current.endpoint === location.endpoint && current.region === location.region) continue;
+    const credentials = await getS3Credentials();
+    if (!credentials) throw new Error("Hetzner Object Storage is not configured; add its credentials in Settings");
+    if (!(await listBuckets(credentials)).some(b => b.name === spec.bucket)) throw new Error(`Storage binding ${name}: bucket ${spec.bucket} not found in Hetzner Object Storage (${credentials.region})`);
     const token = `ocds_${randomBytes(32).toString("hex")}`;
     const encrypted = await encryptValue(token);
     const grants = getStorageGrants();
     // Another preparation may have completed during provider I/O.
     if (grants.some(g => g.appId === app.id && g.binding === name && g.specKey === specKey(spec) && g.endpoint === credentials.endpoint && g.region === credentials.region)) continue;
     saveStorageGrants([...grants, { id: crypto.randomUUID(), app: app.name, appId: app.id, binding: name, specKey: specKey(spec),
-      providerId: connection.id, endpoint: credentials.endpoint, region: credentials.region, bucket: spec.bucket, prefix: spec.prefix,
+      endpoint: credentials.endpoint, region: credentials.region, bucket: spec.bucket, prefix: spec.prefix,
       methods: methodsFor(spec.permissions), tokenHash: storageTokenHash(token), createdAt: new Date().toISOString(), ...encrypted }]);
   }
 }
 export async function appStorageEnv(appId: number, bindings = getAppStorage(appId)): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
   for (const [name, spec] of Object.entries(bindings)) {
-    const connection = storageConnection(spec.connection);
-    const grant = getStorageGrants().find(g => g.appId === appId && g.binding === name && g.specKey === specKey(spec) && g.endpoint === connection?.config.endpoint && g.region === connection?.config.region);
+    const location = storageLocation();
+    const grant = getStorageGrants().find(g => g.appId === appId && g.binding === name && g.specKey === specKey(spec) && g.endpoint === location.endpoint && g.region === location.region);
     if (!grant?.encrypted_value || !grant.iv) throw new Error(`Storage binding ${name} needs a deployment`);
     const names = storageVariableNames(name);
     result[names.token] = await decryptValue(grant.encrypted_value, grant.iv);
@@ -95,7 +97,6 @@ export async function appStorageEnv(appId: number, bindings = getAppStorage(appI
 }
 export function appStorageView(appId: number) {
   return Object.entries(getAppStorage(appId)).map(([name, spec]) => ({ name, ...spec,
-    connection_name: storageConnection(spec.connection)?.name ?? spec.connection,
     variables: storageVariableNames(name), injected_by: "Object storage",
   }));
 }
@@ -109,12 +110,4 @@ export function retireAppStorageGrants(appId: number): void {
 export function deleteAppStorage(appId: number): void {
   saveStorageGrants(getStorageGrants().filter(g => g.appId !== appId));
   saveAppStorage(appId, {});
-}
-export function storageConnectionReferences(id: string): string[] {
-  const refs = getStorageGrants().filter(g => g.providerId === id).map(g => `grant for ${g.app}${g.binding ? `/${g.binding}` : ""}`);
-  for (const app of db.getApps()) if (Object.values(getAppStorage(app.id)).some(b => b.connection === id)) refs.push(`app ${app.name}`);
-  const settings = db.getSettings();
-  if (settings.panel_backup_enabled === "1" && settings.panel_backup_connection === id) refs.push("panel backup schedule");
-  if (db.default.query("SELECT 1 FROM panel_backups WHERE connection_id=? AND status IN ('pending','running') LIMIT 1").get(id)) refs.push("pending panel backup");
-  return [...new Set(refs)];
 }

@@ -103,6 +103,16 @@ describe("runMigrations", () => {
       .toEqual({ permission: "services.view" });
   });
 
+  test("migration 122 drops provider-era server and backup columns", () => {
+    const db = freshDb();
+    runMigrationsWithImageCutover(db);
+    const columns = (table: string) => (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
+    for (const column of ["provider", "ownership", "management_address", "ssh_user", "ssh_port"]) {
+      expect(columns("servers")).not.toContain(column);
+    }
+    expect(columns("panel_backups")).not.toContain("connection_id");
+  });
+
   test("migration 113 repairs committed manifest paths for webhook builds", () => {
     const db = freshDb();
     runMigrationsWithImageCutover(db);

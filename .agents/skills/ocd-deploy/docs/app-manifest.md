@@ -91,9 +91,8 @@ Domain omission retains its existing value; an empty string clears it.
 
 ## Object storage bindings
 
-`storage` maps binding names to `{ connection?, bucket, prefix, permissions, generation? }`.
-Select a connection by ID or unique name. Omitting it selects the default for a new
-binding; existing bindings keep their pinned connection. Permissions are `read`
+`storage` maps binding names to `{ bucket, prefix, permissions, generation? }` in
+OCD's Hetzner Object Storage account. Permissions are `read`
 (GET/HEAD), `write` (PUT), `delete`, and `list`. Prefix is explicit: use `""` for
 bucket root or a relative prefix ending in `/`. Bucket creation is separate.
 
@@ -119,18 +118,26 @@ Staging manifests must select their own explicit bucket/prefix scope.
 
 Enable shared ntfy and app access in Admin → Panel first. Binding deployment
 requires an administrator. OCD injects `OCD_NTFY_URL`, `OCD_NTFY_TOPIC`, and
-`OCD_NTFY_TOKEN`; named bindings use `OCD_<NAME>_NTFY_*`. In a TypeScript app,
-import `OcdNtfyClient` from `@0-ai-ug/ocd-ntfy-client` (local Bun package in
-`packages/ntfy-client`, not registry-published), then call
-`OcdNtfyClient.fromEnv(process.env).publish("Job completed")`. Pass the binding
-name to `fromEnv` for a named binding. `subscribe(signal)` streams ntfy JSON
-events and requires `subscribe` permission. For a Bun app with this repository
-checked out nearby, install with `bun add file:../open-cli-deployment/packages/ntfy-client`
-(adjust the path); independent build repositories must vendor the client source
-until it is published.
+`OCD_NTFY_TOKEN`; named bindings use `OCD_<NAME>_NTFY_*`. Permissions are
+`publish` and/or `subscribe`. Apps can use `OcdNtfyClient.fromEnv(process.env)`
+from the local `@0-ai-ug/ocd-ntfy-client` package (`packages/ntfy-client`) to
+publish, or `subscribe(signal)` to stream
+JSON events; pass a binding name to `fromEnv` for named bindings. In a Bun app
+with this repository checked out nearby, install it with
+`bun add file:../open-cli-deployment/packages/ntfy-client` (adjust the path);
+independent build repositories must vendor the source until it is published.
+The native ntfy
+API also works with the injected bearer token. These are managed topic-scoped
+grants; there is no separate manual notification grant/revoke CLI.
+Each app has isolated topics, including staging targets. Increment `generation`
+to rotate credentials; old credentials retire after rollout attestation.
+Removing `notifications` removes the bindings. Admin → Panel → Shared notifications configures
+personal platform alerts independently of application messages.
 
-These are managed grants: each app and binding has an isolated topic and token
-scoped to `publish` and/or `subscribe`. Increment `generation` to rotate; old
-credentials retire after rollout attestation. Removing the binding removes its
-access. There is no separate manual notification grant/revoke CLI. Account →
-Notifications configures personal platform alerts independently.
+`build.inputs` optionally declares the complete literal repository-relative files
+and directories consumed by a Dockerfile. OCD fingerprints their Git tree entries,
+the Dockerfile and Docker ignore rules, recipe, platform and repository. An
+unchanged fingerprint reuses a registry-verified immutable digest across commits;
+missing cached artifacts build normally. Include every COPY/bind source and update
+this list when adding inputs. Omit it to always invoke BuildKit; `cache: false`
+disables reuse too. Input tags are transport only, never runtime image identity.

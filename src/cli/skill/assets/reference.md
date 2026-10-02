@@ -16,7 +16,7 @@ require no GitHub Actions runner.
 - [Releases, promotion, and rollback](docs/releases-promotion-and-rollback.md)
 - [Environments and secrets](docs/environments-and-secrets.md)
 - [Networking and ingress](docs/networking-and-ingress.md)
-- [Infrastructure and server enrollment](docs/infrastructure-and-enrollment.md)
+- [Hetzner infrastructure](docs/infrastructure-and-enrollment.md)
 - [Scaling, storage, and placement](docs/scaling-storage-and-placement.md)
 - [Operations and recovery](docs/operations-and-recovery.md)
 - [Security and deletion](docs/security-and-deletion.md)

@@ -1,5 +1,5 @@
 import * as db from "../shared/db.ts";
-import { requireDefaultInfrastructureProvider } from "../shared/infrastructure.ts";
+import { hetzner } from "../shared/hetzner/index.ts";
 import { getOrCreateLocalKeyPair, waitForServer, captureHostKey, ensureHostLogPolicy, ensureOcdNetwork } from "../shared/remote/index.ts";
 import { sshExec } from "../shared/remote/index.ts";
 import { ensureNetwork as ensureSharedNetwork } from "./network.ts";
@@ -10,7 +10,7 @@ function log(context: string, ...args: any[]) {
 }
 
 /**
- * Provision a new server from scratch: create at the cloud provider, wait for
+ * Provision a new server from scratch: create it at Hetzner, wait for
  * boot + cloud-init, verify Docker, capture host key, mark ready in DB.
  *
  * Shared by initial deploy, scale-up server creation, and manual server creation.
@@ -36,7 +36,7 @@ export async function provisionServer(opts: {
     );
   }
 
-  const compute = requireDefaultInfrastructureProvider(db.getSettings());
+  const compute = hetzner;
 
   const existingRow = db.getServers().find((server) => server.name === serverName);
   if (existingRow) {
@@ -55,14 +55,14 @@ export async function provisionServer(opts: {
     }
   }
 
-  emit("server", `Creating new ${compute.name} server...`);
+  emit("server", `Creating new Hetzner server...`);
 
   log("ssh", "Ensuring SSH key, firewall, and private network exist...");
   const { publicKey } = await getOrCreateLocalKeyPair();
   const [sshKey, firewallId, networkId] = await Promise.all([
     compute.ensureSshKey("open-cli-deployment", publicKey),
     compute.ensureFirewall(),
-    ensureSharedNetwork(compute),
+    ensureSharedNetwork(),
   ]);
   log("ssh", `SSH key ready: ${sshKey.name}, firewall: ${firewallId}, network: ${networkId || "(none)"}`);
   emit("server", "SSH key + firewall + network ready");
@@ -79,11 +79,9 @@ export async function provisionServer(opts: {
       location,
       status: "creating",
       pool: opts.pool ?? "general",
-      provider: compute.id,
-      ownership: "managed",
     });
 
-  log("server", `Creating ${compute.name} server: name=${serverName} type=${serverType} location=${location}`);
+  log("server", `Creating Hetzner server: name=${serverName} type=${serverType} location=${location}`);
   let providerServer;
   if (dbServer.provider_id) {
     providerServer = await compute.getServer(dbServer.provider_id);
@@ -132,7 +130,6 @@ export async function provisionServer(opts: {
     ipv6: providerServer.ipv6 || "",
     routing_address: providerServer.routingAddress || "",
     status: "provisioning",
-    management_address: serverIp,
   });
   log("server", `Server saved to DB: id=${dbServer.id}`);
   emit("server", `Server created: ${serverName} (${serverIp})`);

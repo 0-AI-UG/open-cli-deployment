@@ -3,7 +3,7 @@ import { normalizeNtfyBindings, prepareNtfyBindings, saveAppNtfy, appNtfyEnv, de
 import { resolveStorageBindings, prepareStorageBindings, saveAppStorage, appStorageEnv, deleteAppStorage } from "../../shared/object-storage.ts";
 import type { DeployRequest, Server } from "../../shared/rpc.ts";
 import dbInstance, * as db from "../../shared/db.ts";
-import { isNotFoundError } from "../../shared/providers/errors.ts";
+import { isNotFoundError } from "../../shared/hetzner/errors.ts";
 import {
   normalizeAppScaling,
   resolveDeployRequestEnvironmentIds,
@@ -26,8 +26,7 @@ import { validateDeployRequest, assertSafeHostPath } from "../../shared/validate
 import { createMasker } from "../../shared/mask.ts";
 import { platformEnvVars } from "../../shared/env-crypto.ts";
 import { serializeRuntimeConfig, resolveRuntimeEnv, runtimeAppFromRequest, preflightRuntimeEnv } from "../../shared/runtime-env.ts";
-import { getInfrastructureToken } from "../../shared/secret-store.ts";
-import { defaultInfrastructureProvider } from "../../shared/infrastructure.ts";
+import { getHetznerToken } from "../../shared/secret-store.ts";
 import { provisionServer } from "../provision-server.ts";
 import { registerOp } from "./registry.ts";
 import { FatalProbeError, type OpContext, type OpKindDefinition, type Step } from "../types.ts";
@@ -37,7 +36,7 @@ import { metricHasRolloutSpace } from "../disk-capacity.ts";
 import { assertRolloutDiskSpace } from "../hetzner/build.ts";
 import { commitManifestDeliverySource } from "../manifest-delivery-source.ts";
 import {
-  defaultStorageDriverForServer,
+  defaultStorageDriver,
   requireStorageDriver,
   type StorageDriver,
 } from "../storage/index.ts";
@@ -100,11 +99,10 @@ export function appVolumeName(appName: string, opId: number): string {
 }
 
 async function deploymentMasker(input: DeployInput, userId: string, additionalSecrets: string[] = []) {
-  const provider = defaultInfrastructureProvider(db.getSettings());
-  const providerToken = provider ? await getInfrastructureToken(provider.id) : "";
+  const hetznerToken = await getHetznerToken();
   const envVarValues = Object.values(input.env ?? {}).filter((entry): entry is string => typeof entry === "string");
   const secretValues = [
-    providerToken,
+    hetznerToken,
     ...envVarValues,
     ...additionalSecrets,
   ];
@@ -237,8 +235,7 @@ const createVolume: Step<DeployInput, VolumeOut> = {
     if (!serverRow) throw new FatalProbeError(`Server ${server.serverId} not found`);
     const driver = req.volume_driver
       ? requireStorageDriver(req.volume_driver)
-      : defaultStorageDriverForServer(serverRow);
-    if (!driver.supports(serverRow)) throw new FatalProbeError(`Storage driver ${driver.id} does not support server ${serverRow.name}`);
+      : defaultStorageDriver();
     const attachedServerId = driver.portable ? serverRow.provider_id : String(serverRow.id);
     if (req.volume_id) {
       const info = await driver.inspect(req.volume_id, serverRow).catch(() => null);
@@ -303,8 +300,7 @@ const createVolume: Step<DeployInput, VolumeOut> = {
     if (!volumeServer) throw new Error(`Server ${server.serverId} not found`);
     const driver = req.volume_driver
       ? requireStorageDriver(req.volume_driver)
-      : defaultStorageDriverForServer(volumeServer);
-    if (!driver.supports(volumeServer)) throw new Error(`Storage driver ${driver.id} does not support server ${volumeServer.name}`);
+      : defaultStorageDriver();
     const attachedServerId = driver.portable ? volumeServer.provider_id : String(volumeServer.id);
 
     if (req.volume_id) {

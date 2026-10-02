@@ -43,9 +43,8 @@ export async function measureStorage(mounts: StorageMount[]): Promise<StorageMou
     usageCache.set(key, { until: Date.now() + 60_000, bytes: null });
     const quoted = "'" + mount.host_path.replaceAll("'", "'\\''") + "'";
     try {
-      const result = await sshExec(server.management_address || server.ipv4,
-        `timeout 5 du -sk -- ${quoted}`, server.ssh_host_key || undefined,
-        { user: server.ssh_user || "root", port: server.ssh_port || 22 });
+      const result = await sshExec(server.ipv4,
+        `timeout 5 du -sk -- ${quoted}`, server.ssh_host_key || undefined);
       const kb = Number(result.stdout.trim().split(/\s+/)[0]);
       if (result.exitCode === 0 && result.stdout.trim() && Number.isFinite(kb) && kb >= 0) {
         usageCache.set(key, { until: Date.now() + 60_000, bytes: kb * 1024 });

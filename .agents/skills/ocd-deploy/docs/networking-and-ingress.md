@@ -67,7 +67,7 @@ With `public: true`, an app receives either:
 - a `<app>.<panel-ip>.nip.io` fallback when no suffix is configured.
 
 OCD manages routing, but never creates, replaces, or deletes DNS records. For
-every public HTTP hostname, the panel displays a provider-neutral `A` record
+every public HTTP hostname, the panel displays an `A` record
 instruction with copyable type, name, and target plus its observed status:
 `pending`, `correct`, or `conflicting`. Private apps, raw-only endpoints, and
 `nip.io` fallbacks require no manual record. Public domains use Let's Encrypt

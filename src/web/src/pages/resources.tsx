@@ -23,7 +23,6 @@ const RESOURCE_SECTIONS: Array<{ key: ResourceSection; label: string }> = [
 ];
 
 export function ResourcesPage() {
-  const [storageConnection, setStorageConnection] = useState("");
   const [section, setSection] = useState<ResourceSection>("overview");
   const [data, setData] = useState<ResourcesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,7 +108,7 @@ export function ResourcesPage() {
 
   const load = async () => {
     try {
-      const resources = await get(`/api/resources${storageConnection ? `?storage=${encodeURIComponent(storageConnection)}` : ""}`);
+      const resources = await get("/api/resources");
       setData(resources);
     } catch (err: any) {
       showToast(err.message, "error");
@@ -118,18 +117,13 @@ export function ResourcesPage() {
     }
   };
 
-  useEffect(() => { load(); }, [storageConnection]);
+  useEffect(() => { load(); }, []);
 
   const handleDelete = async (type: string, id: string, name: string) => {
-    const connectedServer = type === "server" && data?.servers.find((server) => String(server.id) === id)?.ownership === "connected";
-    const verb = connectedServer ? "Disconnect" : "Delete";
-    const consequence = connectedServer
-      ? "The VPS itself will not be changed or deleted."
-      : "This cannot be undone.";
-    if (!await confirm(`${verb} Resource`, `${verb} ${type.replace("_", " ")} "${name}"? ${consequence}`, !connectedServer)) return;
+    if (!await confirm("Delete Resource", `Delete ${type.replace("_", " ")} "${name}"? This cannot be undone.`, true)) return;
     let typedVolumeId: string | undefined;
     if (type === "volume") {
-      typedVolumeId = window.prompt(`Type the provider volume ID "${id}" to permanently delete its data:`)?.trim();
+      typedVolumeId = window.prompt(`Type the Hetzner volume ID "${id}" to permanently delete its data:`)?.trim();
       if (typedVolumeId !== id) {
         showToast("Volume ID did not match; deletion cancelled", "error");
         return;
@@ -151,7 +145,7 @@ export function ResourcesPage() {
           { action: "delete_server", resourceType: "server", resourceId: id },
         );
       }
-      showToast(`${name} ${connectedServer ? "disconnected" : "deleted"}`, "success");
+      showToast(`${name} deleted`, "success");
       load();
     } catch (err: any) {
       showToast(err.message, "error");
@@ -175,13 +169,13 @@ export function ResourcesPage() {
   const handleCreateBucket = async () => {
     const name = bucketName.trim().toLowerCase();
     if (!name) return showToast("Enter a bucket name", "error");
-    if (!await confirm("Create S3 Bucket", `Create private bucket "${name}" in ${data?.s3_region || "the configured region"}? Provider billing may apply.`, true)) return;
+    if (!await confirm("Create S3 Bucket", `Create private bucket "${name}" in ${data?.s3_region || "the configured region"}? Hetzner billing starts when the first bucket becomes active.`, true)) return;
     setBucketBusy(`create:${name}`);
     try {
       await runConfirmedCliAction(
         "buckets.create",
-        { bucket: name, storage: data?.storage_connection },
-        { action: "create_bucket", resourceType: "bucket", resourceId: `${data?.storage_connection}:${name}` },
+        { bucket: name },
+        { action: "create_bucket", resourceType: "bucket", resourceId: name },
       );
       setBucketName("");
       await load();
@@ -201,8 +195,8 @@ export function ResourcesPage() {
     try {
       await runConfirmedCliAction(
         "buckets.delete",
-        { bucket: name, storage: data?.storage_connection },
-        { action: "delete_bucket", resourceType: "bucket", resourceId: `${data?.storage_connection}:${name}`, typedResource: `${data?.storage_connection}:${typed}` },
+        { bucket: name },
+        { action: "delete_bucket", resourceType: "bucket", resourceId: name, typedResource: typed },
       );
       await load();
       showToast("Bucket deleted", "success");
@@ -227,7 +221,7 @@ export function ResourcesPage() {
           try {
             await runCliAction("servers.refresh");
             await load();
-            showToast("Provider inventory refreshed", "success");
+            showToast("Hetzner inventory refreshed", "success");
           } catch (error) {
             showToast(error instanceof Error ? error.message : "Refresh failed", "error");
             setLoading(false);
@@ -240,7 +234,7 @@ export function ResourcesPage() {
       {section === "overview" && data?.totals && (
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider flex items-center gap-1">Estimated Monthly Cost <InfoTip text="Estimates use the configured infrastructure provider's list prices. Excludes traffic overage and snapshots." /></h3>
+            <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider flex items-center gap-1">Estimated Monthly Cost <InfoTip text="Estimates based on Hetzner's list prices. Excludes traffic overage and snapshots." /></h3>
             <span className="font-mono text-[9px] text-muted uppercase tracking-wider">
               gross · {data.totals.currency || "EUR"}
             </span>
@@ -330,7 +324,7 @@ export function ResourcesPage() {
           </div>
         </div>
         {!data?.servers?.length ? <EmptyState message="No servers" /> : (
-          <Table headers={["Name", "Provider", "Ownership", "Replicas", "Disk", "€/mo", ""]}>
+          <Table headers={["Name", "Replicas", "Disk", "€/mo", ""]}>
             {data.servers.map((s) => (
               <tr key={s.id} className="hover:bg-alt/50">
                 <td className="py-2 px-3">
@@ -341,8 +335,6 @@ export function ResourcesPage() {
                     {s.name}
                   </a>
                 </td>
-                <td className="py-2 px-3"><span className="font-mono text-[8px] font-bold uppercase border border-fg px-1 py-0.5">{s.provider || "manual"}</span></td>
-                <td className="py-2 px-3 text-fg-dim">{s.ownership}</td>
                 <td className="py-2 px-3 text-fg-dim">{s.replica_count}</td>
                 <td className="py-2 px-3 font-mono text-[10px]">
                   {s.disk_free_gb != null && s.disk_total_gb != null ? (
@@ -386,21 +378,10 @@ export function ResourcesPage() {
         <div className="flex items-center gap-2 mb-3">
           <Cloud size={14} className="text-fg" />
           <h3 className="font-mono text-[9px] text-fg font-bold uppercase tracking-wider">S3 Buckets ({data?.buckets?.length || 0})</h3>
-          {data?.s3_configured && <span className="font-mono text-[8px] text-muted uppercase">S3 · {data.s3_region}</span>}
+          {data?.s3_configured && <span className="font-mono text-[8px] text-muted uppercase">Hetzner · {data.s3_region}</span>}
         </div>
-        <label className="block mb-3 font-mono text-[10px]">Storage connection
-          <NeoSelect
-            value={storageConnection || data?.storage_connection || ""}
-            onChange={setStorageConnection}
-            options={(data?.storage_connections || []).map((connection) => ({
-              value: connection.id,
-              label: `${connection.name} · ${connection.region}`,
-            }))}
-            disabled={!!bucketBusy}
-          />
-        </label>
         {!data?.s3_configured ? (
-          <EmptyState message="S3-compatible storage is not configured. Add and assign a provider under Admin → Providers." />
+          <EmptyState message="Hetzner Object Storage is not configured. Add S3 credentials under Admin → Hetzner." />
         ) : data.s3_error ? (
           <div className="border-2 border-accent-red bg-accent-red/10 p-3 font-mono text-[10px] text-accent-red">{data.s3_error}</div>
         ) : (
@@ -424,7 +405,7 @@ export function ResourcesPage() {
                 {data.buckets.map((bucket) => (
                   <tr key={bucket.name} className="hover:bg-alt/50">
                     <td className="py-2 px-3">
-                      <a href={`#/resources/buckets/${encodeURIComponent(data.storage_connection)}/${encodeURIComponent(bucket.name)}`} className="text-fg font-bold hover:text-accent-blue hover:underline">
+                      <a href={`#/resources/buckets/${encodeURIComponent(bucket.name)}`} className="text-fg font-bold hover:text-accent-blue hover:underline">
                         {bucket.name}
                       </a>
                     </td>
@@ -459,8 +440,8 @@ export function ResourcesPage() {
             </PermissionGate>
           </div>
         </div>
-        <p className="text-xs text-muted mb-3">Provider block volumes only. Server-local directories share the server disk and appear under each server’s Storage and the app’s Storage.</p>
-        {!data?.volumes?.length ? <EmptyState message="No provider volumes" /> : (
+        <p className="text-xs text-muted mb-3">Hetzner block volumes only. Server-local directories share the server disk and appear under each server’s Storage and the app’s Storage.</p>
+        {!data?.volumes?.length ? <EmptyState message="No Hetzner volumes" /> : (
           <Table headers={["Name", "State", "Size", "Location", "Server", "App", "€/mo", ""]}>
             {data.volumes.map((v) => (
               <tr key={v.id} className="hover:bg-alt/50">

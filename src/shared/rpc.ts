@@ -5,12 +5,6 @@ export type Server = {
   ipv4: string;
   ipv6: string;
   routing_address: string;
-  /** Infrastructure adapter id for managed hosts; empty for connected hosts. */
-  provider: string;
-  ownership: "managed" | "connected";
-  management_address: string;
-  ssh_user: string;
-  ssh_port: number;
   type: string;
   location: string;
   status: string;
@@ -130,7 +124,7 @@ export type DeployRequest = {
   /** Portable manifest selector. Resolved server-side when environment_id is omitted. */
   environment?: string | null;
   environment_id?: number | null; // Link to an existing environment; null explicitly detaches
-  volume_id?: string; // Explicit provider volume to adopt; empty = OCD-managed or none
+  volume_id?: string; // Explicit Hetzner volume to adopt; empty = OCD-managed or none
   volume_size?: number; // Desired GB; 0 = explicitly no primary volume
   volume_path?: string; // Container mount path, defaults to /data
   volume_driver?: string; // Storage driver id; omitted selects the target server's default

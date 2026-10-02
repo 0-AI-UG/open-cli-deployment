@@ -23,6 +23,6 @@ prepared and released before publishing details.
 ## Deployment security
 
 OCD manages privileged infrastructure credentials and root SSH access. Review
-the security and deletion guide, use scoped provider and registry credentials,
+the security and deletion guide, use scoped Hetzner and registry credentials,
 keep the panel private where possible, and back up its data and recovery key.
 Never use `SKIP_2FA=1` outside local development.

@@ -4,7 +4,7 @@ import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 import { mock } from "bun:test";
-import type { Hetzner } from "./providers/hetzner.ts";
+import type { Hetzner } from "./hetzner/index.ts";
 import type { OperationRow } from "./db/operations.ts";
 
 /** Return the test run's temp data dir. Setting OCD_DATA_DIR here would be
@@ -24,19 +24,6 @@ export function randomSuffix(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function configureTestInfrastructureProvider(kind = "hetzner", id = `${kind}-test`): string {
-  const { saveProviderAssignments, saveProviderConnections } = require("./provider-connections.ts");
-  saveProviderConnections([{
-    id,
-    kind,
-    name: kind === "hetzner" ? "Hetzner" : kind,
-    config: {},
-    created_at: "2026-01-01T00:00:00.000Z",
-  }]);
-  saveProviderAssignments({ infrastructure: id, object_storage: "" });
-  return id;
-}
-
 /** Route suites that stub out `requirePermission` still need the stubbed
  *  userId to resolve to a real admin row, because handlers now also call
  *  `hasPermission` directly to filter what a caller may see (stack member logs,
@@ -51,7 +38,7 @@ export function seedTestAdmin(): string {
   return TEST_ADMIN_ID;
 }
 
-/** Factory for a fully-stubbed ComputeProvider. Every method is a bun mock
+/** Factory for a fully-stubbed Hetzner client. Every method is a bun mock
  *  so callers can assert calls and override return values per-test. */
 export function makeFakeComputeProvider(
   overrides: Partial<Hetzner> = {},
@@ -99,14 +86,6 @@ export function makeFakeComputeProvider(
     volumeRename: mock(async () => {}),
   };
   const provider: Hetzner = {
-    id: "hetzner",
-    name: "Hetzner",
-    capabilities: {
-      compute: true,
-      volumes: true,
-      privateNetwork: true,
-      firewall: true,
-    },
     validateToken: () => ({ valid: true, value: "x".repeat(40) }),
     verifyToken: async () => {},
     ensureSshKey: _mocks.ensureSshKey,

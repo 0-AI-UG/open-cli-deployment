@@ -1,20 +1,19 @@
 import { getStorageGrants, saveStorageGrants, type StorageGrant } from "../../shared/object-storage.ts";
 import { createHash, randomBytes } from "node:crypto";
-import { storageConnection } from "../../shared/provider-connections.ts";
 import { getS3Credentials, listBuckets, validateBucketName } from "../../engine/object-storage/s3.ts";
 import { presignObject, validObjectKey } from "../../engine/object-storage/presign.ts";
 import { requireAdmin } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 
 type Method = "GET" | "HEAD" | "PUT" | "DELETE" | "LIST";
-type Grant = { id: string; app: string; providerId: string; endpoint: string; region: string; bucket: string; prefix: string;
+type Grant = { id: string; app: string; endpoint: string; region: string; bucket: string; prefix: string;
   methods: Method[]; tokenHash: string; createdAt: string };
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const grants = getStorageGrants;
 const reply = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const readerName = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,62}$/.test(value);
 const readOnly = (grant: StorageGrant) => grant.methods.length > 0 && grant.methods.every(method => method === "GET" || method === "HEAD");
-const publicReader = (grant: StorageGrant) => ({ id: grant.id, name: grant.reader, connection: grant.providerId,
+const publicReader = (grant: StorageGrant) => ({ id: grant.id, name: grant.reader,
   bucket: grant.bucket, prefix: grant.prefix, createdAt: grant.createdAt });
 
 export function authorizeObject(grant: Pick<Grant, "prefix" | "methods">, body: Record<string, unknown>): {
@@ -43,17 +42,15 @@ export async function handleStorageAuthorize(request: Request): Promise<Response
   if (!grant) return reply({ error: "Unauthorized" }, 401);
   if (!grant.appId && !grant.reader) return reply({ error: "Unauthorized" }, 401);
   if (grant.reader && !readOnly(grant)) return reply({ error: "Unauthorized" }, 401);
-  const provider = storageConnection(grant.providerId);
-  if (provider?.id !== grant.providerId || provider.config.endpoint !== grant.endpoint || provider.config.region !== grant.region) return reply({ error: "Storage provider changed; rebind app" }, 409);
   try {
     if (Number(request.headers.get("content-length") ?? 0) > 4096) return reply({ error: "Request too large" }, 413);
     const raw = await request.text();
     if (raw.length > 4096) return reply({ error: "Request too large" }, 413);
     const body = JSON.parse(raw);
     if (!body || typeof body !== "object" || Array.isArray(body)) return reply({ error: "Invalid request" }, 400);
-    const credentials = await getS3Credentials(grant.providerId);
+    const credentials = await getS3Credentials();
     if (!credentials) return reply({ error: "Storage unavailable" }, 503);
-    if (storageConnection(grant.providerId)?.id !== grant.providerId || credentials.endpoint !== grant.endpoint || credentials.region !== grant.region) return reply({ error: "Storage provider changed; rebind app" }, 409);
+    if (credentials.endpoint !== grant.endpoint || credentials.region !== grant.region) return reply({ error: "Object storage region changed; redeploy the app" }, 409);
     if (body.method === "LIST") {
       if (!grant.methods.includes("LIST") || (body.prefix !== "" && !validObjectKey(body.prefix)) ||
           (body.continuationToken !== undefined && typeof body.continuationToken !== "string")) return reply({ error: "Invalid list request" }, 400);
@@ -91,13 +88,12 @@ export async function handleStorageReaders(request: Request): Promise<Response> 
     if (!bucket.valid || typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") || !validObjectKey(prefix)))) {
       return reply({ error: "Valid bucket and relative prefix ending in / required" }, 400);
     }
-    const provider = storageConnection(typeof body.connection === "string" ? body.connection : undefined);
-    const credentials = provider ? await getS3Credentials(provider.id) : null;
-    if (!provider || !credentials) return reply({ error: "Object storage is not configured" }, 409);
+    const credentials = await getS3Credentials();
+    if (!credentials) return reply({ error: "Object storage is not configured" }, 409);
     if (!(await listBuckets(credentials)).some(item => item.name === bucket.value)) return reply({ error: "Bucket not found" }, 404);
     const token = `ocds_${randomBytes(32).toString("hex")}`;
     const grant: StorageGrant = { id: crypto.randomUUID(), app: name, reader: name,
-      providerId: provider.id, endpoint: credentials.endpoint, region: credentials.region,
+      endpoint: credentials.endpoint, region: credentials.region,
       bucket: bucket.value, prefix, methods: ["GET", "HEAD"], tokenHash: tokenHash(token), createdAt: new Date().toISOString() };
     saveStorageGrants([...current, grant]);
     return reply({ ...publicReader(grant), token }, 201);

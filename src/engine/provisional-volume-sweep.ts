@@ -1,5 +1,5 @@
 import * as db from "../shared/db.ts";
-import { isNotFoundError } from "../shared/providers/errors.ts";
+import { isNotFoundError } from "../shared/hetzner/errors.ts";
 import { requireStorageDriver, type StorageVolume } from "./storage/index.ts";
 
 const AUTOMATION_ACTOR = "system:provisional-volume-sweeper";

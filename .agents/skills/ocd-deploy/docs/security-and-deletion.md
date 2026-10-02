@@ -32,7 +32,7 @@ Read permissions:
 App permissions:
 
 - `apps.deploy`, `apps.rollback`, `apps.restart`, `apps.pause`, `apps.destroy`,
-  `apps.logs`, `apps.promote`.
+  `apps.logs`, `apps.promote`, `apps.storage.bind`, `apps.notifications.bind`.
 
 Stack/environment:
 
@@ -45,7 +45,7 @@ Scaling/infrastructure:
 - `servers.create`, `servers.manage`, `servers.delete`;
 - `volumes.delete`, `volumes.files.read`;
 - `resources.view`, `resources.delete`;
-- `operations.cancel`, `panel.view`, `panel.manage`;
+- `operations.cancel`, `operations.manage`;
 - `terminal.container`, `terminal.host`.
 
 Scopes:
@@ -64,10 +64,14 @@ Scopes:
 
 - Desired app settings, ingress, public ports, image releases, and scaling policy all
   use `apps.deploy`, and deployment endpoints additionally require a CLI token.
+- Manifest storage and notification bindings additionally require
+  `apps.storage.bind` and `apps.notifications.bind`, respectively.
+- `operations.manage` permits cross-user cancellation, retry, and finalization
+  when combined with `operations.cancel`.
 - `volumes.files.read` grants application-data access.
 - `terminal.host` is effectively root-equivalent infrastructure access.
 - `resources.delete`, `servers.delete`, and `volumes.delete` can remove
-  provider resources/data.
+  Hetzner resources/data.
 
 Apply least privilege and prefer app/environment scopes.
 
@@ -93,29 +97,28 @@ Invariant:
 
 - stack deletion always requires actual web UI approval;
 - environment deletion always requires actual web UI approval;
-- user-initiated permanent provider-volume deletion always requires web UI
-  approval and typing the exact provider volume ID;
+- user-initiated permanent Hetzner volume deletion always requires web UI
+  approval and typing the exact Hetzner volume ID;
 - the only unattended exception is an expired failed-deploy provisional volume;
-  the reconciler rechecks that it has no live OCD owner and is provider-detached,
+  the reconciler rechecks that it has no live OCD owner and is detached in Hetzner,
   then records the deletion in the permanent audit;
 - legacy `--yes` automation tokens are rejected server-side for every action.
 
-Bare authenticated stack/environment/provider-volume DELETE requests are
+Bare authenticated stack/environment/volume DELETE requests are
 rejected. Permanent volume deletion additionally requires typing the exact
-provider volume ID before the server marks the confirmation approved.
+Hetzner volume ID before the server marks the confirmation approved.
 
 ## Deletion matrix
 
 | Action | Confirmation | Environment | Managed volume | Other effects |
 |---|---|---|---|---|
 | Delete app | Web UI always | retained | detached/retained | containers and ingress removed; DNS cleanup shown as manual |
-| Delete managed server | Web UI always | retained | workload volumes retained | cascades through assigned workloads, then deletes the provider VPS |
-| Disconnect external server | Web UI always | retained | blocked while local volumes are tracked | cleans up workloads only after storage blockers are resolved; never deletes the VPS |
+| Delete server | Web UI always | retained | workload volumes retained | cascades through assigned workloads, then deletes the Hetzner server |
 | Delete stack | Web UI always | production and staging retained | member volumes detached/retained | all recorded apps destroyed |
 | Delete environment | Web UI always | explicitly deleted only if unused | n/a | fails while apps link it |
 | Cancel operation | Web UI always once compensation is possible | compensation depends on provisional ownership | compensation may detach created volume | runs operation rollback |
-| Delete provider volume | Web UI + typed provider ID | n/a | provider data destroyed | irreversible; verify backup/ownership |
-| Create server capacity | Web UI always | n/a | n/a | creates one or more billable provider resources; automatic deploy capacity uses the same gate |
+| Delete Hetzner volume | Web UI + typed volume ID | n/a | volume data destroyed | irreversible; verify backup/ownership |
+| Create server capacity | Web UI always | n/a | n/a | creates one or more billable Hetzner resources; automatic deploy capacity uses the same gate |
 
 ## App deletion
 
@@ -168,22 +171,22 @@ afterward purge is still a browser-confirmed action.
 
 ## Volume/resource deletion
 
-Detachment/retention and provider deletion are different operations. App/stack
+Detachment/retention and Hetzner volume deletion are different operations. App/stack
 destroy performs the former. A later explicit volume delete can destroy data
 and requires the corresponding global permission, a single-use resource-bound
-browser approval, and the exact provider ID typed into the approval page.
+browser approval, and the exact Hetzner volume ID typed into the approval page.
 
-Before provider deletion, verify:
+Before Hetzner volume deletion, verify:
 
-- detached state and exact provider ID;
+- detached state and exact Hetzner volume ID;
 - former owner and intended target;
 - backup/checksum;
 - no recovery/rollback need;
 - billing implications.
 
-OCD creates a durable audit record before provider deletion and records the
-actor, provider identity, former owner, retention state/dates, outcome, and
-provider error. Inspect it with `ocd volumes audit`.
+OCD creates a durable audit record before Hetzner volume deletion and records the
+actor, Hetzner volume identity, former owner, retention state/dates, outcome, and
+Hetzner error. Inspect it with `ocd volumes audit`.
 
 ## Secret safety
 
@@ -207,5 +210,5 @@ and wait for the resource-bound approval. Raw API calls do not launch a browser.
 Existing user authorization establishes task scope, but the server still
 requires its browser confirmation before consuming destructive requests.
 Show exact reviewed targets before opening approvals; for volume deletion the
-user types the exact volume ID. Do not substitute direct provider deletion for
+user types the exact volume ID. Do not substitute direct Hetzner Console deletion for
 OCD's confirmation and audit workflow.

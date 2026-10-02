@@ -1,18 +1,13 @@
-import type { ServerRow } from "../../shared/db.ts";
-import { requireProviderVolumes } from "../../shared/infrastructure.ts";
-import { requireInfrastructureProvider } from "../../shared/providers/registry.ts";
+import { hetzner } from "../../shared/hetzner/index.ts";
 import { ensureVolumeBindMount, removeVolumeBindMount } from "../hetzner/host-mounts.ts";
 import type { StorageDriver } from "./contracts.ts";
 
-export function providerBlockStorage(providerId: string): StorageDriver {
-  const volumes = () => requireProviderVolumes(requireInfrastructureProvider(providerId));
-  return {
-    id: `${providerId}-block`,
-    name: `${providerId} block storage`,
+const volumes = () => hetzner.volumes;
+
+export const hetznerVolumeStorage: StorageDriver = {
+    id: "hetzner-block",
+    name: "Hetzner volume",
     portable: true,
-    supports(server) {
-      return server.ownership === "managed" && server.provider === providerId;
-    },
     async create({ server, name, sizeGb }) {
       const volume = await volumes().create({
         name,
@@ -67,10 +62,10 @@ export function providerBlockStorage(providerId: string): StorageDriver {
       await volumes().delete(volumeId);
     },
     async ensureMount({ server, volumeId, hostPath, blockName }) {
-      // Cloud block devices can take a moment to appear after attachment.
+      // Hetzner block devices can take a moment to appear after attachment.
       await Bun.sleep(3000);
       await ensureVolumeBindMount({
-        serverIp: server.management_address || server.ipv4,
+        serverIp: server.ipv4,
         hostKey: server.ssh_host_key || undefined,
         hetznerVolumeId: volumeId,
         hostMountPath: hostPath,
@@ -79,11 +74,10 @@ export function providerBlockStorage(providerId: string): StorageDriver {
     },
     async removeMount({ server, hostPath, blockName }) {
       await removeVolumeBindMount({
-        serverIp: server.management_address || server.ipv4,
+        serverIp: server.ipv4,
         hostKey: server.ssh_host_key || undefined,
         hostMountPath: hostPath,
         blockName,
       });
     },
   };
-}

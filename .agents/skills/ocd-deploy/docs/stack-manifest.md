@@ -15,6 +15,7 @@ Stack `blog`, app key `api` becomes `blog-api`; app key `database` becomes
 | `$llm` | Optional tooling metadata ignored by the engine. |
 | `name` | Required stack identifier and resource prefix. |
 | `description` | Optional human metadata. |
+| `release_order` | Optional integer ordering stacks within a repository release (default zero). |
 | `environment` | Existing shared production environment name. |
 | `staging_environment` | Optional existing shared staging environment name; `null` clears the link. It does not create an environment or app. |
 | `apps` | Required non-empty app map. |
@@ -95,3 +96,9 @@ an intentional artifact-only rollout after configuration is synchronized.
   }
 }
 ```
+
+`release_order` is an optional integer (default zero). Repository releases reconcile
+stacks in ascending order so private dependencies can be ready before consumers in
+another stack. Existing stack and app names remain stable. Unchanged immutable
+images with matching configuration, environment and healthy attested replicas are
+skipped even when the repository commit changes.

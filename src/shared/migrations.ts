@@ -2683,6 +2683,16 @@ export const migrations: Migration[] = [
         }
       }
     },
+  },  {
+    version: 122,
+    description: "Hetzner-only servers and object storage (data moved by a manual cutover)",
+    up: (db) => {
+      const drops = { servers: ["provider", "ownership", "management_address", "ssh_user", "ssh_port"], panel_backups: ["connection_id"] };
+      for (const [table, columns] of Object.entries(drops)) {
+        const existing = new Set((db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name));
+        for (const column of columns) if (existing.has(column)) db.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+      }
+    },
   },
 ];
 

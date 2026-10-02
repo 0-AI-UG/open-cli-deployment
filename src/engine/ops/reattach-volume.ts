@@ -68,9 +68,6 @@ const validate: Step<ReattachVolumeInput, ValidateOut> = {
     const toServer = toReps[0] ? db.getServer(toReps[0].server_id) : null;
     if (!fromServer || !toServer) throw new Error("Server not found");
     const driver = requireStorageDriver(fromApp.volume_driver);
-    if (!driver.supports(fromServer) || !driver.supports(toServer)) {
-      throw new Error(`Storage driver ${driver.id} does not support both servers`);
-    }
     if (!driver.portable && fromServer.id !== toServer.id) {
       throw new Error(`Storage driver ${driver.id} cannot move volumes between servers`);
     }

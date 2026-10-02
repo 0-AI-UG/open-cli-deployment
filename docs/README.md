@@ -14,7 +14,7 @@ implementation and migration notes.
 
 ## Infrastructure and operations
 
-- [Infrastructure and server enrollment](../src/cli/skill/assets/docs/infrastructure-and-enrollment.md)
+- [Hetzner infrastructure](../src/cli/skill/assets/docs/infrastructure-and-enrollment.md)
 - [Build workers and webhooks](../src/cli/skill/assets/docs/build-workers-and-webhooks.md)
 - [Networking and ingress](../src/cli/skill/assets/docs/networking-and-ingress.md)
 - [Scaling, storage, and placement](../src/cli/skill/assets/docs/scaling-storage-and-placement.md)
@@ -25,7 +25,7 @@ implementation and migration notes.
 
 ## Focused guides
 
-- [S3-compatible object storage](object-storage.md)
+- [Hetzner Object Storage](object-storage.md)
 - [Panel backups and alerts](panel-protection.md)
 - [Build worker operations](build-workers.md)
 - [Storage inventory](storage-inventory.md)

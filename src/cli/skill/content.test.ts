@@ -71,7 +71,7 @@ describe("embedded OCD skill", () => {
     for (const link of overviewLinks) {
       expect(files[link]).toBeDefined();
     }
-    expect(files["docs/infrastructure-and-enrollment.md"]).toContain("ocd servers connect");
+    expect(files["docs/infrastructure-and-enrollment.md"]).toContain("Hetzner Object Storage");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("consumes no Actions minutes");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("untrusted forks");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("X-Hub-Signature-256");

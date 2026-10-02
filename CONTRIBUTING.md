@@ -49,7 +49,7 @@ git switch -c fix/short-description upstream/main
 | `bun run test:integration` | Run opt-in integration tests |
 | `bun run test:component:build` | Test BuildKit and registry integration |
 
-The default test command explicitly disables live provider tests, even if your
+The default test command explicitly disables live Hetzner tests, even if your
 shell contains cloud credentials. Integration and component tests are opt-in
 because they require external services or Docker configuration.
 

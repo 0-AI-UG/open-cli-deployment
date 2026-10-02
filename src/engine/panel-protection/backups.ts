@@ -9,26 +9,26 @@ import { CURRENT_SCHEMA_VERSION } from "../../shared/db/current-schema.ts";
 import { getS3Credentials, putObject, getObject, deleteObject } from "../object-storage/s3.ts";
 import { encryptArchive, sha256, MAX_ARCHIVE_BYTES } from "./archive.ts";
 
-export type BackupRow = { id: string; created_at: number; status: string; connection_id: string; region: string; bucket: string; object_key: string; endpoint: string; checksum: string; size_bytes: number; error: string; finished_at: number | null };
+export type BackupRow = { id: string; created_at: number; status: string; region: string; bucket: string; object_key: string; endpoint: string; checksum: string; size_bytes: number; error: string; finished_at: number | null };
 export const listBackups = () => db.query("SELECT * FROM panel_backups ORDER BY created_at DESC, rowid DESC").all() as BackupRow[];
 export async function requestBackup(): Promise<string> {
   const settings = getSettings();
-  const credentials = settings.panel_backup_connection ? await getS3Credentials(settings.panel_backup_connection) : null;
+  const credentials = await getS3Credentials();
   if (!credentials || !settings.panel_backup_bucket || !await secretStore.get("panel_backup_recovery_key")) throw new Error("Configure object storage, backup bucket, and recovery key first");
   const id = crypto.randomUUID();
   const key = `${settings.panel_backup_prefix || "ocd-panel"}/${new Date().toISOString().replace(/[:.]/g, "-")}-${id}.ocdb`;
   return db.transaction(() => {
     const active = db.query("SELECT id FROM panel_backups WHERE status IN ('pending','running')").get() as { id: string } | null;
     if (active) return active.id;
-    db.query("INSERT INTO panel_backups (id, created_at, status, bucket, object_key, endpoint, connection_id, region) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)").run(id, Date.now(), settings.panel_backup_bucket, key, credentials.endpoint, settings.panel_backup_connection, credentials.region);
+    db.query("INSERT INTO panel_backups (id, created_at, status, bucket, object_key, endpoint, region) VALUES (?, ?, 'pending', ?, ?, ?, ?)").run(id, Date.now(), settings.panel_backup_bucket, key, credentials.endpoint, credentials.region);
     return id;
   })();
 }
 
 export async function performBackup(row: BackupRow): Promise<void> {
-  const credentials = await getS3Credentials(row.connection_id);
+  const credentials = await getS3Credentials();
   const key = await secretStore.get("panel_backup_recovery_key");
-  if (!credentials || credentials.endpoint !== row.endpoint || credentials.region !== row.region || !key) throw new Error("Backup storage connection changed or recovery key is unavailable");
+  if (!credentials || credentials.endpoint !== row.endpoint || credentials.region !== row.region || !key) throw new Error("Object storage region changed or recovery key is unavailable");
   const dir = mkdtempSync(path.join(tmpdir(), "ocd-panel-backup-"));
   try {
     const snapshotPath = path.join(dir, "deploy.db");
@@ -62,10 +62,10 @@ export async function performBackup(row: BackupRow): Promise<void> {
 
 export async function pruneBackups(): Promise<void> {
   const settings = getSettings();
-  const credentials = settings.panel_backup_connection ? await getS3Credentials(settings.panel_backup_connection) : null;
+  const credentials = await getS3Credentials();
   if (!credentials) return;
   const keep = Number(getSettings().panel_backup_retention || 7);
-  const rows = db.query("SELECT * FROM panel_backups WHERE status='complete' AND connection_id=? AND endpoint=? AND region=? AND bucket=? ORDER BY created_at DESC, rowid DESC").all(settings.panel_backup_connection, credentials.endpoint, credentials.region, settings.panel_backup_bucket) as BackupRow[];
+  const rows = db.query("SELECT * FROM panel_backups WHERE status='complete' AND endpoint=? AND region=? AND bucket=? ORDER BY created_at DESC, rowid DESC").all(credentials.endpoint, credentials.region, settings.panel_backup_bucket) as BackupRow[];
   // Delete only exact objects OCD recorded; never list/delete arbitrary bucket contents.
   for (const old of rows.slice(keep)) {
     try {

@@ -10,15 +10,8 @@ export type ServerRow = {
   location: string;
   status: string;
   ssh_host_key: string;
-  /** IPv4 used for fleet routing. Managed providers may assign it from a
-   *  private network; connected hosts supply an address the panel verifies. */
+  /** Private-network IPv4 Hetzner assigned; used for fleet routing. */
   routing_address: string;
-  /** Infrastructure adapter id for managed hosts; empty for connected hosts. */
-  provider: string;
-  ownership: "managed" | "connected";
-  management_address: string;
-  ssh_user: string;
-  ssh_port: number;
   /** Named capacity pool this server belongs to. 'general' is the default pool
    *  every server lands in; apps schedule onto servers whose pool matches their
    *  placement_pool. */
@@ -56,15 +49,10 @@ export function insertServer(server: {
   status: string;
   routing_address?: string;
   pool?: string;
-  provider?: string;
-  ownership?: "managed" | "connected";
-  management_address?: string;
-  ssh_user?: string;
-  ssh_port?: number;
 }): ServerRow {
   return db
     .query(
-      "INSERT INTO servers (name, provider_id, ipv4, ipv6, type, location, status, routing_address, pool, provider, ownership, management_address, ssh_user, ssh_port) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+      "INSERT INTO servers (name, provider_id, ipv4, ipv6, type, location, status, routing_address, pool) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
     )
     .get(
       server.name,
@@ -76,11 +64,6 @@ export function insertServer(server: {
       server.status,
       server.routing_address ?? "",
       server.pool ?? "general",
-      server.provider ?? "",
-      server.ownership ?? "connected",
-      server.management_address ?? server.ipv4,
-      server.ssh_user ?? "root",
-      server.ssh_port ?? 22,
     ) as ServerRow;
 }
 
@@ -94,9 +77,6 @@ export function updateServer(id: number, fields: {
   ipv6?: string;
   status?: string;
   routing_address?: string;
-  management_address?: string;
-  ssh_user?: string;
-  ssh_port?: number;
 }): void {
   const setClauses: string[] = [];
   const values: (string | number)[] = [];
@@ -105,9 +85,6 @@ export function updateServer(id: number, fields: {
   if (fields.ipv6 !== undefined) { setClauses.push("ipv6 = ?"); values.push(fields.ipv6); }
   if (fields.status !== undefined) { setClauses.push("status = ?"); values.push(fields.status); }
   if (fields.routing_address !== undefined) { setClauses.push("routing_address = ?"); values.push(fields.routing_address); }
-  if (fields.management_address !== undefined) { setClauses.push("management_address = ?"); values.push(fields.management_address); }
-  if (fields.ssh_user !== undefined) { setClauses.push("ssh_user = ?"); values.push(fields.ssh_user); }
-  if (fields.ssh_port !== undefined) { setClauses.push("ssh_port = ?"); values.push(fields.ssh_port); }
   if (setClauses.length === 0) return;
   values.push(id);
   db.query(`UPDATE servers SET ${setClauses.join(", ")} WHERE id = ?`).run(...values);

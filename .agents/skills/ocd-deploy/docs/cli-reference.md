@@ -90,8 +90,6 @@ ocd servers
 ocd servers show <name|id> [--storage]
 ocd servers diagnose <name|id>
 ocd servers create --type=X --location=X
-ocd servers enrollment-key
-ocd servers connect --name=X --address=X --routing-address=X --host-key='...'
 ocd servers delete <name|id>
 ocd servers refresh
 ocd servers pool <name|id> <pool>
@@ -101,7 +99,7 @@ ocd delete <app>
 ocd delete stack <name>
 ocd resources <ls|volume|volumes|delete>
 ocd volumes <list|show|audit|ls|cat|delete>
-ocd buckets <list|create|delete> [--storage=<connection>]
+ocd buckets <list|create|delete>
 ocd storage-readers <list|create|revoke>
 ocd ssh
 ocd cp <app|server>:/absolute/path <local-path> [--force] [--server] [--replica=ID]
@@ -115,11 +113,11 @@ Remote-to-local copies only are supported.
 DNS has no mutation command. The panel displays records for the operator to
 create at any DNS provider.
 
-Buckets use a separately configured S3 access key, secret key, signing region,
-and HTTPS endpoint. Bucket creation and deletion require browser approval;
+Buckets live in the Hetzner Object Storage account configured in Admin →
+Settings (region, access key, and secret key). Bucket creation and deletion require browser approval;
 deletion refuses non-empty buckets and never recursively removes objects.
 
-`ocd volumes` lists provider disks; local directories appear in
+`ocd volumes` lists Hetzner volumes; local directories appear in
 `ocd servers show <name|id> --storage` and `ocd app show <app> --storage`.
 Declare app-owned object access with manifest `storage` bindings. OCD creates
 and injects the scoped token during deployment. Use `ocd storage-readers create`

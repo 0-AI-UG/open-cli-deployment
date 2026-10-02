@@ -163,10 +163,8 @@ export function App() {
     const volumeId = decodeURIComponent(hash.split("/")[3] || "");
     content = volumeId ? <VolumeDetailPage volumeId={volumeId} /> : <ResourcesPage />;
   } else if (hash.startsWith("#/resources/buckets/")) {
-    const parts = hash.split("/");
-    const connectionId = decodeURIComponent(parts[3] || "");
-    const bucketName = decodeURIComponent(parts[4] || "");
-    content = connectionId && bucketName ? <BucketDetailPage connectionId={connectionId} bucketName={bucketName} /> : <ResourcesPage />;
+    const bucketName = decodeURIComponent(hash.split("/")[3] || "");
+    content = bucketName ? <BucketDetailPage bucketName={bucketName} /> : <ResourcesPage />;
   } else if (hash.startsWith("#/resources/servers/")) {
     const id = parseInt(hash.split("/")[3] || "", 10);
     content = id ? <ServerDetailPage serverId={id} /> : <ResourcesPage />;

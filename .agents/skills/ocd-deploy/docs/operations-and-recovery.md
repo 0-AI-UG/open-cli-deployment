@@ -94,19 +94,19 @@ first.
 ## Retry
 
 ```bash
-ocd ops retry <id>
+ocd ops retry <id> [--wait]
 ```
 
 Retry either resumes recoverable cleanup/work or enqueues a fresh attempt,
 depending on operation state. The command returns the operation ID and whether
-it resumed. Follow the returned ID.
+it resumed. Follow the returned ID, or use `--wait` to wait and fail on an unsuccessful result.
 
 For a failed stack deployment, retry is a checkpointed continuation: successful
 members are retained and convergence skips them, while failed/unreconciled
 members continue from the dependency level that still needs work.
 
 Prefer retry when steps are idempotent/resumable and the external cause has
-been fixed: capacity, registry access, provider/API availability, health
+been fixed: capacity, registry access, Hetzner API availability, health
 endpoint, or invalid dependent state.
 
 ## Finalize
@@ -196,23 +196,23 @@ After validation, recreate/redeploy linked apps so they use current credentials.
 ## Volume recovery
 
 Destroyed app volumes are detached and retained as user-owned data.
-Provider block volumes remain billable; local directories occupy their host
+Hetzner volumes remain billable; local directories occupy their host
 disk without a separate storage charge. Their seven-day review date is not
-automatic deletion. Use provider Volumes for block disks and Server → Storage
+automatic deletion. Use Infrastructure → Volumes for Hetzner volumes and Server → Storage
 for retained local directories.
 
 Volumes created only by a failed deployment are retained as provisional for
 the same seven-day recovery window. After that date, the reconciler permanently
-deletes them only when no app or panel references the volume and the
-provider reports it detached. Automated deletion is written to the permanent
+deletes them only when no app or panel references the volume and
+Hetzner reports it detached. Automated deletion is written to the permanent
 volume audit. Adopting the volume before expiry removes it from provisional
 retention.
 
 Recovery:
 
-1. identify the retained provider volume and former owner;
+1. identify the retained Hetzner volume and former owner;
 2. verify backups and filesystem/application consistency;
-3. set that app manifest's `volume` to `{ "id": "<provider-id>", "size": <gb>, "path": "/data" }` and run `ocd deploy`;
+3. set that app manifest's `volume` to `{ "id": "<hetzner-volume-id>", "size": <gb>, "path": "/data" }` and run `ocd deploy`;
 4. verify mount path and ownership;
 5. restart/redeploy and validate;
 6. delete only after recovery is no longer required.
@@ -225,7 +225,7 @@ copy, and compare schema/table counts and data before cutover. Update committed
 stack manifests so a later reconciliation does not recreate retired databases.
 Retire migration jobs after verification; removing apps retains their storage.
 Delete old disks only within the user's authorized cleanup scope after checking
-exact provider IDs, detached state, ownership, and verified recovery material.
+exact Hetzner volume IDs, detached state, ownership, and verified recovery material.
 
 The OCD repository’s `services/postgres-backup` application runs TypeScript on Bun with
 PostgreSQL dump tools every six hours. It encrypts archives, uploads through
@@ -240,12 +240,14 @@ automatic historical deletion; panel-backup retention is a different feature.
 ## Panel backups and recovery
 
 **Admin → Panel** protects OCD's SQLite state, SSH files, and credential/JWT
-secret, not application databases, app volumes, images, or DNS. Select a named
-S3 connection, existing bucket and prefix, create/download the recovery key,
+secret, not application databases, app volumes, images, or DNS. Select an
+existing Hetzner Object Storage bucket and prefix, create/download the recovery key,
 and keep the key and independent storage credentials outside the panel.
 Daily backups default to seven retained successes; uploads are downloaded and
 checksum-verified before completion and retention. **Back up now** is available
-without enabling the schedule. The current size limits are 256 MiB for SQLite
+without enabling the schedule. After setup, this page shows backup history; use **Edit settings** to change
+the destination, schedule, retention, or view the recovery key.
+The current size limits are 256 MiB for SQLite
 and 512 MiB for the archive.
 
 Restore with the matching OCD release, stopping the original panel and engine
@@ -254,7 +256,7 @@ first. Run the restore command from the matching OCD release checkout. Supply
 `OCD_S3_ACCESS_KEY`, and `OCD_S3_SECRET_KEY` through the environment:
 
 ```bash
-bun run restore:panel --from s3://bucket/prefix/backup.ocdb --data-dir /srv/ocd-restored
+bun run scripts/restore-panel.ts --from s3://bucket/path.ocdb --data-dir /new/panel-data
 # Or use a previously downloaded encrypted archive:
 bun run restore:panel --file /safe/backup.ocdb --data-dir /srv/ocd-restored
 ```
@@ -262,14 +264,16 @@ bun run restore:panel --file /safe/backup.ocdb --data-dir /srv/ocd-restored
 The destination must not exist. Restore authenticates and validates the archive
 and SQLite before installing it. It preserves recorded hosts and panel placement;
 it does not provision infrastructure or migrate the panel. Mount the restored
-directory as the matching panel's data directory. Omit `JWT_SECRET` to load the
+directory as the matching panel's `/app/data` and start that release with
+`OCD_DATA_DIR=/app/data`. See `docs/panel-protection.md` in the OCD checkout
+for the complete procedure. Omit `JWT_SECRET` to load the
 recovered secret, or supply the identical original value.
 
 Automation starts paused. In **Admin → Panel**, confirm the original panel is
 stopped, review saved operations, and use **Verify servers and resume**. OCD
 checks pinned host keys and Docker access; this does not prove application data
 consistency or that old pending operations should be replayed. Scheduled backups
-remain disabled until explicitly re-enabled; stale queued notifications is discarded.
+remain disabled until explicitly re-enabled; stale queued notifications are discarded.
 
 ## Panel notifications
 
@@ -287,3 +291,9 @@ Inspect server disk metrics and app image storage, then preview safe cleanup
 with `ocd gc --server=<id>`. Use `--execute` within authorized cleanup scope.
 This removes eligible unused images, not database volumes. Check operation
 errors before retrying deployments after freeing space.
+
+Build deliveries run this protected cleanup on their runtime hosts after a
+successful rollout. If a host is below the rollout disk minimum before a build,
+OCD cleans it once and checks free space again before continuing. Running and
+stopped container images, the current and rollback references, panel images,
+and in-flight pulls remain protected.

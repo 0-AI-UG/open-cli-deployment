@@ -3,7 +3,7 @@ useTempDataDir();
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import db from "./db.ts";
-import { secretStore, maskToken, getEncryptionKey, DEFAULT_JWT_SECRET, getJwtSecret } from "./secret-store.ts";
+import { secretStore, maskToken, getEncryptionKey, DEFAULT_JWT_SECRET, getJwtSecret, getHetznerToken } from "./secret-store.ts";
 
 function clearAll() {
   db.query("DELETE FROM encrypted_secrets").run();
@@ -145,11 +145,16 @@ describe("secret-store: encryption properties", () => {
   });
 });
 
-describe("secret-store: getInfrastructureToken", () => {
+describe("secret-store: getHetznerToken", () => {
   beforeEach(clearAll);
 
-  test("returns empty string when the active provider has no token stored", async () => {
-    expect(await secretStore.getInfrastructureToken("hetzner")).toBe("");
+  test("returns empty string when no token is stored", async () => {
+    expect(await getHetznerToken()).toBe("");
+  });
+
+  test("reads the stored Hetzner API token", async () => {
+    await secretStore.set("hetzner_api_token", "tok");
+    expect(await getHetznerToken()).toBe("tok");
   });
 });
 

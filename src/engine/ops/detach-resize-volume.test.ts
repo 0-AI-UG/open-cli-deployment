@@ -4,7 +4,7 @@ useTempDataDir();
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 
 const compute = makeFakeComputeProvider();
-mock.module("../../shared/providers/index.ts", () => ({ hetzner: compute }));
+mock.module("../../shared/hetzner/index.ts", () => ({ hetzner: compute }));
 
 const recreateAppContainer = mock(async () => ({ ok: true } as { ok: boolean; error?: string }));
 mock.module("../deploy/index.ts", () => ({ recreateAppContainer }));
@@ -29,7 +29,6 @@ resizeVolume.mockImplementation(async (_id: string, size: number) => {
 });
 
 import * as db from "../../shared/db.ts";
-import { __replaceInfrastructureProvidersForTest } from "../../shared/providers/registry.ts";
 import detachVolumeOp from "./detach-volume.ts";
 import resizeVolumeOp from "./resize-volume.ts";
 
@@ -53,7 +52,7 @@ function stepByName(op: { steps: any[] }, name: string) {
 function makeAppWithVolume(volumeId: string | null) {
   const server = db.insertServer({
     name: `srv-${randomSuffix()}`, provider_id: `h-${randomSuffix()}`, ipv4: "2.2.2.2", ipv6: "",
-    type: "cx22", location: "fsn1", status: "ready", provider: "hetzner", ownership: "managed",
+    type: "cx22", location: "fsn1", status: "ready",
   });
   const name = `dv-${randomSuffix()}`;
   const { app } = db.insertAppWithFirstReplica(
@@ -65,7 +64,6 @@ function makeAppWithVolume(volumeId: string | null) {
 }
 
 beforeEach(() => {
-  __replaceInfrastructureProvidersForTest([compute]);
   observedVolumeSize = 10;
   observedVolumeServerId = null;
   compute._mocks.volumeDetach.mockClear();

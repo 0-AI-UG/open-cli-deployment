@@ -1,5 +1,5 @@
 import { hetznerApi } from "./api.ts";
-import { isNotFoundError } from "../../shared/providers/errors.ts";
+import { isNotFoundError } from "../../shared/hetzner/errors.ts";
 import {
   PUBLIC_TCP_PORT_BASE,
   PUBLIC_TCP_PORT_COUNT,

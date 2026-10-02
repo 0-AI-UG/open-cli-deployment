@@ -5,7 +5,6 @@ import { webConfirm } from "../confirm.ts";
 
 type ResourceServer = {
   id: number; name: string; provider_id: string; type: string; location: string;
-  provider: string; ownership: "managed" | "connected";
   status: string; replica_count: number; disk_free_gb: number | null;
   disk_total_gb: number | null; monthly_eur: number | null;
 };
@@ -47,12 +46,10 @@ async function listResources(): Promise<void> {
   }
   console.log(`\n${BOLD}Servers${RESET}`);
   table(
-    ["ID", "NAME", "PROVIDER", "OWNERSHIP", "TYPE", "LOCATION", "REPLICAS", "DISK FREE", "COST"],
+    ["ID", "NAME", "TYPE", "LOCATION", "REPLICAS", "DISK FREE", "COST"],
     data.servers.map((server) => [
       String(server.id),
       server.name,
-      server.provider,
-      server.ownership,
       server.type,
       server.location,
       String(server.replica_count),
@@ -78,9 +75,9 @@ async function listResources(): Promise<void> {
       money(volume.monthly_eur, currency),
     ]),
   );
-  console.log(`\n${BOLD}S3 buckets${RESET}`);
+  console.log(`\n${BOLD}Buckets${RESET}`);
   if (!data.s3_configured) {
-    console.log(`${DIM}S3-compatible storage is not configured. Add and assign a provider in Admin → Providers.${RESET}`);
+    console.log(`${DIM}Hetzner Object Storage is not configured. Add its credentials in Admin → Hetzner.${RESET}`);
   } else if (data.s3_error) {
     console.log(`${RED}${data.s3_error}${RESET}`);
   } else {
@@ -96,28 +93,28 @@ async function listResources(): Promise<void> {
   }
 }
 
-async function createS3Bucket(name: string, storage: string): Promise<void> {
-  const confirmation = await webConfirm("create_bucket", "bucket", `${storage}:${name}`);
+async function createBucket(name: string): Promise<void> {
+  const confirmation = await webConfirm("create_bucket", "bucket", name);
   if (!confirmation) {
     console.log("Aborted.");
     return;
   }
   await post<{ ok: boolean }>(
-    `/api/resources/buckets?storage=${encodeURIComponent(storage)}`,
+    "/api/resources/buckets",
     { name },
     { "X-OCD-Confirmation": confirmation },
   );
   console.log(`${GREEN}bucket created.${RESET}`);
 }
 
-async function deleteS3Bucket(name: string, storage: string): Promise<void> {
-  const confirmation = await webConfirm("delete_bucket", "bucket", `${storage}:${name}`);
+async function deleteBucket(name: string): Promise<void> {
+  const confirmation = await webConfirm("delete_bucket", "bucket", name);
   if (!confirmation) {
     console.log("Aborted.");
     return;
   }
   await del<{ ok: boolean }>(
-    `/api/resources/buckets/${encodeURIComponent(name)}?storage=${encodeURIComponent(storage)}`,
+    `/api/resources/buckets/${encodeURIComponent(name)}`,
     undefined,
     { "X-OCD-Confirmation": confirmation },
   );
@@ -125,21 +122,19 @@ async function deleteS3Bucket(name: string, storage: string): Promise<void> {
 }
 
 function bucketUsage(): void {
-  console.error(`${BOLD}Usage:${RESET} ocd buckets <command> [--storage=<connection>]
+  console.error(`${BOLD}Usage:${RESET} ocd buckets <command>
 
 ${BOLD}Commands:${RESET}
-  list                      List buckets visible to the configured S3 key
+  list                      List Hetzner Object Storage buckets
   create <name>             Create a private bucket (browser approval)
   delete <name>             Delete an empty bucket (browser approval)`);
 }
 
 export async function buckets(args: string[] = []): Promise<void> {
-  const selector = args.find(arg => arg.startsWith("--storage="))?.slice(10);
-  args = args.filter(arg => !arg.startsWith("--storage="));
   const sub = args[0] || "list";
   if (["help", "--help", "-h"].includes(sub)) return bucketUsage();
-  const data = await get<{ configured: boolean; connection_id: string; buckets: ResourceBucket[] }>(`/api/resources/buckets${selector ? `?storage=${encodeURIComponent(selector)}` : ""}`);
-  if (!data.configured) throw new Error("S3-compatible storage is not configured");
+  const data = await get<{ configured: boolean; buckets: ResourceBucket[] }>("/api/resources/buckets");
+  if (!data.configured) throw new Error("Hetzner Object Storage is not configured; add its credentials in Admin → Hetzner");
   if (sub === "list" || sub === "ls") {
     table(
       ["NAME", "REGION", "CREATED", "ENDPOINT"],
@@ -149,11 +144,11 @@ export async function buckets(args: string[] = []): Promise<void> {
   }
   if (sub === "create") {
     if (!args[1]) throw new Error("Usage: ocd buckets create <name>");
-    return createS3Bucket(args[1], data.connection_id);
+    return createBucket(args[1]);
   }
   if (sub === "delete" || sub === "remove") {
     if (!args[1]) throw new Error("Usage: ocd buckets delete <name>");
-    return deleteS3Bucket(args[1], data.connection_id);
+    return deleteBucket(args[1]);
   }
   if (sub === "help" || sub === "--help" || sub === "-h") return bucketUsage();
   throw new Error(`Unknown bucket command: ${sub}`);
@@ -200,7 +195,6 @@ async function deleteResource(args: string[]): Promise<void> {
     throw new Error("Usage: ocd resources delete <server|volume> <id>");
   }
   let headers: Record<string, string> | undefined;
-  let resultVerb = "deleted";
   if (type === "volume") {
     const confirmation = await webConfirm("delete_volume", "volume", id);
     if (!confirmation) {
@@ -212,7 +206,6 @@ async function deleteResource(args: string[]): Promise<void> {
     const inventory = await get<ResourceInventory>("/api/resources");
     const server = inventory.servers.find((row) => row.provider_id === id || String(row.id) === id);
     if (!server) throw new Error(`Server not found: ${id}`);
-    if (server.ownership === "connected") resultVerb = "disconnected";
     const confirmation = await webConfirm("delete_server", "server", server.id);
     if (!confirmation) return;
     headers = { "X-OCD-Confirmation": confirmation };
@@ -227,7 +220,7 @@ async function deleteResource(args: string[]): Promise<void> {
     const op = await followOp(result.op_id);
     if (!op.ok) throw new Error(op.error || `${type} deletion failed`);
   }
-  console.log(`${GREEN}${type} ${resultVerb}.${RESET}`);
+  console.log(`${GREEN}${type} deleted.${RESET}`);
 }
 
 function formatBytes(value: number): string {
@@ -257,7 +250,7 @@ async function listVolumeFiles(volumeId: string, path: string): Promise<void> {
 }
 
 async function readVolumeFile(volumeId: string, path: string): Promise<void> {
-  if (!path) throw new Error("Usage: ocd volumes cat <provider-volume-id> <path>");
+  if (!path) throw new Error("Usage: ocd volumes cat <volume-id> <path>");
   const result = await get<{
     size: number; truncated: boolean; binary: boolean; content: string | null; max_bytes: number;
   }>(
@@ -275,8 +268,8 @@ function volumeUsage(): void {
   console.error(`${BOLD}Usage:${RESET} ocd volumes <command>
 
 ${BOLD}Commands:${RESET}
-  list                                  List provider volumes and retention state
-  show <provider-volume-id>             Show volume ownership, mount and cost
+  list                                  List volumes and retention state
+  show <volume-id>                      Show volume ownership, mount and cost
   audit                                 Show the durable permanent-deletion audit
   ls <id> [path]                        Browse an attached volume
   cat <id> <path>                       Read a text file (max 256 KiB)
@@ -311,7 +304,7 @@ export async function volumes(args: string[] = []): Promise<void> {
     return listVolumeFiles(args[1], args[2] || "");
   }
   if (sub === "cat" || sub === "read") {
-    if (!args[1] || !args[2]) throw new Error("Usage: ocd volumes cat <provider-volume-id> <path>");
+    if (!args[1] || !args[2]) throw new Error("Usage: ocd volumes cat <volume-id> <path>");
     return readVolumeFile(args[1], args[2]);
   }
   if (sub === "delete" || sub === "remove") {
@@ -329,7 +322,7 @@ ${BOLD}Commands:${RESET}
   ls                              Inventory and estimated monthly cost
   volume <provider-id>            Volume detail
   volumes <command>               Volume inspection, files, and deletion
-  buckets <command>               S3-compatible bucket management
+  buckets <command>               Hetzner Object Storage bucket management
   delete <server|volume> <id>     Delete a provider resource or disconnect an external server`);
 }
 

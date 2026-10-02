@@ -1,6 +1,6 @@
 import * as db from "../../shared/db.ts";
 import { recreateAppContainer } from "../deploy/index.ts";
-import { defaultStorageDriverForServer, requireStorageDriver } from "../storage/index.ts";
+import { defaultStorageDriver, requireStorageDriver } from "../storage/index.ts";
 import { registerOp } from "./registry.ts";
 import {
   loadSingleReplicaTarget,
@@ -34,9 +34,8 @@ const validate: Step<AttachExistingVolumeInput, ValidateOut> = {
     const server = db.getServer(target.serverId)!;
     const retired = db.getRetiredVolumes().find((v) => v.provider_volume_id === ctx.input.volumeId);
     const driver = requireStorageDriver(
-      ctx.input.driverId || retired?.driver_id || defaultStorageDriverForServer(server).id,
+      ctx.input.driverId || retired?.driver_id || defaultStorageDriver().id,
     );
-    if (!driver.supports(server)) throw new Error(`Storage driver ${driver.id} does not support server ${server.name}`);
     const volInfo = await driver.inspect(ctx.input.volumeId, server);
     if (driver.portable && volInfo.location && volInfo.location !== target.serverLocation) {
       throw new Error(

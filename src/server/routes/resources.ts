@@ -1,34 +1,32 @@
 import { localStorageInventory, measureStorage } from "../lib/storage-inventory.ts";
 import { localVolumeIdentity } from "../../shared/storage-display.ts";
-import { storageConnection, getProviderConnections } from "../../shared/provider-connections.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { requirePermission } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
-import { defaultInfrastructureProvider, infrastructureProviderForServer, isManagedServer } from "../../shared/infrastructure.ts";
+import { hetzner } from "../../shared/hetzner/index.ts";
 import { requireStorageDriver, type StorageVolume } from "../../engine/storage/index.ts";
 import { enqueue } from "../ipc/enqueue.ts";
 import { sshExec } from "../../shared/remote/index.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
 import { serverProvisioningResourceId } from "../../shared/server-provisioning.ts";
-import { getInfrastructureToken } from "../../shared/secret-store.ts";
+import { getHetznerToken } from "../../shared/secret-store.ts";
 import { getS3Credentials, listBuckets, type S3Bucket } from "../../engine/object-storage/s3.ts";
 export async function handleGetResources(request: Request): Promise<Response> {
   try {
     await requirePermission(request, "resources.view");
 
-    const compute = defaultInfrastructureProvider(db.getSettings());
-    const providerConfigured = !!compute && !!await getInfrastructureToken(compute.id).catch(() => "");
+    const hetznerConfigured = !!await getHetznerToken().catch(() => "");
     const dbServers = db.getServers();
-    const hasManagedProvider = providerConfigured && dbServers.some(isManagedServer);
+    const hasServers = hetznerConfigured && dbServers.length > 0;
 
     // Fetch pricing once and build lookup maps.
     // If pricing fetch fails (no token, network), monthly_eur falls back to null.
     let serverPriceMap = new Map<string, number>();
     let volumePerGbMonth: number | null = null;
     let currency = "EUR";
-    if (hasManagedProvider) try {
-      const pricing = await compute?.getPricing?.();
+    if (hasServers) try {
+      const pricing = await hetzner.getPricing();
       if (pricing) {
         currency = pricing.currency;
         for (const [key, value] of Object.entries(pricing.servers)) {
@@ -46,9 +44,9 @@ export async function handleGetResources(request: Request): Promise<Response> {
     // vCPU count per server type, so the UI can render server load as
     // "cores used / total" instead of a bare percentage.
     const coresByType = new Map<string, number>();
-    if (hasManagedProvider) try {
-      const types = await compute?.listServerTypes?.();
-      for (const t of types ?? []) coresByType.set(t.name, t.cores);
+    if (hasServers) try {
+      const types = await hetzner.listServerTypes();
+      for (const t of types) coresByType.set(t.name, t.cores);
     } catch (e) {
       console.error("resources: failed to fetch server types:", e);
     }
@@ -71,12 +69,7 @@ export async function handleGetResources(request: Request): Promise<Response> {
         id: s.id,
         name: s.name,
         provider_id: s.provider_id,
-        provider: s.provider,
-        ownership: s.ownership,
-        management_address: s.management_address,
         routing_address: s.routing_address,
-        ssh_user: s.ssh_user,
-        ssh_port: s.ssh_port,
         ipv4: s.ipv4,
         type: s.type,
         location: s.location,
@@ -90,7 +83,7 @@ export async function handleGetResources(request: Request): Promise<Response> {
           ? Math.round((usage.disk_total_gb - usage.disk_used_gb) * 10) / 10
           : null,
         replica_count: db.getReplicasByServer(s.id).length,
-        monthly_eur: isManagedServer(s) ? priceForServer(s.type, s.location) : null,
+        monthly_eur: priceForServer(s.type, s.location),
       };
     });
 
@@ -146,8 +139,8 @@ export async function handleGetResources(request: Request): Promise<Response> {
       });
     }
     let volumes: VolumeResource[] = [...trackedVolumes.values()];
-    if (providerConfigured) try {
-      const vols = await compute?.volumes?.list() ?? [];
+    if (hetznerConfigured) try {
+      const vols = await hetzner.volumes.list();
       const allApps = db.getApps();
       const retiredById = new Map(
         db.getRetiredVolumes().map((row) => [row.provider_volume_id, row]),
@@ -173,7 +166,7 @@ export async function handleGetResources(request: Request): Promise<Response> {
           monthly_eur: volumePerGbMonth != null ? volumePerGbMonth * v.sizeGb : null,
         };
       });
-      // A successful provider listing is authoritative: stale retirement rows are not billable disks.
+      // A successful Hetzner listing is authoritative: stale retirement rows are not billable disks.
       volumes = providerVolumes;
     } catch (e) {
       console.error("resources: failed to fetch volumes:", e);
@@ -182,8 +175,7 @@ export async function handleGetResources(request: Request): Promise<Response> {
     interface ResourceWithCost { monthly_eur: number | null }
     const sum = (arr: ResourceWithCost[]) =>
       arr.reduce((acc, x) => acc + (typeof x.monthly_eur === "number" ? x.monthly_eur : 0), 0);
-    const storage = storageConnection(new URL(request.url).searchParams.get("storage") || undefined);
-    const s3Credentials = storage ? await getS3Credentials(storage.id) : null;
+    const s3Credentials = await getS3Credentials();
     let buckets: S3Bucket[] = [];
     let s3Error = "";
     if (s3Credentials) {
@@ -207,8 +199,6 @@ export async function handleGetResources(request: Request): Promise<Response> {
       volumes,
       local_storage: localStorageInventory(),
       buckets,
-      storage_connection: storage?.id ?? "",
-      storage_connections: getProviderConnections().filter(p => p.kind === "s3-compatible").map(p => ({ id: p.id, name: p.name, ...p.config })),
       s3_configured: !!s3Credentials,
       s3_region: s3Credentials?.region ?? "",
       s3_error: s3Error,
@@ -394,8 +384,7 @@ export async function handleGetVolumeDetail(request: Request, volumeId: string):
     ) || null : null;
     const hostPath = app?.volume_mount?.split(":")[0] || (volume.attachedServerId ? volume.hostPath : null);
     let pricing;
-    const compute = defaultInfrastructureProvider(db.getSettings());
-    try { pricing = await compute?.getPricing?.(); } catch { /* ignore */ }
+    try { pricing = await hetzner.getPricing(); } catch { /* ignore */ }
     const monthly_eur = pricing?.volumePerGbMonth != null ? pricing.volumePerGbMonth * volume.sizeGb : null;
     return Response.json({
       id: volume.id,
@@ -656,12 +645,10 @@ export async function handleGetServerDetail(request: Request, serverId: number):
       return Response.json({ error: "Server not found" }, { status: 404, headers: corsHeaders });
     }
 
-    const compute = isManagedServer(server) ? infrastructureProviderForServer(server) : null;
     let monthly_eur: number | null = null;
     let currency = "EUR";
-    const providerConfigured = !!compute && !!await getInfrastructureToken(compute.id).catch(() => "");
-    if (providerConfigured && isManagedServer(server)) try {
-      const pricing = await compute?.getPricing?.();
+    if (await getHetznerToken().catch(() => "")) try {
+      const pricing = await hetzner.getPricing();
       if (pricing) {
         currency = pricing.currency;
         monthly_eur = pricing.servers[`${server.type}|${server.location}`] ?? null;
@@ -700,11 +687,6 @@ export async function handleGetServerDetail(request: Request, serverId: number):
       id: server.id,
       name: server.name,
       provider_id: server.provider_id,
-      provider: server.provider,
-      ownership: server.ownership,
-      management_address: server.management_address,
-      ssh_user: server.ssh_user,
-      ssh_port: server.ssh_port,
       ipv4: server.ipv4,
       ipv6: server.ipv6,
       routing_address: server.routing_address,
@@ -735,11 +717,9 @@ export async function handleGetServerDetail(request: Request, serverId: number):
 export async function handleCreateServer(request: Request): Promise<Response> {
   try {
     const payload = await requirePermission(request, "servers.create");
-    const compute = defaultInfrastructureProvider(db.getSettings());
-    const providerToken = compute ? await getInfrastructureToken(compute.id).catch(() => "") : "";
-    if (!providerToken) {
+    if (!await getHetznerToken().catch(() => "")) {
       return Response.json(
-        { error: "Infrastructure provisioning is not configured. Add and assign a provider in Admin → Providers, or connect an existing server." },
+        { error: "Hetzner is not configured. Add the Hetzner API token in Admin → Hetzner." },
         { status: 409, headers: corsHeaders },
       );
     }

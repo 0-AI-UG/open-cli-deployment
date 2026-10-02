@@ -1,4 +1,3 @@
-import { storageConnection, getProviderConnections } from "../../shared/provider-connections.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { requirePermission } from "../lib/permissions.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
@@ -13,6 +12,8 @@ import {
   listObjects,
   validateBucketName,
 } from "../../engine/object-storage/s3.ts";
+
+const NOT_CONFIGURED = "Hetzner Object Storage is not configured. Add its credentials in Admin → Hetzner.";
 
 function providerError(error: unknown): Response {
   if (error instanceof S3Error) {
@@ -33,16 +34,12 @@ function providerError(error: unknown): Response {
 export async function handleListBuckets(request: Request): Promise<Response> {
   try {
     await requirePermission(request, "resources.view");
-    const connection = storageConnection(new URL(request.url).searchParams.get("storage") || undefined);
-    const credentials = connection ? await getS3Credentials(connection.id) : null;
+    const credentials = await getS3Credentials();
     if (!credentials) {
-      return Response.json(
-        { configured: false, buckets: [], connections: getProviderConnections().filter(p => p.kind === "s3-compatible").map(p => ({ id: p.id, name: p.name, ...p.config })) },
-        { headers: corsHeaders },
-      );
+      return Response.json({ configured: false, buckets: [] }, { headers: corsHeaders });
     }
     return Response.json(
-      { configured: true, connection_id: connection!.id, connections: getProviderConnections().filter(p => p.kind === "s3-compatible").map(p => ({ id: p.id, name: p.name, ...p.config })), region: credentials.region, buckets: (await listBuckets(credentials)).map(b => ({ ...b, connection_id: connection!.id })) },
+      { configured: true, region: credentials.region, buckets: await listBuckets(credentials) },
       { headers: corsHeaders },
     );
   } catch (error) {
@@ -58,15 +55,14 @@ export async function handleCreateBucket(request: Request): Promise<Response> {
     if (!checked.valid) {
       return Response.json({ error: checked.error }, { status: 400, headers: corsHeaders });
     }
-    const connection = storageConnection(new URL(request.url).searchParams.get("storage") || undefined);
-    const credentials = connection ? await getS3Credentials(connection.id) : null;
+    const credentials = await getS3Credentials();
     if (!credentials) {
       return Response.json(
-        { error: "S3-compatible object storage is not configured. Add and assign a provider in Admin → Providers." },
+        { error: NOT_CONFIGURED },
         { status: 409, headers: corsHeaders },
       );
     }
-    await enforceConfirmation(request, payload, "create_bucket", "bucket", `${connection!.id}:${checked.value}`);
+    await enforceConfirmation(request, payload, "create_bucket", "bucket", checked.value);
     await createBucket(checked.value, credentials);
     return Response.json(
       { ok: true, bucket: { name: checked.value, region: credentials.region } },
@@ -84,12 +80,11 @@ export async function handleDeleteBucket(request: Request, rawName: string): Pro
     if (!checked.valid) {
       return Response.json({ error: checked.error }, { status: 400, headers: corsHeaders });
     }
-    const connection = storageConnection(new URL(request.url).searchParams.get("storage") || undefined);
-    const credentials = connection ? await getS3Credentials(connection.id) : null;
+    const credentials = await getS3Credentials();
     if (!credentials) {
-      return Response.json({ error: "S3-compatible object storage is not configured" }, { status: 409, headers: corsHeaders });
+      return Response.json({ error: NOT_CONFIGURED }, { status: 409, headers: corsHeaders });
     }
-    await enforceConfirmation(request, payload, "delete_bucket", "bucket", `${connection!.id}:${checked.value}`);
+    await enforceConfirmation(request, payload, "delete_bucket", "bucket", checked.value);
     await deleteBucket(checked.value, credentials);
     return Response.json({ ok: true }, { headers: corsHeaders });
   } catch (error) {
@@ -97,24 +92,21 @@ export async function handleDeleteBucket(request: Request, rawName: string): Pro
   }
 }
 
-function bucketContext(request: Request, rawName: string) {
+function bucketContext(rawName: string) {
   const checked = validateBucketName(rawName);
   if (!checked.valid || checked.value !== rawName) return { error: checked.valid ? "Invalid bucket name" : checked.error } as const;
-  const connection = storageConnection(new URL(request.url).searchParams.get("storage") || undefined);
-  return { bucket: checked.value, connection } as const;
+  return { bucket: checked.value } as const;
 }
 
 export async function handleGetBucket(request: Request, rawName: string): Promise<Response> {
   try {
     await requirePermission(request, "resources.view");
-    const context = bucketContext(request, rawName);
+    const context = bucketContext(rawName);
     if ("error" in context) return Response.json({ error: context.error }, { status: 400, headers: corsHeaders });
-    const credentials = context.connection ? await getS3Credentials(context.connection.id) : null;
-    if (!credentials) return Response.json({ error: "S3-compatible object storage is not configured" }, { status: 409, headers: corsHeaders });
+    const credentials = await getS3Credentials();
+    if (!credentials) return Response.json({ error: NOT_CONFIGURED }, { status: 409, headers: corsHeaders });
     return Response.json({
       name: context.bucket,
-      connection_id: context.connection!.id,
-      connection_name: context.connection!.name,
       region: credentials.region,
       endpoint: credentials.endpoint,
     }, { headers: corsHeaders });
@@ -126,7 +118,7 @@ export async function handleGetBucket(request: Request, rawName: string): Promis
 export async function handleListBucketObjects(request: Request, rawName: string): Promise<Response> {
   try {
     await requirePermission(request, "buckets.objects.read");
-    const context = bucketContext(request, rawName);
+    const context = bucketContext(rawName);
     if ("error" in context) return Response.json({ error: context.error }, { status: 400, headers: corsHeaders });
     const url = new URL(request.url);
     const prefix = url.searchParams.get("prefix") || "";
@@ -134,8 +126,8 @@ export async function handleListBucketObjects(request: Request, rawName: string)
     if (Buffer.byteLength(prefix) > 1024 || prefix.includes("\0")) {
       return Response.json({ error: "Invalid object prefix" }, { status: 400, headers: corsHeaders });
     }
-    const credentials = context.connection ? await getS3Credentials(context.connection.id) : null;
-    if (!credentials) return Response.json({ error: "S3-compatible object storage is not configured" }, { status: 409, headers: corsHeaders });
+    const credentials = await getS3Credentials();
+    if (!credentials) return Response.json({ error: NOT_CONFIGURED }, { status: 409, headers: corsHeaders });
     const page = await listObjects(context.bucket, prefix, credentials, cursor);
     return Response.json({ prefix, ...page }, { headers: corsHeaders });
   } catch (error) {
@@ -146,14 +138,14 @@ export async function handleListBucketObjects(request: Request, rawName: string)
 export async function handleGetBucketObject(request: Request, rawName: string): Promise<Response> {
   try {
     await requirePermission(request, "buckets.objects.read");
-    const context = bucketContext(request, rawName);
+    const context = bucketContext(rawName);
     if ("error" in context) return Response.json({ error: context.error }, { status: 400, headers: corsHeaders });
     const key = new URL(request.url).searchParams.get("key") || "";
     if (!key || Buffer.byteLength(key) > 1024 || key.includes("\0")) {
       return Response.json({ error: "Valid object key required" }, { status: 400, headers: corsHeaders });
     }
-    const credentials = context.connection ? await getS3Credentials(context.connection.id) : null;
-    if (!credentials) return Response.json({ error: "S3-compatible object storage is not configured" }, { status: 409, headers: corsHeaders });
+    const credentials = await getS3Credentials();
+    if (!credentials) return Response.json({ error: NOT_CONFIGURED }, { status: 409, headers: corsHeaders });
     const preview = await getObjectPreview(context.bucket, key, credentials);
     return Response.json({ key, ...preview }, { headers: corsHeaders });
   } catch (error) {

@@ -1,5 +1,4 @@
-import type { ProviderServer, ServerType, VolumeInfo } from "./types.ts";
-import type { InfrastructureProvider } from "./contracts.ts";
+import type { CloudServer, ServerType, VolumeInfo } from "./types.ts";
 import { hetznerApi } from "../../engine/hetzner/api.ts";
 import {
   createServer,
@@ -27,15 +26,6 @@ import { cloudInitScript } from "./cloud-init.ts";
 import { validateHetznerToken } from "../validate.ts";
 
 export const hetzner = {
-  id: "hetzner",
-  name: "Hetzner Cloud",
-  capabilities: {
-    compute: true,
-    volumes: true,
-    privateNetwork: true,
-    firewall: true,
-  },
-
   validateToken(token: string) {
     return validateHetznerToken(token);
   },
@@ -115,9 +105,9 @@ export const hetzner = {
     firewallId: string;
     userData: string;
     /** Private network to attach at create time — when set, the returned
-     *  ProviderServer.routingAddress reflects the assigned address. */
+     *  CloudServer.routingAddress reflects the assigned address. */
     networkId?: string;
-  }): Promise<ProviderServer> {
+  }): Promise<CloudServer> {
     const userData = opts.userData || cloudInitScript({
       extraPackages: ["hc-utils"],
       extraCommands: ["systemctl enable hc-agent && systemctl start hc-agent"],
@@ -144,7 +134,7 @@ export const hetzner = {
     };
   },
 
-  async getServer(providerId: string): Promise<ProviderServer> {
+  async getServer(providerId: string): Promise<CloudServer> {
     const s = await getHetznerServer(providerId);
     return {
       providerId: String(s.id),
@@ -259,6 +249,8 @@ export const hetzner = {
       return null;
     }
   },
-} satisfies InfrastructureProvider;
+};
 
 export type Hetzner = typeof hetzner;
+
+export type { ServerType, CloudServer, VolumeInfo } from "./types.ts";

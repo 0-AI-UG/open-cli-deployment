@@ -1,28 +1,22 @@
 import { test, expect, mock, beforeEach } from "bun:test";
 import database, * as db from "./db.ts";
-import { saveProviderConnections, saveProviderAssignments } from "./provider-connections.ts";
 const realS3 = await import("../engine/object-storage/s3.ts");
 mock.module("../engine/object-storage/s3.ts", () => ({ ...realS3,
-  getS3Credentials: async (id: string) => ({ endpoint: `https://${id}.example.com`, region: id, accessKey: "access", secretKey: "secret" }),
+  getS3Credentials: async () => ({ endpoint: "https://fsn1.your-objectstorage.com", region: "fsn1", accessKey: "access", secretKey: "secret" }),
   listBuckets: async () => [{ name: "shared-bucket" }],
 }));
 const storage = await import("./object-storage.ts");
-const connections = ["first", "second"].map(id => ({ id, kind: "s3-compatible" as const, name: id, config: { endpoint: `https://${id}.example.com`, region: id }, created_at: "now" }));
 beforeEach(() => {
-saveProviderConnections(connections);
-saveProviderAssignments({ infrastructure: "", object_storage: "first" });
+if (db.getPanel()) return;
 database.run("PRAGMA foreign_keys=OFF");
 db.insertPanel({ server_id: 1, name: "panel", domain: "panel.example.com", image_ref: `ghcr.io/test/panel@sha256:${"a".repeat(64)}`, container_port: 3001, host_port: 3001 });
 database.run("PRAGMA foreign_keys=ON");
 });
 const input = { primary: { bucket: "shared-bucket", prefix: "app/", permissions: ["read", "write"] as Array<"read" | "write"> } };
 
-test("default selection is pinned and existing binding survives a default change", () => {
+test("resolution is stable", () => {
   const first = storage.resolveStorageBindings(input);
-  saveProviderAssignments({ infrastructure: "", object_storage: "second" });
-  expect(storage.resolveStorageBindings(input, first).primary.connection).toBe("first");
-  expect(JSON.stringify(storage.resolveStorageBindings(first, first))).toBe(JSON.stringify(first));
-  expect(storage.resolveStorageBindings(input).primary.connection).toBe("second");
+  expect(JSON.stringify(storage.resolveStorageBindings(first))).toBe(JSON.stringify(first));
 });
 test("separate apps get separate encrypted grants; retries keep their tokens stable", async () => {
   const bindings = storage.resolveStorageBindings(input);
@@ -36,11 +30,11 @@ test("separate apps get separate encrypted grants; retries keep their tokens sta
   expect(JSON.stringify(storage.getStorageGrants())).not.toContain(before.OCD_STORAGE_TOKEN);
   expect(storage.getStorageGrants().find(g => g.appId === 101)?.methods).toEqual(["GET", "HEAD", "PUT"]);
 });
-test("rotation retains old grant until rollout finalization; multiple bindings select separate connections", async () => {
+test("rotation retains old grant until rollout finalization; multiple bindings get separate grants", async () => {
   const previous = storage.resolveStorageBindings(input);
   await storage.prepareStorageBindings({ id: 101, name: "one" }, previous);
   storage.saveAppStorage(101, previous);
-  const next = storage.resolveStorageBindings({ ...previous, primary: { ...previous.primary, generation: 1 }, media: { connection: "first", bucket: "shared-bucket", prefix: "media/", permissions: ["read"] } }, previous);
+  const next = storage.resolveStorageBindings({ ...previous, primary: { ...previous.primary, generation: 1 }, media: { bucket: "shared-bucket", prefix: "media/", permissions: ["read"] } });
   await storage.prepareStorageBindings({ id: 101, name: "one" }, next);
   expect(storage.getStorageGrants().filter(g => g.appId === 101)).toHaveLength(3);
   const vars = await storage.appStorageEnv(101, next);

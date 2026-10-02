@@ -6,7 +6,7 @@ type RemoveOpts = Parameters<ReturnType<typeof requireStorageDriver>["removeMoun
 let testEnsure: ((opts: EnsureOpts) => Promise<void>) | undefined;
 let testRemove: ((opts: RemoveOpts) => Promise<void>) | undefined;
 
-/** Test-only seam around the provider-neutral mount boundary. */
+/** Test-only seam around the storage-driver mount boundary. */
 export function __setBindImplForTest(impl: {
   ensureVolumeBindMount?: (opts: any) => Promise<void>;
   removeVolumeBindMount?: (opts: any) => Promise<void>;

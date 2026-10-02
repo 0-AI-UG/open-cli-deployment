@@ -16,7 +16,7 @@
 //     if the panel container is destroyed seconds later.
 import { resolve4 } from "node:dns/promises";
 import * as db from "../../shared/db.ts";
-import { requireInfrastructureProvider } from "../../shared/providers/index.ts";
+import { hetzner } from "../../shared/hetzner/index.ts";
 import {
   sshExec, waitForServer, captureHostKey, getOrCreateLocalKeyPair,
   pullImmutableImageAndRun, healthCheck, getContainerLogs,
@@ -28,7 +28,7 @@ import { handoffDbToVolume } from "./self-deploy.ts";
 import { dockerLoginRegistry } from "../../shared/remote/index.ts";
 import { resolveRegistryCredentialsForImage } from "../registry-config.ts";
 import { DEFAULT_LOG_MAX_FILES, DEFAULT_LOG_MAX_SIZE } from "../../shared/remote/index.ts";
-import { defaultStorageDriverForServer, requireStorageDriver } from "../storage/index.ts";
+import { defaultStorageDriver, requireStorageDriver } from "../storage/index.ts";
 
 type ProgressFn = (step: string, detail: string) => void;
 
@@ -68,7 +68,6 @@ async function waitForHttps(domain: string, attempts: number): Promise<boolean> 
 }
 
 export type BootstrapPanelOpts = {
-  providerId: string;
   appName: string;
   /** Public domain. When omitted, a `<server-ip>.nip.io` domain is derived
    *  after the server is created and served with a self-signed cert. */
@@ -126,12 +125,12 @@ export async function bootstrapPanel(
   let volumeId: string | undefined;
   let volumeDriverId: string | undefined;
 
-  const compute = requireInfrastructureProvider(opts.providerId);
+  const compute = hetzner;
 
   try {
     // 0. Guard against duplicate provisioning. The bootstrap DB is ephemeral
     //    (the container runs with --rm), so the db.getPanel() check above can't
-    //    catch a panel that a previous run already created. Ask the provider
+    //    catch a panel that a previous run already created. Ask Hetzner
     //    directly: if a server for this app already exists, refuse rather than
     //    silently spinning up a second paid server.
     onProgress("server", "Checking for an existing panel server...");
@@ -144,7 +143,7 @@ export async function bootstrapPanel(
         error:
           `A panel server already exists (${existing.name} @ ${existing.ipv4}). ` +
           (domain ? `The panel may already be live at https://${domain}. ` : "") +
-          `Destroy that server in the ${compute.name} console before re-running bootstrap.`,
+          `Destroy that server in the Hetzner console before re-running bootstrap.`,
       };
     }
 
@@ -154,7 +153,7 @@ export async function bootstrapPanel(
     const [sshKey, firewallId, networkId] = await Promise.all([
       compute.ensureSshKey("open-cli-deployment", publicKey),
       compute.ensureFirewall(),
-      ensureSharedNetwork(compute),
+      ensureSharedNetwork(),
     ]);
 
     // 2. Create server
@@ -168,8 +167,6 @@ export async function bootstrapPanel(
       type: opts.serverType,
       location: opts.serverLocation,
       status: "creating",
-      provider: compute.id,
-      ownership: "managed",
     });
     dbServerId = dbServer.id;
 
@@ -190,7 +187,6 @@ export async function bootstrapPanel(
       ipv6: providerServer.ipv6 || "",
       routing_address: providerServer.routingAddress || "",
       status: "provisioning",
-      management_address: serverIp,
     });
     onProgress("server", `Server created: ${serverIp}`);
 
@@ -218,8 +214,8 @@ export async function bootstrapPanel(
     if (hostKey) db.updateServerHostKey(dbServer.id, hostKey);
     db.updateServerStatus(dbServer.id, "ready");
 
-    // 5. DNS is always operator-owned. OCD reports the provider-neutral
-    //    instruction and observes propagation, but never mutates DNS.
+    // 5. DNS is always operator-owned. OCD reports the record to create and
+    //    observes propagation, but never mutates DNS.
     if (opts.domain) {
       onProgress("dns", `Create an A record with your DNS provider: ${domain} → ${serverIp}`);
     }
@@ -228,7 +224,7 @@ export async function bootstrapPanel(
     onProgress("artifact", `Creating ${opts.volumeSize}GB persistent volume...`);
     const readyServer = db.getServer(dbServer.id);
     if (!readyServer) throw new Error("Panel server disappeared during bootstrap");
-    const storage = defaultStorageDriverForServer(readyServer);
+    const storage = defaultStorageDriver();
     volumeDriverId = storage.id;
     const vol = await storage.create({
       server: readyServer,

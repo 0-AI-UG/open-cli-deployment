@@ -1,7 +1,7 @@
 import * as db from "../../shared/db.ts";
-import { isNotFoundError } from "../../shared/providers/errors.ts";
+import { isNotFoundError } from "../../shared/hetzner/errors.ts";
 import { recreateAppContainer } from "../deploy/index.ts";
-import { defaultStorageDriverForServer, requireStorageDriver } from "../storage/index.ts";
+import { defaultStorageDriver, requireStorageDriver } from "../storage/index.ts";
 import { registerOp } from "./registry.ts";
 import {
   loadSingleReplicaTarget,
@@ -32,10 +32,7 @@ const validate: Step<AttachVolumeInput, ValidateOut> = {
     const server = db.getServer(target.serverId)!;
     const driver = ctx.input.driverId
       ? requireStorageDriver(ctx.input.driverId)
-      : defaultStorageDriverForServer(server);
-    if (!driver.supports(server)) {
-      throw new Error(`Storage driver ${driver.id} does not support server ${server.name}`);
-    }
+      : defaultStorageDriver();
     return {
       ...target,
       driverId: driver.id,

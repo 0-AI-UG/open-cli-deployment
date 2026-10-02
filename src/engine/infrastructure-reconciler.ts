@@ -1,10 +1,10 @@
 import * as db from "../shared/db.ts";
-import { isNotFoundError } from "../shared/providers/errors.ts";
+import { isNotFoundError } from "../shared/hetzner/errors.ts";
 import { ensureNetwork as ensureSharedNetwork } from "./network.ts";
 import { requireStorageDriver } from "./storage/index.ts";
 import { tryAcquire, release, NON_OP_HOLDER } from "./scheduler.ts";
-import { infrastructureProviderForServer, isManagedServer } from "../shared/infrastructure.ts";
-import { getInfrastructureToken } from "../shared/secret-store.ts";
+import { getHetznerToken } from "../shared/secret-store.ts";
+import { hetzner } from "../shared/hetzner/index.ts";
 
 function log(context: string, ...args: unknown[]): void {
   console.log(`[${new Date().toISOString()}] [infra-reconciler:${context}]`, ...args);
@@ -16,25 +16,24 @@ async function withLock(keys: string[], kind: string, work: () => Promise<void>)
   try { await work(); } finally { release(keys); }
 }
 
-/** Observe provider truth, repair private-network attachment, and make a
+/** Observe Hetzner truth, repair private-network attachment, and make a
  * confirmed missing server unavailable to schedulers and routing. */
 export async function reconcileServersAndNetwork(): Promise<void> {
-  const managedServers = db.getServers().filter((server) => isManagedServer(server) && server.provider_id);
-  if (managedServers.length === 0) return;
-  for (const snapshot of managedServers) {
+  const servers = db.getServers().filter((server) => server.provider_id);
+  if (servers.length === 0) return;
+  if (!await getHetznerToken().catch(() => "")) return;
+  for (const snapshot of servers) {
     await withLock([`server:${snapshot.id}`], "reconcile:server", async () => {
       const server = db.getServer(snapshot.id);
       if (!server) return;
-      const provider = infrastructureProviderForServer(server);
-      if (!await getInfrastructureToken(provider.id).catch(() => "")) return;
       let networkId = "";
-      if (provider.networks) try {
-        networkId = await ensureSharedNetwork(provider);
+      try {
+        networkId = await ensureSharedNetwork();
       } catch (error) {
-        log("network", `${provider.name} shared network reconciliation failed: ${error}`);
+        log("network", `Hetzner shared network reconciliation failed: ${error}`);
       }
       try {
-        const observed = await provider.getServer(server.provider_id);
+        const observed = await hetzner.getServer(server.provider_id);
         const available = observed.status === "running";
         db.recordServerObservation(server.id, {
           providerStatus: observed.status,
@@ -48,15 +47,15 @@ export async function reconcileServersAndNetwork(): Promise<void> {
           db.updateServerStatus(server.id, "unavailable");
           for (const replica of db.getReplicasByServer(server.id)) db.updateReplicaStatus(replica.id, "unhealthy");
         }
-        if (!networkId || !provider.networks) return;
+        if (!networkId) return;
         try {
-          let routingAddress = await provider.networks.getPrivateIpv4(server.provider_id, networkId);
+          let routingAddress = await hetzner.networks.getPrivateIpv4(server.provider_id, networkId);
           if (!routingAddress) {
-            // The provider authoritatively reports detachment. Stop routing to
+            // Hetzner authoritatively reports detachment. Stop routing to
             // the cached address before attempting repair.
             db.updateServer(server.id, { routing_address: "" });
-            await provider.networks.attachServer(server.provider_id, networkId);
-            routingAddress = await provider.networks.getPrivateIpv4(server.provider_id, networkId);
+            await hetzner.networks.attachServer(server.provider_id, networkId);
+            routingAddress = await hetzner.networks.getPrivateIpv4(server.provider_id, networkId);
           }
           if (routingAddress) db.updateServer(server.id, { routing_address: routingAddress });
         } catch (networkError) {
@@ -81,18 +80,17 @@ export async function reconcileServersAndNetwork(): Promise<void> {
 /** Continuously reassert both firewall rules and server attachments. */
 export async function reconcileFirewall(): Promise<void> {
   const servers = db.getServers().filter((server) =>
-    isManagedServer(server) && server.provider_id && server.status !== "cleanup_failed"
+    server.provider_id && server.status !== "cleanup_failed"
   );
   if (servers.length === 0) return;
+  if (!await getHetznerToken().catch(() => "")) return;
   await Promise.all(servers.map(async (server) => {
     try {
-      const provider = infrastructureProviderForServer(server);
-      if (!provider.capabilities.firewall || !await getInfrastructureToken(provider.id).catch(() => "")) return;
-      const firewallId = await provider.ensureFirewall();
+      const firewallId = await hetzner.ensureFirewall();
       await withLock(
         [`server:${server.id}`],
         "reconcile:firewall",
-        () => provider.ensureFirewallAttached(firewallId, server.provider_id),
+        () => hetzner.ensureFirewallAttached(firewallId, server.provider_id),
       );
     } catch (error) {
       log("firewall", `${server.name}: attachment reconciliation failed: ${error}`);
@@ -158,10 +156,6 @@ export async function reconcileActiveVolumes(): Promise<void> {
         const server = db.getServer(owner.serverId);
         if (!server || server.status !== "ready") return;
         const driver = requireStorageDriver(owner.driverId);
-        if (!driver.supports(server)) {
-          owner.markDegraded(`storage driver ${driver.id} does not support server ${server.name}`);
-          return;
-        }
         let volume;
         try {
           volume = await driver.inspect(owner.volumeId, server);

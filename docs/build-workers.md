@@ -103,7 +103,7 @@ When a build is waiting, check in this order:
 6. the pushed commit is still the configured branch head for webhook builds.
 
 Removing a worker returns the server to its previous placement pool; it does not
-delete an operator-owned VPS. Treat all workers as trusted production hosts:
+delete the Hetzner server. Treat all workers as trusted production hosts:
 repository Dockerfiles execute code and receive scoped push credentials during
 their operation.
 
@@ -114,5 +114,5 @@ parallel health probes, capacity leases and fencing, failover boundaries,
 artifact checkpoints/recovery, cancellation, webhook ordering, and delivery
 compaction. CI also starts a local OCI registry and runs real BuildKit pushes to
 verify `linux/amd64`, cache export/import, digest extraction, and immutable
-digest inspection. Provider provisioning remains in the explicitly opted-in
+digest inspection. Hetzner provisioning remains in the explicitly opted-in
 Hetzner integration suite.

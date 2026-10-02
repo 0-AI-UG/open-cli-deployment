@@ -10,7 +10,7 @@ Database ownership and ACLs remain in the dumps. Backups are individually
 consistent per database, not one transaction spanning all databases.
 
 The archive uses AES-256-GCM with a random salt/nonce and a key derived using
-scrypt. Uploads go to the connected OCD object-storage provider through scoped
+scrypt. Uploads go to OCD's Hetzner Object Storage through scoped
 authorization. The service downloads the encrypted object and verifies its
 SHA-256 before publishing `complete.json` and updating its health marker.
 Incomplete runs never publish a completion record. No automatic deletion of
@@ -19,7 +19,7 @@ historical backups is currently performed.
 Configure `BACKUP_DATABASE_URL`, `BACKUP_ENCRYPTION_KEY` (32+ characters),
 `OCD_STORAGE_URL`, and `OCD_STORAGE_TOKEN` as OCD environment values; both keys
 and the database URL are secrets. The storage grant needs PUT and GET on the
-backup prefix in an nbg1 bucket. Provider access keys stay in OCD.
+backup prefix in an nbg1 bucket. Hetzner Object Storage access keys stay in OCD.
 
 Keep the encryption key in an independently recoverable secret store. Role
 passwords must be recovered from OCD environment secrets. Losing either the

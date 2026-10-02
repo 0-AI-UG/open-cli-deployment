@@ -5,9 +5,8 @@ import { Card, Btn, Field, Badge, Table, showToast } from "../../components/ui.t
 import { NeoSelect } from "../../components/neo-select.tsx";
 import { AlertTriangle, Archive, Download, Settings2, ShieldCheck } from "lucide-react";
 
-type Form = { backup_connection: string; backup_enabled: boolean; backup_bucket: string; backup_prefix: string; backup_retention: number };
+type Form = { backup_enabled: boolean; backup_bucket: string; backup_prefix: string; backup_retention: number };
 type State = Form & {
-  storage_connections: Array<{ id: string; name: string; region: string }>;
   recovery_key_configured: boolean; storage_configured: boolean; recovery_pending: boolean; pending_operations: number;
   backups: { id: string; created_at: number; status: string; bucket: string; object_key: string; size_bytes: number; error: string }[];
 };
@@ -20,39 +19,38 @@ export function PanelProtection() {
   const [error, setError] = useState("");
   const [stopped, setStopped] = useState(false);
   const [resumeOps, setResumeOps] = useState(false);
-  const [bucketList, setBucketList] = useState<{ connection: string; names: string[]; error: string } | null>(null);
+  const [bucketList, setBucketList] = useState<{ names: string[]; error: string } | null>(null);
   const [bucketRefresh, setBucketRefresh] = useState(0);
   const configured = !!(state?.storage_configured && state.recovery_key_configured && state.backup_bucket);
   const showSetup = editing || !configured;
-  const connection = form?.backup_connection || "";
   useEffect(() => {
-    if (!showSetup || !connection) return;
+    if (!showSetup) return;
     let cancelled = false;
     setBucketList(null);
-    void get(`/api/resources/buckets?storage=${encodeURIComponent(connection)}`)
+    void get("/api/resources/buckets")
       .then((result: { configured: boolean; buckets: { name: string }[] }) => {
         if (cancelled) return;
-        setBucketList({ connection, names: result.buckets.map(b => b.name), error: result.configured ? "" : "Configure credentials for this storage connection in Admin → Providers." });
+        setBucketList({ names: result.buckets.map(b => b.name), error: result.configured ? "" : "Configure Hetzner Object Storage credentials in Admin → Hetzner." });
       })
       .catch(() => {
-        if (!cancelled) setBucketList({ connection, names: [], error: "Could not load buckets. Check this connection’s credentials and permission to list buckets, then retry." });
+        if (!cancelled) setBucketList({ names: [], error: "Could not load buckets. Check the Hetzner Object Storage credentials and permission to list buckets, then retry." });
       });
     return () => { cancelled = true; };
-  }, [connection, showSetup, bucketRefresh]);
+  }, [showSetup, bucketRefresh]);
   const load = async (reset = false) => {
     const s = await get("/api/admin/protection");
     setState(s);
-    setForm(f => !f || reset ? { backup_connection: s.backup_connection, backup_enabled: s.backup_enabled, backup_bucket: s.backup_bucket, backup_prefix: s.backup_prefix, backup_retention: s.backup_retention } : f);
+    setForm(f => !f || reset ? { backup_enabled: s.backup_enabled, backup_bucket: s.backup_bucket, backup_prefix: s.backup_prefix, backup_retention: s.backup_retention } : f);
   };
   useEffect(() => { void load().catch(e => setError(e.message)); const timer = setInterval(() => void load().catch(() => {}), 10000); return () => clearInterval(timer); }, []);
   const action = async (fn: () => Promise<void>) => { setBusy(true); setError(""); try { await fn(); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Action failed"); } finally { setBusy(false); } };
   if (!form || !state) return <Card className="p-5">{error || "Loading panel protection…"}</Card>;
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm({ ...form, [key]: value });
-  const bucketsLoading = !!connection && bucketList?.connection !== connection;
-  const buckets = bucketList?.connection === connection ? bucketList.names : [];
-  const bucketError = bucketList?.connection === connection ? bucketList.error : "";
+  const bucketsLoading = bucketList === null;
+  const buckets = bucketList?.names ?? [];
+  const bucketError = bucketList?.error ?? "";
   const validBucket = !bucketsLoading && !bucketError && buckets.includes(form.backup_bucket);
-  const canSave = validBucket && state.storage_connections.some(c => c.id === form.backup_connection) && state.recovery_key_configured;
+  const canSave = validBucket && state.recovery_key_configured;
   const activeBackup = state.backups.some(b => b.status === "pending" || b.status === "running");
   const inputClass = "w-full border-2 border-fg bg-bg-raised px-3 py-2 font-mono text-[11px]";
   const save = async () => {
@@ -93,15 +91,13 @@ export function PanelProtection() {
         <p className="text-xs text-muted">Choose where to store your backups and save a recovery key. Application databases and volumes are excluded.</p>
         <section className="space-y-3">
           <h4 className="font-mono text-[10px] font-bold uppercase tracking-wider">Storage destination</h4>
-          {state.storage_connections.length === 0 && <p className="border-2 border-fg bg-alt p-3 text-xs">Add an S3-compatible connection in Admin → Providers to get started.</p>}
-          <Field label="Storage connection"><NeoSelect value={form.backup_connection} onChange={value => { if (value !== form.backup_connection) setForm({ ...form, backup_connection: value, backup_bucket: "" }); }} placeholder="Select S3 connection" disabled={busy || state.storage_connections.length === 0} options={state.storage_connections.map(c => ({ value: c.id, label: `${c.name}${c.region ? ` · ${c.region}` : ""}` }))} /></Field>
-          <Field label="Bucket" hint="Buckets available on the selected S3 connection.">
+          <Field label="Bucket" hint="Buckets in your Hetzner Object Storage account.">
             <div className="space-y-2">
-              <NeoSelect value={validBucket ? form.backup_bucket : ""} onChange={value => set("backup_bucket", value)} options={buckets.map(name => ({ value: name, label: name }))} disabled={busy || !connection || bucketsLoading || !!bucketError || buckets.length === 0} placeholder={!connection ? "Select a storage connection first" : bucketsLoading ? "Loading buckets…" : bucketError ? "Buckets unavailable" : buckets.length === 0 ? "No buckets found" : "Select a bucket"} />
+              <NeoSelect value={validBucket ? form.backup_bucket : ""} onChange={value => set("backup_bucket", value)} options={buckets.map(name => ({ value: name, label: name }))} disabled={busy || bucketsLoading || !!bucketError || buckets.length === 0} placeholder={bucketsLoading ? "Loading buckets…" : bucketError ? "Buckets unavailable" : buckets.length === 0 ? "No buckets found" : "Select a bucket"} />
               {bucketError && <p role="alert" className="text-xs text-accent-red">{bucketError}</p>}
-              {connection && !bucketsLoading && !bucketError && form.backup_bucket && !validBucket && <p role="alert" className="text-xs text-accent-red">The saved bucket “{form.backup_bucket}” is unavailable on this connection. Select an existing bucket.</p>}
-              {connection && !bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="underline">Resources</a>, then refresh this list.</p>}
-              {connection && <Btn size="xs" disabled={busy || bucketsLoading} onClick={() => { setBucketList(null); setBucketRefresh(value => value + 1); }}>{bucketError ? "Retry" : "Refresh buckets"}</Btn>}
+              {!bucketsLoading && !bucketError && form.backup_bucket && !validBucket && <p role="alert" className="text-xs text-accent-red">The saved bucket “{form.backup_bucket}” is unavailable. Select an existing bucket.</p>}
+              {!bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="underline">Resources</a>, then refresh this list.</p>}
+              <Btn size="xs" disabled={busy || bucketsLoading} onClick={() => { setBucketList(null); setBucketRefresh(value => value + 1); }}>{bucketError ? "Retry" : "Refresh buckets"}</Btn>
             </div>
           </Field>
           <Field label="Path prefix"><input className={inputClass} disabled={busy} value={form.backup_prefix} onChange={e => set("backup_prefix", e.target.value)} placeholder="ocd-panel" /></Field>
@@ -120,7 +116,7 @@ export function PanelProtection() {
         </section>
         <div className="flex flex-wrap gap-2 border-t border-fg/20 pt-5">
           <Btn variant="primary" loading={busy} disabled={!canSave} onClick={() => action(save)}>{configured ? "Save settings" : "Finish setup"}</Btn>
-          {configured && <Btn disabled={busy} onClick={() => { setForm({ backup_connection: state.backup_connection, backup_enabled: state.backup_enabled, backup_bucket: state.backup_bucket, backup_prefix: state.backup_prefix, backup_retention: state.backup_retention }); setEditing(false); setRecoveryKey(""); setError(""); }}>Cancel</Btn>}
+          {configured && <Btn disabled={busy} onClick={() => { setForm({ backup_enabled: state.backup_enabled, backup_bucket: state.backup_bucket, backup_prefix: state.backup_prefix, backup_retention: state.backup_retention }); setEditing(false); setRecoveryKey(""); setError(""); }}>Cancel</Btn>}
         </div>
       </div> : <>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-fg/20 bg-alt px-5 py-4">

@@ -25,7 +25,6 @@ beforeEach(async () => {
   recoveryKey = generateRecoveryKey();
   await secretStore.set("panel_backup_recovery_key", recoveryKey);
   await secretStore.set("test-provider-secret", "credential-to-recover");
-  saveSetting("panel_backup_connection", "test-storage");
   saveSetting("panel_backup_bucket", "backup-bucket");
   saveSetting("panel_backup_retention", "1");
 });
@@ -71,7 +70,7 @@ test("disabled scheduling still processes manual requests, enabled scheduling is
 });
 
 test("backup history includes every recorded backup, newest first", () => {
-  const insert = db.query("INSERT INTO panel_backups (id, created_at, status, bucket, object_key, endpoint, connection_id, region) VALUES (?, ?, 'complete', 'backup-bucket', ?, 'https://storage.example.com', 'test-storage', 'test')");
+  const insert = db.query("INSERT INTO panel_backups (id, created_at, status, bucket, object_key, endpoint, region) VALUES (?, ?, 'complete', 'backup-bucket', ?, 'https://storage.example.com', 'test')");
   db.transaction(() => {
     for (let i = 0; i < 105; i++) insert.run(`history-${i}`, i, `history-${i}.ocdb`);
   })();

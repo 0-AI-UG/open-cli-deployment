@@ -56,7 +56,6 @@ type ServerDetail = {
   id: number;
   name: string;
   provider_id: string;
-  provider: string;
   ipv4: string;
   ipv6: string;
   routing_address: string;

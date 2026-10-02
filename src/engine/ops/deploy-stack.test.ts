@@ -16,7 +16,7 @@ import deployStackOp, {
 } from "./deploy-stack.ts";
 import type { StackDeployRequest } from "../../shared/rpc.ts";
 import type { OpContext } from "../types.ts";
-import { hetzner } from "../../shared/providers/index.ts";
+import { hetzner } from "../../shared/hetzner/index.ts";
 import { resolveAppEnvVars, resolveEnvVarsForDeploy } from "../../shared/env-crypto.ts";
 import { hashEnvironment } from "../revision.ts";
 

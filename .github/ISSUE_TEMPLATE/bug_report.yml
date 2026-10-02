@@ -55,7 +55,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include the panel host OS/architecture, Docker version, browser if relevant, and infrastructure provider.
+      description: Include the panel host OS/architecture, Docker version, browser if relevant, and Hetzner server type/location.
   - type: checkboxes
     id: checks
     attributes:

@@ -2,7 +2,7 @@ import { useTempDataDir } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { beforeEach, describe, expect, test } from "bun:test";
-import { saveProviderAssignments, saveProviderConnections, providerSecretKey } from "../../shared/provider-connections.ts";
+import { saveSetting } from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
 import {
   createBucket,
@@ -15,9 +15,10 @@ import {
   type S3Credentials,
 } from "../object-storage/s3.ts";
 
-beforeEach(() => {
-  saveProviderConnections([]);
-  saveProviderAssignments({ infrastructure: "", object_storage: "" });
+beforeEach(async () => {
+  await secretStore.delete("hetzner_s3_access_key");
+  await secretStore.delete("hetzner_s3_secret_key");
+  saveSetting("hetzner_s3_region", "");
 });
 
 const credentials: S3Credentials = {
@@ -94,22 +95,23 @@ describe("S3 bucket behavior", () => {
   });
 });
 
-describe("S3 provider selection", () => {
-  test("loads credentials only from the assigned S3-compatible profile", async () => {
-    saveProviderConnections([{
-      id: "s3-main",
-      kind: "s3-compatible",
-      name: "Any S3 provider",
-      config: { endpoint: credentials.endpoint, region: credentials.region },
-      created_at: "2026-09-04T00:00:00.000Z",
-    }]);
-    saveProviderAssignments({ infrastructure: "", object_storage: "s3-main" });
-    await secretStore.set(providerSecretKey("s3-main", "access_key"), credentials.accessKey);
-    await secretStore.set(providerSecretKey("s3-main", "secret_key"), credentials.secretKey);
+describe("Hetzner Object Storage credentials", () => {
+  test("derives the endpoint from the configured region", async () => {
+    saveSetting("hetzner_s3_region", "fsn1");
+    await secretStore.set("hetzner_s3_access_key", credentials.accessKey);
+    await secretStore.set("hetzner_s3_secret_key", credentials.secretKey);
     expect(await getS3Credentials()).toEqual(credentials);
   });
 
-  test("returns null when object storage has no assigned provider", async () => {
+  test("defaults to fsn1 when no region is stored", async () => {
+    await secretStore.set("hetzner_s3_access_key", credentials.accessKey);
+    await secretStore.set("hetzner_s3_secret_key", credentials.secretKey);
+    expect((await getS3Credentials())?.endpoint).toBe("https://fsn1.your-objectstorage.com");
+  });
+
+  test("returns null until both keys are configured", async () => {
+    expect(await getS3Credentials()).toBeNull();
+    await secretStore.set("hetzner_s3_access_key", credentials.accessKey);
     expect(await getS3Credentials()).toBeNull();
   });
 });

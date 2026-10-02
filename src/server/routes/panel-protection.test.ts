@@ -6,7 +6,7 @@ let allowed = true;
 mock.module("../lib/permissions.ts", () => ({ ...realPermissions, requireAdmin: async () => { if (!allowed) { const e = new Error("Admin required"); Object.defineProperty(e, "constructor", { value: { name: "ForbiddenError" } }); throw e; } return { userId: "admin" }; } }));
 const { handleSaveProtection, handleGetProtection, handleRecoveryKey } = await import("./panel-protection.ts");
 const request = (body?: unknown) => new Request("https://panel.example/api/admin/protection", { method: "POST", ...(body ? { body: JSON.stringify(body), headers: { "content-type": "application/json" } } : {}) });
-const config = { backup_connection: "", backup_enabled: false, backup_bucket: "", backup_prefix: "ocd-panel", backup_retention: 7 };
+const config = { backup_enabled: false, backup_bucket: "", backup_prefix: "ocd-panel", backup_retention: 7 };
 beforeEach(() => { allowed = true; });
 test("protection settings configure backups without an email channel", async () => {
   expect((await handleSaveProtection(request(config))).status).toBe(200);

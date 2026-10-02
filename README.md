@@ -12,28 +12,27 @@
 </div>
 
 Open CLI Deployment (OCD) builds immutable OCI images from Git and reconciles
-them onto Linux servers. You operate it through the `ocd` CLI while a small,
+them onto Hetzner Cloud servers. You operate it through the `ocd` CLI while a small,
 self-hosted panel keeps desired state, credentials, deployment history, and
 recovery operations in one place.
 
 ## Why OCD?
 
-- **Your infrastructure:** connect an existing Docker host or optionally
-  provision servers and volumes on Hetzner.
+- **Your Hetzner account:** OCD provisions and manages servers, the private
+  network, firewall, volumes, and object storage in your Hetzner Cloud project.
 - **Immutable releases:** deployments and rollbacks use digest-qualified images.
 - **Git-based configuration:** keep single-app or multi-app manifests beside the
   code they deploy.
 - **Operational controls:** inspect logs, open a shell, copy files, pause, scale,
   promote, roll back, and recover failed operations from the CLI.
-- **Portable integrations:** use HTTPS Git hosts, OCI registries, and
-  S3-compatible object storage rather than a closed hosting ecosystem.
+- **Portable integrations:** use HTTPS Git hosts and OCI registries rather
+  than a closed hosting ecosystem.
 
 ## Requirements
 
-To run a panel you need one of the following:
-
-- a Linux server with Docker, a public IPv4 address, and root SSH access; or
-- a Hetzner Cloud account and API token for guided provisioning.
+To run a panel you need a Hetzner Cloud account and API token. OCD runs on
+Hetzner Cloud only. Hetzner Object Storage (access key and secret key) is
+needed for buckets, app storage bindings, and panel backups.
 
 The CLI supports macOS and Linux on x64 and arm64. App builds require an OCD
 BuildKit worker or a prebuilt image in an OCI registry.
@@ -47,13 +46,11 @@ curl -fsSL https://github.com/0-AI-UG/open-cli-deployment/releases/latest/downlo
 ocd bootstrap
 ```
 
-The wizard connects an operator-owned Docker host or provisions a managed
-Hetzner server. It verifies access, deploys the panel, and guides you through
-browser setup. Omit `--domain` to use a generated `nip.io` address:
+The wizard provisions a managed Hetzner server for the panel. It verifies
+access, deploys the panel, and guides you through browser setup. Omit `--domain` to use a generated `nip.io` address:
 
 ```sh
-OCD_PROVISIONER_TOKEN=... ocd bootstrap \
-  --provider=hetzner \
+HETZNER_API_TOKEN=... ocd bootstrap \
   --domain=panel.example.com
 ```
 

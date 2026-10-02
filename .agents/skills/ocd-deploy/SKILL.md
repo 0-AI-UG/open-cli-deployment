@@ -5,7 +5,7 @@ description: Build, deploy, configure, operate, recover, and troubleshoot applic
 
 # OCD Deploy
 
-Use the `ocd` CLI for Open CLI Deployment panels. OCD owns provider-neutral HTTPS
+Use the `ocd` CLI for Open CLI Deployment panels. OCD runs on Hetzner Cloud and owns HTTPS
 Git checkout, BuildKit image creation, immutable OCI publication, manifest
 reconciliation, and runtime rollout. GitHub signed push webhooks are an optional
 trigger integration; GitHub Actions is not part of app delivery.
@@ -24,7 +24,7 @@ trigger integration; GitHub Actions is not part of app delivery.
 - Before panel upgrades, back up the database, verify current image digests,
   and ensure the release commit contains the features running in production.
 - For persistent data, inspect the actual driver and mount; a local directory
-  is not a separately billed provider disk or an enforced size reservation.
+  is not a separately billed Hetzner volume or an enforced size reservation.
 - Do not delete, purge, rollback, migrate, promote, or recover resources
   without explicit user intent.
 
@@ -57,12 +57,13 @@ does not read a manifest.
 Private Git checkout and registry push/pull credentials are explicit scoped
 connections, configured with `ocd source login` and `ocd registry login` or the
 panel connection cards. Public repositories need no Git token. DNS remains
-operator-owned; OCD only displays records. Hetzner remains optional
-infrastructure.
+operator-managed; OCD only displays records. Servers, volumes, and object
+storage are Hetzner Cloud resources managed by OCD.
 
 ## Typical workflow
 
 ```bash
+ocd bootstrap
 ocd login https://panel.example.com
 ocd doctor
 ocd manifest validate .ocd-deploy.json
@@ -88,6 +89,8 @@ OCD without GitHub Actions minutes.
 ## Command map
 
 ```text
+ocd bootstrap [--domain=HOSTNAME] [--app-domain=SUFFIX]
+    [--server-type=TYPE] [--location=LOCATION]
 ocd deploy [manifest] [--auth-password-env=KEY]
     [--commit=sha] [--server=ID] [--app=EXISTING_APP]
     [--dry-run] [--config-only]
@@ -122,11 +125,9 @@ ocd ops logs <id> [--tail N] [--since TIME|CURSOR] [--child NAME|ID]
     [--phase STEP] [--follow]
 ocd servers
 ocd servers show <name|id> [--storage]
-ocd servers enrollment-key
-ocd servers connect --name=X --address=X --routing-address=X --host-key='...'
 ocd resources
 ocd volumes
-ocd buckets <list|create|delete> [--storage=<connection>]
+ocd buckets <list|create|delete>
 ocd storage-readers <list|create|revoke>
 ocd ssh
 ```
@@ -147,7 +148,7 @@ OCD injects topic-scoped publish/subscribe tokens; use
 - [CLI reference](docs/cli-reference.md)
 - [Environments and secrets](docs/environments-and-secrets.md)
 - [Networking and ingress](docs/networking-and-ingress.md)
-- [Infrastructure and server enrollment](docs/infrastructure-and-enrollment.md)
+- [Hetzner infrastructure](docs/infrastructure-and-enrollment.md)
 - [Scaling, storage, and placement](docs/scaling-storage-and-placement.md)
 - [Operations, database recovery, and panel backups](docs/operations-and-recovery.md)
 - [Security and deletion](docs/security-and-deletion.md)

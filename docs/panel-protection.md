@@ -15,12 +15,13 @@ scheduling; OCD does not back up application data or schedule application jobs.
 
 ## Enable backups
 
-1. Connect and assign an S3-compatible provider in **Admin → Providers**.
+1. Configure Hetzner Object Storage in **Admin → Hetzner**.
 2. Enter an existing bucket in **Panel backups**. Use a dedicated prefix per panel
    (default `ocd-panel`). The credentials need GetObject, PutObject, and DeleteObject
    access to that prefix. Bucket creation remains in the object-storage controls.
 3. Create and download the recovery key. Save it **outside the panel**, together
-   with the S3 endpoint, region, bucket, and independent S3 access credentials.
+   with the Hetzner Object Storage region, bucket, and independent access
+   credentials.
 4. Enable daily backups and save. The first backup runs on the next engine tick.
 
 Defaults are one backup every 24 hours and seven successful backups retained.
@@ -32,7 +33,7 @@ A failed scheduled backup retries after an hour; there is no catch-up burst.
 Each `.ocdb` object contains a consistent SQLite `VACUUM INTO` snapshot, its
 checksum, SSH directory files, the panel's credential encryption/JWT secret,
 creation time, schema version, and recorded panel image. Configuration and
-provider credentials stored in SQLite are included. Build caches, app volumes,
+Hetzner credentials stored in SQLite are included. Build caches, app volumes,
 container images, application databases, external DNS, and infrastructure are
 not included. Keep the panel image available in your registry.
 
@@ -59,8 +60,8 @@ infrastructure or automatically move the panel to a different server.
 Supply secrets through environment variables, not command-line arguments:
 
 ```bash
-export OCD_S3_ENDPOINT=https://your-s3-endpoint.example
-export OCD_S3_REGION=your-region
+export OCD_S3_ENDPOINT=https://nbg1.your-objectstorage.com
+export OCD_S3_REGION=nbg1
 # Set these from your password manager or secret manager:
 # OCD_S3_ACCESS_KEY, OCD_S3_SECRET_KEY, OCD_RECOVERY_KEY
 

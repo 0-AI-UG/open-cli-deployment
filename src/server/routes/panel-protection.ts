@@ -1,4 +1,3 @@
-import { storageConnection, getProviderConnections } from "../../shared/provider-connections.ts";
 import { z } from "zod";
 import { unlinkSync } from "node:fs";
 import db, { getSettings, saveSetting, getServers } from "../../shared/db.ts";
@@ -14,7 +13,6 @@ import { sshExec } from "../../shared/remote/index.ts";
 
 const settingsSchema = z.object({
   backup_enabled: z.boolean(),
-  backup_connection: z.string(),
   backup_bucket: z.string().max(63).refine(v => !v || (validateBucketName(v).valid && v === v.trim().toLowerCase()), "Invalid bucket"),
   backup_prefix: z.string().max(200).regex(/^[a-zA-Z0-9_/-]*$/).refine(v => !v.startsWith("/") && !v.endsWith("/") && !v.includes("//"), "Use a relative prefix without trailing slash"),
   backup_retention: z.number().int().min(1).max(90),
@@ -25,10 +23,8 @@ export async function handleGetProtection(request: Request): Promise<Response> {
     await requireAdmin(request);
     const s = getSettings();
     return json({
-      backup_connection: s.panel_backup_connection || "",
-      storage_connections: getProviderConnections().filter(p => p.kind === "s3-compatible").map(p => ({ id: p.id, name: p.name, region: p.config.region })),
       backup_enabled: s.panel_backup_enabled === "1", backup_bucket: s.panel_backup_bucket || "", backup_prefix: s.panel_backup_prefix || "ocd-panel", backup_retention: Number(s.panel_backup_retention || 7),
-      recovery_key_configured: !!await secretStore.get("panel_backup_recovery_key"), storage_configured: !!(s.panel_backup_connection && await getS3Credentials(s.panel_backup_connection)), recovery_pending: recoveryPending(),
+      recovery_key_configured: !!await secretStore.get("panel_backup_recovery_key"), storage_configured: !!await getS3Credentials(), recovery_pending: recoveryPending(),
       backups: listBackups(), alerts: db.query("SELECT * FROM panel_alerts WHERE opened_at IS NOT NULL ORDER BY first_seen DESC LIMIT 50").all(),
       pending_operations: (db.query("SELECT count(*) AS n FROM operations WHERE status IN ('pending','running','compensating')").get() as { n: number }).n,
     });
@@ -40,12 +36,7 @@ export async function handleSaveProtection(request: Request): Promise<Response> 
     const parsed = settingsSchema.safeParse(await request.json());
     if (!parsed.success) return json({ error: "Invalid protection settings", issues: parsed.error.issues.map(i => ({ field: i.path.join("."), message: i.message })) }, 400);
     const value = parsed.data;
-    if (value.backup_enabled && (!value.backup_bucket || !(value.backup_connection && await getS3Credentials(value.backup_connection)) || !await secretStore.get("panel_backup_recovery_key"))) return json({ error: "Connect object storage, choose a bucket, and save your recovery key before enabling backups" }, 400);
-    if (value.backup_connection) {
-      const connection = storageConnection(value.backup_connection);
-      if (!connection) return json({ error: "Select a storage connection" }, 400);
-      value.backup_connection = connection.id;
-    }
+    if (value.backup_enabled && (!value.backup_bucket || !await getS3Credentials() || !await secretStore.get("panel_backup_recovery_key"))) return json({ error: "Configure Hetzner Object Storage, choose a bucket, and save your recovery key before enabling backups" }, 400);
     const old = getSettings();
     db.transaction(() => {
       for (const [key, val] of Object.entries(value)) {
@@ -93,7 +84,7 @@ export async function handleResumeRecovery(request: Request): Promise<Response> 
     for (const server of getServers()) {
       if (!server.ssh_host_key) { failures.push(`${server.name}: no pinned SSH host key`); continue; }
       try {
-        const result = await sshExec(server.management_address || server.ipv4, "docker ps --format '{{.Names}}' >/dev/null", server.ssh_host_key, { user: server.ssh_user, port: server.ssh_port });
+        const result = await sshExec(server.ipv4, "docker ps --format '{{.Names}}' >/dev/null", server.ssh_host_key);
         if (result.exitCode !== 0) failures.push(`${server.name}: Docker access failed`);
       } catch { failures.push(`${server.name}: SSH access failed`); }
     }

@@ -46,7 +46,7 @@ test("overdue panel backups use last successful backup or initial enable time", 
   expect(collectConditions(1000 + 27 * 3600000).some(c => c.key === "backup:overdue")).toBe(false);
 });
 test("retrying a failed backup does not send recovery until a verified backup succeeds", () => {
-  db.query("INSERT INTO panel_backups (id,created_at,status,bucket,object_key,endpoint,connection_id,region) VALUES ('failed',1,'failed','b','k','e','test','test'), ('retry',2,'running','b','k2','e','test','test')").run();
+  db.query("INSERT INTO panel_backups (id,created_at,status,bucket,object_key,endpoint,region) VALUES ('failed',1,'failed','b','k','e','test'), ('retry',2,'running','b','k2','e','test')").run();
   expect(collectConditions().some(c => c.key === "backup:failed")).toBe(true);
   db.query("UPDATE panel_backups SET status='complete' WHERE id='retry'").run();
   expect(collectConditions().some(c => c.key === "backup:failed")).toBe(false);

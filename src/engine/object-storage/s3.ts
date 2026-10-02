@@ -199,18 +199,36 @@ async function s3Request(
 
 }
 
-export async function getS3Credentials(connectionId?: string): Promise<S3Credentials | null> {
-  const { storageConnection, providerSecretKey } = await import("../../shared/provider-connections.ts");
-  const provider = storageConnection(connectionId);
-  if (!provider || provider.kind !== "s3-compatible") return null;
+export const HETZNER_S3_REGIONS = ["fsn1", "nbg1", "hel1"] as const;
+export type HetznerS3Region = (typeof HETZNER_S3_REGIONS)[number];
+export const HETZNER_S3_ACCESS_KEY = "hetzner_s3_access_key";
+export const HETZNER_S3_SECRET_KEY = "hetzner_s3_secret_key";
+export const HETZNER_S3_REGION_SETTING = "hetzner_s3_region";
+export const DEFAULT_HETZNER_S3_REGION: HetznerS3Region = "fsn1";
+
+export function isHetznerS3Region(value: string): value is HetznerS3Region {
+  return HETZNER_S3_REGIONS.includes(value as HetznerS3Region);
+}
+
+export function hetznerS3Endpoint(region: HetznerS3Region): string {
+  return `https://${region}.your-objectstorage.com`;
+}
+
+export function hetznerS3Region(settings: Record<string, string>): HetznerS3Region {
+  const region = settings[HETZNER_S3_REGION_SETTING] ?? "";
+  return isHetznerS3Region(region) ? region : DEFAULT_HETZNER_S3_REGION;
+}
+
+/** Hetzner Object Storage credentials, or null until both keys are configured. */
+export async function getS3Credentials(): Promise<S3Credentials | null> {
+  const { getSettings } = await import("../../shared/db.ts");
   const [accessKey, secretKey] = await Promise.all([
-    secretStore.get(providerSecretKey(provider.id, "access_key")),
-    secretStore.get(providerSecretKey(provider.id, "secret_key")),
+    secretStore.get(HETZNER_S3_ACCESS_KEY),
+    secretStore.get(HETZNER_S3_SECRET_KEY),
   ]);
-  const region = provider.config.region ?? "";
-  const endpoint = provider.config.endpoint ?? "";
-  if (!accessKey || !secretKey || !isS3Region(region) || !isS3Endpoint(endpoint)) return null;
-  return { accessKey, secretKey, region, endpoint };
+  if (!accessKey || !secretKey) return null;
+  const region = hetznerS3Region(getSettings());
+  return { accessKey, secretKey, region, endpoint: hetznerS3Endpoint(region) };
 }
 
 export async function listBuckets(

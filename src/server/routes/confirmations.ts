@@ -71,9 +71,7 @@ export async function handleCreateConfirmation(request: Request): Promise<Respon
       const server = db.getServers().find((row) => String(row.id) === resourceId || row.provider_id === resourceId);
       if (!server) return Response.json({ error: "Server not found" }, { status: 404, headers: corsHeaders });
       const apps = db.getApps(server.id);
-      summary = server.ownership === "connected"
-        ? `Disconnect externally owned server "${server.name}" (id ${server.id}) after destroying ${apps.length} app(s) assigned to it. The VPS itself will not be changed or deleted.`
-        : `Permanently delete managed server "${server.name}" (${server.provider_id || `id ${server.id}`}) and destroy ${apps.length} app(s) assigned to it.`;
+      summary = `Permanently delete Hetzner server "${server.name}" (${server.provider_id || `id ${server.id}`}) and destroy ${apps.length} app(s) assigned to it.`;
     } else if (action === "delete_stack") {
       const s = db.getStack(Number(resourceId));
       if (!s) return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
@@ -120,13 +118,13 @@ export async function handleCreateConfirmation(request: Request): Promise<Respon
       const plan = parseServerProvisioningResourceId(resourceId);
       if (!plan) return Response.json({ error: "Invalid server provisioning plan" }, { status: 400, headers: corsHeaders });
       summary =
-        `Allow creation of one or more billable provider servers as required for ${plan.reason}: ` +
+        `Allow creation of one or more billable Hetzner servers as required for ${plan.reason}: ` +
         `${plan.serverType} in ${plan.location}, pool${plan.pools.length === 1 ? "" : "s"} ${plan.pools.join(", ")}.`;
     } else if (action === "create_bucket") {
-      const region = (await getS3Credentials(resourceId.split(":")[0]))?.region || "the selected provider";
-      summary = `Create private S3-compatible bucket "${resourceId}" in ${region}. Provider billing may apply.`;
+      const region = (await getS3Credentials())?.region || "Hetzner Object Storage";
+      summary = `Create private bucket "${resourceId}" in Hetzner Object Storage (${region}). Hetzner billing may apply.`;
     } else if (action === "delete_bucket") {
-      summary = `Delete empty S3-compatible bucket "${resourceId}". OCD will refuse to recursively delete objects or versions.`;
+      summary = `Delete empty Hetzner Object Storage bucket "${resourceId}". OCD will refuse to recursively delete objects or versions.`;
     } else if (action === "promote_app") {
       const match = /^(\d+):(\d+)$/.exec(resourceId);
       const source = match ? db.getApp(Number(match[1])) : null;

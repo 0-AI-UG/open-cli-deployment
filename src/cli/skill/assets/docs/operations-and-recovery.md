@@ -106,7 +106,7 @@ members are retained and convergence skips them, while failed/unreconciled
 members continue from the dependency level that still needs work.
 
 Prefer retry when steps are idempotent/resumable and the external cause has
-been fixed: capacity, registry access, provider/API availability, health
+been fixed: capacity, registry access, Hetzner API availability, health
 endpoint, or invalid dependent state.
 
 ## Finalize
@@ -196,23 +196,23 @@ After validation, recreate/redeploy linked apps so they use current credentials.
 ## Volume recovery
 
 Destroyed app volumes are detached and retained as user-owned data.
-Provider block volumes remain billable; local directories occupy their host
+Hetzner volumes remain billable; local directories occupy their host
 disk without a separate storage charge. Their seven-day review date is not
-automatic deletion. Use provider Volumes for block disks and Server → Storage
+automatic deletion. Use Infrastructure → Volumes for Hetzner volumes and Server → Storage
 for retained local directories.
 
 Volumes created only by a failed deployment are retained as provisional for
 the same seven-day recovery window. After that date, the reconciler permanently
-deletes them only when no app or panel references the volume and the
-provider reports it detached. Automated deletion is written to the permanent
+deletes them only when no app or panel references the volume and
+Hetzner reports it detached. Automated deletion is written to the permanent
 volume audit. Adopting the volume before expiry removes it from provisional
 retention.
 
 Recovery:
 
-1. identify the retained provider volume and former owner;
+1. identify the retained Hetzner volume and former owner;
 2. verify backups and filesystem/application consistency;
-3. set that app manifest's `volume` to `{ "id": "<provider-id>", "size": <gb>, "path": "/data" }` and run `ocd deploy`;
+3. set that app manifest's `volume` to `{ "id": "<hetzner-volume-id>", "size": <gb>, "path": "/data" }` and run `ocd deploy`;
 4. verify mount path and ownership;
 5. restart/redeploy and validate;
 6. delete only after recovery is no longer required.
@@ -225,7 +225,7 @@ copy, and compare schema/table counts and data before cutover. Update committed
 stack manifests so a later reconciliation does not recreate retired databases.
 Retire migration jobs after verification; removing apps retains their storage.
 Delete old disks only within the user's authorized cleanup scope after checking
-exact provider IDs, detached state, ownership, and verified recovery material.
+exact Hetzner volume IDs, detached state, ownership, and verified recovery material.
 
 The OCD repository’s `services/postgres-backup` application runs TypeScript on Bun with
 PostgreSQL dump tools every six hours. It encrypts archives, uploads through
@@ -240,8 +240,8 @@ automatic historical deletion; panel-backup retention is a different feature.
 ## Panel backups and recovery
 
 **Admin → Panel** protects OCD's SQLite state, SSH files, and credential/JWT
-secret, not application databases, app volumes, images, or DNS. Select a named
-S3 connection, existing bucket and prefix, create/download the recovery key,
+secret, not application databases, app volumes, images, or DNS. Select an
+existing Hetzner Object Storage bucket and prefix, create/download the recovery key,
 and keep the key and independent storage credentials outside the panel.
 Daily backups default to seven retained successes; uploads are downloaded and
 checksum-verified before completion and retention. **Back up now** is available

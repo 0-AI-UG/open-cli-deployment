@@ -6,7 +6,7 @@ import { BOLD, DIM, GREEN, RESET, YELLOW } from "./format.ts";
 
 export type DeployReadiness = {
   ready: boolean;
-  provider: { status: string; configured: boolean };
+  hetzner: { status: string; configured: boolean };
   defaults: { status: string; server_type: string; location: string };
   worker: { status: string; online: number; total: number; candidate_server: { id: number; name: string } | null };
   registry: { status: string; configured: boolean; scope: string; username: string; covers_target: boolean | null };
@@ -63,9 +63,9 @@ export async function ensureBuildReadiness(repository = "", image = ""): Promise
     return;
   }
 
-  if (!readiness.provider.configured || !readiness.defaults.server_type || !readiness.defaults.location) {
+  if (!readiness.hetzner.configured || !readiness.defaults.server_type || !readiness.defaults.location) {
     throw new Error(
-      "No build worker or empty server is available. Configure provider/defaults in the panel, " +
+      "No build worker or empty server is available. Configure the Hetzner token and server defaults in the panel, " +
       "connect an empty server, or run `ocd doctor` for exact next actions.",
     );
   }

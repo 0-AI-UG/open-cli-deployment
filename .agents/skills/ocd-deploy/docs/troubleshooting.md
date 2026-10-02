@@ -66,10 +66,10 @@ ocd ops logs <id>
 Only use cancel, retry, or finalize after inspecting the operation and with
 explicit user intent.
 
-## Missing provider UI or provider key errors after a panel release
+## Missing UI or Hetzner key errors after a panel release
 
-Inspect the running panel image digest and its source commit, provider
-connections, and assignments before asking for credentials again. A release
+Inspect the running panel image digest, its source commit, and the configured
+status of the Hetzner settings before asking for credentials again. A release
 built from an older committed tree can omit features present in a custom image
 or uncommitted workspace. Existing encrypted keys may still be intact while the
 older code reads a legacy credential location. Check configured status without
@@ -93,8 +93,8 @@ confirmation token. Volume deletion additionally requires typing the exact ID.
 
 ## A local directory was displayed as a paid volume
 
-Current source separates provider Volumes from local directories in app/server
+Current source separates Hetzner Volumes from local directories in app/server
 Storage. Older panel/CLI versions may mix them and show the manifest's requested
 size as capacity. A `local:<server-id>:<name>` identity is server-local storage;
 verify its actual mount and host free space. Changing that display does not
-allocate a provider disk or move data. See [Storage](scaling-storage-and-placement.md#storage).
+allocate a Hetzner volume or move data. See [Storage](scaling-storage-and-placement.md#storage).

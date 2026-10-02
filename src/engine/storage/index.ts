@@ -1,14 +1,21 @@
+import type { StorageDriver } from "./contracts.ts";
+import { hetznerVolumeStorage } from "./hetzner-volume.ts";
 import { localDirectoryStorage } from "./local-directory.ts";
-import { providerBlockStorage } from "./provider-block.ts";
-import { registerStorageDriver } from "./registry.ts";
 
-registerStorageDriver(localDirectoryStorage);
-registerStorageDriver(providerBlockStorage("hetzner"));
+/** Hetzner volumes are the default. Server-local directories remain for
+ *  volumes that were created on a host's own disk. */
+const drivers = new Map<string, StorageDriver>(
+  [hetznerVolumeStorage, localDirectoryStorage].map((driver) => [driver.id, driver]),
+);
 
-export {
-  defaultStorageDriverForServer,
-  listStorageDrivers,
-  requireStorageDriver,
-  __replaceStorageDriversForTest,
-} from "./registry.ts";
+export function requireStorageDriver(id: string): StorageDriver {
+  const driver = drivers.get(id);
+  if (!driver) throw new Error(`Unknown storage driver: ${id || "(empty)"}`);
+  return driver;
+}
+
+export function defaultStorageDriver(): StorageDriver {
+  return requireStorageDriver("hetzner-block");
+}
+
 export type { StorageDriver, StorageVolume } from "./contracts.ts";

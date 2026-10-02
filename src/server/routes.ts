@@ -38,7 +38,7 @@ import {
   handlePromoteApp,
   handleGetAppStaging,
 } from "./routes/apps.ts";
-import { handleConnectServer, handleDeleteServer, handleGetServerEnrollmentKey, handleRefreshServers, handleSetServerPool } from "./routes/servers.ts";
+import { handleDeleteServer, handleRefreshServers, handleSetServerPool } from "./routes/servers.ts";
 import { handleGetSettings, handleSaveSettings, handleGetServerTypes } from "./routes/settings.ts";
 import { handleGetResources, handleGetServerMetricsHistory, handleDeleteResource, handleCreateServer, handleGetVolumeDetail, handleListVolumeFiles, handleGetVolumeFile, handleGetServerDetail, handleGetVolumeDeletionAudit } from "./routes/resources.ts";
 import { handleCreateBucket, handleDeleteBucket, handleGetBucket, handleGetBucketObject, handleListBucketObjects, handleListBuckets } from "./routes/buckets.ts";
@@ -120,13 +120,6 @@ import {
   handlePutRegistryConnection,
   handlePutSourceConnection,
 } from "./routes/readiness.ts";
-import {
-  handleCreateProvider,
-  handleDeleteProvider,
-  handleGetProviders,
-  handleSaveProviderAssignments,
-  handleUpdateProvider,
-} from "./routes/providers.ts";
 
 function appIdFrom(req: Request): number {
   const url = new URL(req.url);
@@ -144,11 +137,6 @@ function userIdFrom(req: Request): string {
   const url = new URL(req.url);
   const match = url.pathname.match(/\/api\/admin\/users\/([^/]+)/);
   return match ? match[1] : "";
-}
-
-function providerIdFrom(req: Request): string {
-  const match = new URL(req.url).pathname.match(/\/api\/admin\/providers\/([^/]+)/);
-  return match ? decodeURIComponent(match[1]) : "";
 }
 
 function serverIdFrom(req: Request): number {
@@ -282,10 +270,8 @@ export const apiRoutes = {
   // --- Servers ---
   "/api/servers": { GET: (req: Request) => handleGetServers(req) },
   "/api/servers/refresh": { POST: (req: Request) => handleRefreshServers(req) },
-  "/api/servers/enrollment-key": { GET: (req: Request) => handleGetServerEnrollmentKey(req) },
   "/api/servers/provisioning-defaults": { GET: (req: Request) => handleGetProvisioningDefaults(req) },
   "/api/readiness": { GET: (req: Request) => handleGetReadiness(req) },
-  "/api/servers/connect": { POST: (req: Request) => handleConnectServer(req) },
   "/api/servers/:id": { DELETE: (req: Request) => handleDeleteServer(req, serverIdFrom(req)) },
   "/api/servers/:id/pool": { PATCH: (req: Request) => handleSetServerPool(req, serverPathIdFrom(req)) },
   "/api/runners": {
@@ -358,17 +344,6 @@ export const apiRoutes = {
     PUT: (req: Request) => handleSaveSettings(req),
   },
   "/api/admin/settings/server-types": { GET: (req: Request) => handleGetServerTypes(req) },
-  "/api/admin/providers": {
-    GET: (req: Request) => handleGetProviders(req),
-    POST: (req: Request) => handleCreateProvider(req),
-  },
-  "/api/admin/providers/assignments": {
-    PUT: (req: Request) => handleSaveProviderAssignments(req),
-  },
-  "/api/admin/providers/:providerId": {
-    PUT: (req: Request) => handleUpdateProvider(req, providerIdFrom(req)),
-    DELETE: (req: Request) => handleDeleteProvider(req, providerIdFrom(req)),
-  },
   "/api/admin/connections": { GET: (req: Request) => handleGetConnections(req) },
   "/api/admin/connections/registry": {
     PUT: (req: Request) => handlePutRegistryConnection(req),

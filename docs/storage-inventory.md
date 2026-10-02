@@ -1,7 +1,7 @@
 # Storage inventory
 
-Infrastructure → Volumes and `ocd volumes` list provider block volumes. A
-successful provider inventory is authoritative; stale retirement records for
+Infrastructure → Volumes and `ocd volumes` list Hetzner volumes. A
+successful Hetzner inventory is authoritative; stale retirement records for
 missing disks do not appear as billable volumes.
 
 Server-local persistent directories appear in the server's Storage section,

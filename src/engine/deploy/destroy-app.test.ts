@@ -7,6 +7,7 @@ import { describe, test, expect, mock, beforeEach } from "bun:test";
 // imports resolve to the mocks.
 
 const compute = makeFakeComputeProvider();
+mock.module("../../shared/hetzner/index.ts", () => ({ hetzner: compute }));
 
 const sshExec = mock(async (..._args: unknown[]) => ({ exitCode: 0, stdout: "", stderr: "" }));
 const removeContainer = mock(async (..._args: unknown[]) => {});
@@ -37,7 +38,6 @@ mock.module("../../shared/github.ts", () => ({
 }));
 
 import * as db from "../../shared/db.ts";
-import { __replaceInfrastructureProvidersForTest } from "../../shared/providers/registry.ts";
 import { destroyApp } from "./lifecycle.ts";
 import { enqueueOperation, listChildOperations, markOperationFinished } from "../../shared/db/operations.ts";
 import destroyServerOp from "../ops/destroy-server.ts";
@@ -104,22 +104,6 @@ function freshServer() {
     type: "cx22",
     location: "fsn1",
     status: "ready",
-    provider: "hetzner",
-    ownership: "managed",
-  });
-}
-
-function freshConnectedServer() {
-  return db.insertServer({
-    name: `connected-${randomSuffix()}`,
-    provider_id: "",
-    ipv4: "1.2.3.4",
-    ipv6: "",
-    type: "external",
-    location: "external",
-    status: "ready",
-    provider: "",
-    ownership: "connected",
   });
 }
 
@@ -144,7 +128,6 @@ function attachReplica(appId: number, serverId: number, name: string) {
 }
 
 beforeEach(() => {
-  __replaceInfrastructureProvidersForTest([compute]);
   sshExec.mockClear();
   removeContainer.mockClear();
   syncAllTraefik.mockClear();
@@ -351,8 +334,8 @@ describe("destroyServer", () => {
     expect(result.error).toMatch(/not found/i);
   });
 
-  test("refuses to forget a connected host with retained server-local data", async () => {
-    const server = freshConnectedServer();
+  test("refuses to delete a server with retained server-local data", async () => {
+    const server = freshServer();
     const volumeId = `local:${server.id}:retained-data`;
     db.retireVolume({
       providerVolumeId: volumeId,

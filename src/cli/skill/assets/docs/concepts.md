@@ -34,15 +34,15 @@ so mapping changes are applied with the image built from that commit.
 Staging is an explicit app or stack target with its own environment and domain.
 Promotion copies an exact tested digest; it does not rebuild.
 
-## Provider boundaries
+## Integration boundaries
 
 Source checkout accepts compatible HTTPS Git hosts. Image publication accepts
 compatible OCI registries such as GHCR, GitLab, Docker Hub, Quay, Harbor, and
 self-hosted registries. GitHub signed push webhooks are the current automatic
 source trigger; manual deployment is not GitHub-dependent.
 
-DNS is manual and provider-neutral. Hetzner provisioning is optional. Connected
-operator-owned hosts support stateless workloads and server-local persistent
-directories. Provider block volumes require supported managed infrastructure.
-Local directories share the host disk and are shown in app/server Storage,
-separately from the provider Volumes inventory.
+DNS is manual and operator-managed. Servers, volumes, and object storage run on
+Hetzner Cloud only: every server is a managed Hetzner server provisioned by OCD.
+`hetzner-block` volumes can move between servers; `local-directory` volumes
+share one host's disk, are not portable, and are shown in app/server Storage,
+separately from the Hetzner Volumes inventory.

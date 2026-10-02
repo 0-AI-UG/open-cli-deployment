@@ -6,8 +6,6 @@ import { Btn, Card, EmptyState, PageHeader, PageShell, PageState, Spinner, showT
 
 type BucketDetail = {
   name: string;
-  connection_id: string;
-  connection_name: string;
   region: string;
   endpoint: string;
 };
@@ -31,8 +29,7 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-export function BucketDetailPage({ connectionId, bucketName }: { connectionId: string; bucketName: string }) {
-  const storageQuery = `storage=${encodeURIComponent(connectionId)}`;
+export function BucketDetailPage({ bucketName }: { bucketName: string }) {
   const [detail, setDetail] = useState<BucketDetail | null>(null);
   const [detailErr, setDetailErr] = useState<string | null>(null);
   const [prefix, setPrefix] = useState("");
@@ -44,10 +41,10 @@ export function BucketDetailPage({ connectionId, bucketName }: { connectionId: s
   const [objectLoading, setObjectLoading] = useState(false);
 
   useEffect(() => {
-    get(`/api/resources/buckets/${encodeURIComponent(bucketName)}?${storageQuery}`)
+    get(`/api/resources/buckets/${encodeURIComponent(bucketName)}`)
       .then(setDetail)
       .catch((err) => setDetailErr(err.message));
-  }, [bucketName, storageQuery]);
+  }, [bucketName]);
 
   const loadPrefix = useCallback(async (nextPrefix: string, cursor?: string) => {
     setListLoading(true);
@@ -55,7 +52,7 @@ export function BucketDetailPage({ connectionId, bucketName }: { connectionId: s
     try {
       const cursorQuery = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
       const result: ObjectPage = await get(
-        `/api/resources/buckets/${encodeURIComponent(bucketName)}/objects?${storageQuery}&prefix=${encodeURIComponent(nextPrefix)}${cursorQuery}`,
+        `/api/resources/buckets/${encodeURIComponent(bucketName)}/objects?prefix=${encodeURIComponent(nextPrefix)}${cursorQuery}`,
       );
       setPage(current => cursor && current
         ? { ...result, prefixes: [...current.prefixes, ...result.prefixes], objects: [...current.objects, ...result.objects] }
@@ -66,7 +63,7 @@ export function BucketDetailPage({ connectionId, bucketName }: { connectionId: s
     } finally {
       setListLoading(false);
     }
-  }, [bucketName, storageQuery]);
+  }, [bucketName]);
 
   useEffect(() => {
     if (detail) loadPrefix(prefix);
@@ -88,7 +85,7 @@ export function BucketDetailPage({ connectionId, bucketName }: { connectionId: s
     setObjectLoading(true);
     try {
       setObjectView(await get(
-        `/api/resources/buckets/${encodeURIComponent(bucketName)}/object?${storageQuery}&key=${encodeURIComponent(key)}`,
+        `/api/resources/buckets/${encodeURIComponent(bucketName)}/object?key=${encodeURIComponent(key)}`,
       ));
     } catch (err: any) {
       showToast(err.message, "error");
@@ -114,8 +111,7 @@ export function BucketDetailPage({ connectionId, bucketName }: { connectionId: s
       <PageHeader backHref="#/resources" backLabel="Back to resources" eyebrow="S3 bucket" title={detail.name} />
 
       <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Info label="Connection" value={detail.connection_name} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Info label="Region" value={detail.region} />
           <Info label="Endpoint" value={detail.endpoint} />
         </div>

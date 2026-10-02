@@ -29,7 +29,6 @@
   "environment": "shared-data",
   "storage": {
     "primary": {
-      "connection": "s3-compatible-3206399b",
       "bucket": "ocd-ceroai-backups",
       "prefix": "",
       "permissions": [

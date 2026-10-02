@@ -13,7 +13,6 @@ export interface StorageDriver {
   readonly id: string;
   readonly name: string;
   readonly portable: boolean;
-  supports(server: ServerRow): boolean;
   create(input: { server: ServerRow; name: string; sizeGb: number }): Promise<StorageVolume>;
   inspect(volumeId: string, server?: ServerRow): Promise<StorageVolume>;
   list(server?: ServerRow): Promise<StorageVolume[]>;

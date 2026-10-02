@@ -46,8 +46,6 @@ export interface SecretStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   delete(key: string): Promise<void>;
-  /** Read one infrastructure adapter's credential. Returns "" when unset. */
-  getInfrastructureToken(providerId: string): Promise<string>;
 }
 
 // Shared encryption key, cached after first derivation
@@ -118,19 +116,15 @@ class DbSecretStore implements SecretStore {
     const { default: db } = await import("./db.ts");
     db.query("DELETE FROM encrypted_secrets WHERE key = ?").run(key);
   }
-
-  async getInfrastructureToken(providerId: string) {
-    const { assignedProvider, providerSecretKey } = await import("./provider-connections.ts");
-    const connection = assignedProvider("infrastructure");
-    if (!connection || connection.kind !== providerId) return "";
-    return (await this.get(providerSecretKey(connection.id, "api_token"))) ?? "";
-  }
 }
 
 export const secretStore: SecretStore = new DbSecretStore();
 
-export function getInfrastructureToken(providerId: string) {
-  return secretStore.getInfrastructureToken(providerId);
+export const HETZNER_API_TOKEN = "hetzner_api_token";
+
+/** The Hetzner Cloud API token. Returns "" when unset. */
+export async function getHetznerToken(): Promise<string> {
+  return (await secretStore.get(HETZNER_API_TOKEN)) ?? "";
 }
 
 export function maskToken(token: string): string {

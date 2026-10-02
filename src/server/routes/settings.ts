@@ -2,9 +2,21 @@ import { corsHeaders } from "../lib/cors.ts";
 import { requireAdmin, requirePermission } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
-import { getInfrastructureToken, secretStore, maskToken } from "../../shared/secret-store.ts";
-import { assignedProvider } from "../../shared/provider-connections.ts";
-import { defaultInfrastructureProvider } from "../../shared/infrastructure.ts";
+import { getHetznerToken, HETZNER_API_TOKEN, secretStore, maskToken } from "../../shared/secret-store.ts";
+import { hetzner } from "../../shared/hetzner/index.ts";
+import {
+  HETZNER_S3_ACCESS_KEY,
+  HETZNER_S3_REGION_SETTING,
+  HETZNER_S3_REGIONS,
+  HETZNER_S3_SECRET_KEY,
+  hetznerS3Endpoint,
+  hetznerS3Region,
+  isHetznerS3Region,
+  listBuckets,
+} from "../../engine/object-storage/s3.ts";
+
+const isMasked = (value: string) => value === "****" || value.includes("...");
+const S3_SETTING_KEYS = new Set([HETZNER_S3_ACCESS_KEY, HETZNER_S3_SECRET_KEY, HETZNER_S3_REGION_SETTING]);
 
 const PLAIN_SETTING_KEYS = new Set([
   "github_oauth_client_id",
@@ -23,16 +35,20 @@ export async function handleGetSettings(request: Request): Promise<Response> {
     const githubOauthClientSecret = await secretStore.get("github_oauth_client_secret");
     const registryPassword = await secretStore.get("oci_registry_password");
     const githubBuildToken = await secretStore.get("github_build_token");
+    const hetznerToken = await getHetznerToken();
+    const s3AccessKey = await secretStore.get(HETZNER_S3_ACCESS_KEY);
+    const s3SecretKey = await secretStore.get(HETZNER_S3_SECRET_KEY);
     return Response.json(
       {
+        hetzner_api_token: maskToken(hetznerToken),
+        hetzner_configured: !!hetznerToken,
+        hetzner_s3_access_key: maskToken(s3AccessKey ?? ""),
+        hetzner_s3_secret_key: maskToken(s3SecretKey ?? ""),
+        hetzner_s3_region: hetznerS3Region(s),
+        hetzner_s3_configured: !!s3AccessKey && !!s3SecretKey,
+        hetzner_s3_regions: HETZNER_S3_REGIONS,
         github_oauth_client_id: s.github_oauth_client_id ?? "",
         github_oauth_client_secret: maskToken(githubOauthClientSecret ?? ""),
-        infrastructure_provider: (() => {
-          const connection = assignedProvider("infrastructure", s);
-          const adapter = defaultInfrastructureProvider(s);
-          return connection && adapter?.capabilities.compute
-            ? { id: connection.id, name: connection.name } : null;
-        })(),
         default_domain_suffix: s.default_domain_suffix ?? "",
         default_server_type: s.default_server_type ?? "",
         default_location: s.default_location ?? "",
@@ -54,11 +70,8 @@ export async function handleGetSettings(request: Request): Promise<Response> {
 export async function handleGetServerTypes(request: Request): Promise<Response> {
   try {
     await requirePermission(request, "servers.create");
-    const compute = defaultInfrastructureProvider(db.getSettings());
-    if (!compute?.capabilities.compute) return Response.json({ server_types: [] }, { headers: corsHeaders });
-    const token = await getInfrastructureToken(compute.id);
-    if (!token) return Response.json({ server_types: [] }, { headers: corsHeaders });
-    const types = await compute.listServerTypes();
+    if (!await getHetznerToken()) return Response.json({ server_types: [] }, { headers: corsHeaders });
+    const types = await hetzner.listServerTypes();
     return Response.json({ server_types: types }, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
@@ -70,13 +83,13 @@ export async function handleSaveSettings(request: Request): Promise<Response> {
     await requireAdmin(request);
     const settings = await request.json() as Record<string, unknown>;
 
-    if ("infrastructure_provider_id" in settings &&
-        settings.infrastructure_provider_id !== (assignedProvider("infrastructure")?.id ?? "")) {
-      return Response.json({ error: "Infrastructure provider changed. Reload settings before saving." }, { status: 409, headers: corsHeaders });
+    if ([...S3_SETTING_KEYS].some((key) => Object.hasOwn(settings, key))) {
+      const error = await saveObjectStorage(settings);
+      if (error) return Response.json({ error }, { status: 400, headers: corsHeaders });
     }
 
     for (const [key, rawValue] of Object.entries(settings)) {
-      if (key === "infrastructure_provider_id") continue;
+      if (S3_SETTING_KEYS.has(key)) continue;
       if (key === "require_2fa") {
         db.saveSetting(key, rawValue ? "1" : "0");
         continue;
@@ -95,7 +108,22 @@ export async function handleSaveSettings(request: Request): Promise<Response> {
           { status: 400, headers: corsHeaders },
         );
       }
-      if (key === "default_domain_suffix") {
+      if (key === "hetzner_api_token") {
+        if (isMasked(value)) continue;
+        if (value) {
+          const validation = hetzner.validateToken(value);
+          if (!validation.valid) {
+            return Response.json(
+              { error: `Hetzner API token: ${validation.error}` },
+              { status: 400, headers: corsHeaders },
+            );
+          }
+          await hetzner.verifyToken(value);
+          await secretStore.set(HETZNER_API_TOKEN, value);
+        } else {
+          await secretStore.delete(HETZNER_API_TOKEN);
+        }
+      } else if (key === "default_domain_suffix") {
         const suffix = value.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
         if (suffix && !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(suffix)) {
           return Response.json(
@@ -129,4 +157,39 @@ export async function handleSaveSettings(request: Request): Promise<Response> {
   } catch (error) {
     return handleError(error);
   }
+}
+
+/** Save Hetzner Object Storage credentials, verifying changed ones by listing
+ *  buckets. Returns an error message, or null on success. */
+async function saveObjectStorage(settings: Record<string, unknown>): Promise<string | null> {
+  const current = db.getSettings();
+  const [currentAccessKey, currentSecretKey] = await Promise.all([
+    secretStore.get(HETZNER_S3_ACCESS_KEY),
+    secretStore.get(HETZNER_S3_SECRET_KEY),
+  ]);
+  const submittedAccessKey = String(settings[HETZNER_S3_ACCESS_KEY] ?? "").trim();
+  const submittedSecretKey = String(settings[HETZNER_S3_SECRET_KEY] ?? "").trim();
+  const accessKey = isMasked(submittedAccessKey) ? currentAccessKey ?? "" : submittedAccessKey;
+  const secretKey = isMasked(submittedSecretKey) ? currentSecretKey ?? "" : submittedSecretKey;
+  const region = String(settings[HETZNER_S3_REGION_SETTING] ?? hetznerS3Region(current)).trim();
+  if (!isHetznerS3Region(region)) return `hetzner_s3_region must be one of ${HETZNER_S3_REGIONS.join(", ")}`;
+  if (!!accessKey !== !!secretKey) return "Both the Hetzner Object Storage access key and secret key are required";
+  const changed = accessKey !== (currentAccessKey ?? "") || secretKey !== (currentSecretKey ?? "") ||
+    region !== hetznerS3Region(current);
+  if (accessKey && secretKey && changed) {
+    try {
+      await listBuckets({ accessKey, secretKey, region, endpoint: hetznerS3Endpoint(region) });
+    } catch (error) {
+      return error instanceof Error ? error.message : "Could not verify Hetzner Object Storage credentials";
+    }
+  }
+  if (accessKey && secretKey) {
+    await secretStore.set(HETZNER_S3_ACCESS_KEY, accessKey);
+    await secretStore.set(HETZNER_S3_SECRET_KEY, secretKey);
+  } else {
+    await secretStore.delete(HETZNER_S3_ACCESS_KEY);
+    await secretStore.delete(HETZNER_S3_SECRET_KEY);
+  }
+  db.saveSetting(HETZNER_S3_REGION_SETTING, region);
+  return null;
 }

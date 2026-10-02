@@ -18,7 +18,7 @@ const RUN = process.env.RUN_INTEGRATION === "1" && !!process.env.HCLOUD_TOKEN;
 // Dynamic import so the heavy provider module isn't loaded in CI when skipped.
 async function loadProvider() {
   await secretStore.set("hetzner_api_token", process.env.HCLOUD_TOKEN!);
-  const mod = await import("../shared/providers/hetzner.ts");
+  const mod = await import("../shared/hetzner/index.ts");
   return mod.hetzner;
 }
 

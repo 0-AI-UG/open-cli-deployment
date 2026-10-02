@@ -78,7 +78,7 @@ after all replicas attest to replacement configuration; app deletion revokes
 managed grants. External readers use separate GET/HEAD-only grants and must be
 revoked explicitly.
 Revocation blocks new authorizations; already issued URLs can remain valid for
-up to one hour. Provider credentials stay in the panel.
+up to one hour. Hetzner Object Storage credentials stay in the panel.
 
 Specify only the needed manifest permissions: readers need `read`, while a
 backup writer that verifies uploads needs `read` and `write`. Add `delete` or

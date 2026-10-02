@@ -156,7 +156,7 @@ export function mergeDeployRequestWithExistingApp(
     container_port: supplied.container_port,
     env: supplied.env ?? {},
     outputs: supplied.outputs ?? {},
-    storage: resolveStorageBindings(supplied.storage, getAppStorage(app.id)),
+    storage: resolveStorageBindings(supplied.storage),
     notifications: normalizeNtfyBindings(supplied.notifications),
     public: publicApp,
     memory_mb: supplied.memory_mb ?? 0,

@@ -91,9 +91,8 @@ Domain omission retains its existing value; an empty string clears it.
 
 ## Object storage bindings
 
-`storage` maps binding names to `{ connection?, bucket, prefix, permissions, generation? }`.
-Select a connection by ID or unique name. Omitting it selects the default for a new
-binding; existing bindings keep their pinned connection. Permissions are `read`
+`storage` maps binding names to `{ bucket, prefix, permissions, generation? }` in
+OCD's Hetzner Object Storage account. Permissions are `read`
 (GET/HEAD), `write` (PUT), `delete`, and `list`. Prefix is explicit: use `""` for
 bucket root or a relative prefix ending in `/`. Bucket creation is separate.
 

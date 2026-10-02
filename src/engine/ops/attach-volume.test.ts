@@ -1,4 +1,4 @@
-import { useTempDataDir, makeFakeComputeProvider, randomSuffix, configureTestInfrastructureProvider } from "../../shared/test-helpers.ts";
+import { useTempDataDir, makeFakeComputeProvider, randomSuffix } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
@@ -7,7 +7,7 @@ import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 // op (static imports). The fake provider id is left as "hetzner" but the bind
 // step is exercised only via its (sleep-free) compensate path in these tests.
 const compute = makeFakeComputeProvider();
-mock.module("../../shared/providers/index.ts", () => ({ hetzner: compute }));
+mock.module("../../shared/hetzner/index.ts", () => ({ hetzner: compute }));
 
 const recreateAppContainer = mock(async () => ({ ok: true } as { ok: boolean; error?: string }));
 mock.module("../deploy/index.ts", () => ({ recreateAppContainer }));
@@ -20,7 +20,6 @@ mock.module("../../shared/remote/index.ts", () => ({
 }));
 
 import * as db from "../../shared/db.ts";
-import { __replaceInfrastructureProvidersForTest } from "../../shared/providers/registry.ts";
 import attachVolumeOp from "./attach-volume.ts";
 import attachExistingVolumeOp from "./attach-existing-volume.ts";
 import { __setBindImplForTest, __resetBindImplForTest } from "./_volumes.ts";
@@ -60,8 +59,6 @@ function makeApp(opts: { minReplicas?: number; maxReplicas?: number; withVolume?
     type: "cx22",
     location: "fsn1",
     status: "ready",
-    provider: "hetzner",
-    ownership: "managed",
   });
   const name = `av-${randomSuffix()}`;
   const { app, replica } = db.insertAppWithFirstReplica(
@@ -76,8 +73,6 @@ function makeApp(opts: { minReplicas?: number; maxReplicas?: number; withVolume?
 }
 
 beforeEach(() => {
-  __replaceInfrastructureProvidersForTest([compute]);
-  configureTestInfrastructureProvider(compute.id);
   compute._mocks.volumeCreate.mockClear();
   compute._mocks.volumeDelete.mockClear();
   compute._mocks.volumeAttach.mockClear();

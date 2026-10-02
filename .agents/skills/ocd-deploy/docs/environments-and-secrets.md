@@ -65,7 +65,7 @@ never persisted into the shared environment.
 
 Prefer app-owned `storage` bindings in the manifest; see
 [Object storage bindings](app-manifest.md#object-storage-bindings).
-Bindings need an existing bucket and administrator authorization to deploy.
+Bindings need an existing bucket and the global `apps.storage.bind` permission to deploy. Administrators have this permission implicitly.
 OCD injects scoped tokens directly into each app, overriding same-named
 app env values. Keep driver
 selection such as `STORAGE_DRIVER=ocd` in normal configuration. The token is
@@ -78,7 +78,7 @@ after all replicas attest to replacement configuration; app deletion revokes
 managed grants. External readers use separate GET/HEAD-only grants and must be
 revoked explicitly.
 Revocation blocks new authorizations; already issued URLs can remain valid for
-up to one hour. Provider credentials stay in the panel.
+up to one hour. Hetzner Object Storage credentials stay in the panel.
 
 Specify only the needed manifest permissions: readers need `read`, while a
 backup writer that verifies uploads needs `read` and `write`. Add `delete` or

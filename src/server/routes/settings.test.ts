@@ -1,4 +1,4 @@
-import { useTempDataDir, seedTestAdmin, configureTestInfrastructureProvider } from "../../shared/test-helpers.ts";
+import { useTempDataDir, seedTestAdmin } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { describe, test, expect, mock, beforeEach } from "bun:test";
@@ -18,10 +18,7 @@ mock.module("../lib/permissions.ts", () => ({
   requireAuthenticated: async () => ({ userId: seedTestAdmin(), username: "admin" }),
 }));
 
-const fakeProvider = {
-  id: "hetzner",
-  name: "Hetzner",
-  capabilities: { compute: true, volumes: true, privateNetwork: true, firewall: true },
+const fakeHetzner = {
   validateToken: (tok: string) => {
     if (!tok || tok.length < 32) return { valid: false, error: "too short" };
     if (!/^[\x20-\x7e]+$/.test(tok)) return { valid: false, error: "bad chars" };
@@ -40,11 +37,7 @@ const fakeProvider = {
   deleteServer: async () => {},
   listServers: async () => [],
 };
-mock.module("../../shared/providers/index.ts", () => ({
-  hetzner: fakeProvider,
-  getInfrastructureProvider: (id: string) => id === "hetzner" ? fakeProvider : undefined,
-  listInfrastructureProviders: () => [fakeProvider],
-}));
+mock.module("../../shared/hetzner/index.ts", () => ({ hetzner: fakeHetzner }));
 const realS3 = await import("../../engine/object-storage/s3.ts");
 mock.module("../../engine/object-storage/s3.ts", () => ({
   ...realS3,
@@ -53,7 +46,6 @@ mock.module("../../engine/object-storage/s3.ts", () => ({
 
 import * as db from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
-import { __replaceInfrastructureProvidersForTest } from "../../shared/providers/registry.ts";
 import {
   handleGetSettings,
   handleSaveSettings,
@@ -69,9 +61,9 @@ function req(body?: unknown): Request {
 }
 
 beforeEach(async () => {
-  __replaceInfrastructureProvidersForTest([fakeProvider as any]);
-  configureTestInfrastructureProvider("hetzner");
-  await secretStore.delete("provider.hetzner-test.api_token");
+  await secretStore.delete("hetzner_api_token");
+  await secretStore.delete("hetzner_s3_access_key");
+  await secretStore.delete("hetzner_s3_secret_key");
   await secretStore.delete("github_oauth_client_secret");
   await secretStore.delete("oci_registry_password");
 });
@@ -124,7 +116,7 @@ describe("handleSaveSettings: plain db settings", () => {
     expect(r.status).toBe(400);
   });
 
-  test("saves the provider-neutral default domain suffix and server defaults", async () => {
+  test("saves the default domain suffix and server defaults", async () => {
     const r = await handleSaveSettings(
       req({
         default_domain_suffix: "apps.example.org",
@@ -162,39 +154,56 @@ describe("handleSaveSettings: plain db settings", () => {
 });
 
 describe("handleGetServerTypes", () => {
-  test("returns the server types from the active compute provider", async () => {
-    await secretStore.set("provider.hetzner-test.api_token", "x".repeat(40));
+  test("returns the Hetzner server types", async () => {
+    await secretStore.set("hetzner_api_token", "x".repeat(40));
     const r = await handleGetServerTypes(req());
     expect(r.status).toBe(200);
     const body = (await r.json()) as { server_types: Array<{ name: string }> };
     expect(body.server_types.map((t) => t.name)).toContain("cx22");
   });
 
-  test("returns an empty provider-neutral result when Hetzner is not configured", async () => {
+  test("returns an empty result when Hetzner is not configured", async () => {
     const r = await handleGetServerTypes(req());
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ server_types: [] });
   });
 });
 
+describe("Hetzner settings", () => {
+  test("stores a verified API token and masks it", async () => {
+    const token = "t".repeat(64);
+    expect((await handleSaveSettings(req({ hetzner_api_token: token }))).status).toBe(200);
+    expect(await secretStore.get("hetzner_api_token")).toBe(token);
+    const body = await (await handleGetSettings(req())).json();
+    expect(body.hetzner_configured).toBe(true);
+    expect(body.hetzner_api_token).toBe("tttt...tttt");
+    expect((await handleSaveSettings(req({ hetzner_api_token: body.hetzner_api_token }))).status).toBe(200);
+    expect(await secretStore.get("hetzner_api_token")).toBe(token);
+    await handleSaveSettings(req({ hetzner_api_token: "" }));
+    expect(await secretStore.get("hetzner_api_token")).toBeNull();
+  });
 
-test("rejects defaults submitted for a stale infrastructure connection", async () => {
-  const before = db.getSettings().default_server_type;
-  const response = await handleSaveSettings(req({
-    infrastructure_provider_id: "removed-connection",
-    default_server_type: "wrong-provider-size",
-  }));
-  expect(response.status).toBe(409);
-  expect(db.getSettings().default_server_type).toBe(before);
-});
+  test("rejects an invalid API token", async () => {
+    expect((await handleSaveSettings(req({ hetzner_api_token: "short" }))).status).toBe(400);
+    expect(await secretStore.get("hetzner_api_token")).toBeNull();
+  });
 
+  test("stores Object Storage credentials and region", async () => {
+    const r = await handleSaveSettings(req({
+      hetzner_s3_access_key: "access-key",
+      hetzner_s3_secret_key: "secret-key-value",
+      hetzner_s3_region: "nbg1",
+    }));
+    expect(r.status).toBe(200);
+    const body = await (await handleGetSettings(req())).json();
+    expect(body.hetzner_s3_configured).toBe(true);
+    expect(body.hetzner_s3_region).toBe("nbg1");
+    expect(body.hetzner_s3_regions).toEqual(["fsn1", "nbg1", "hel1"]);
+  });
 
-test("settings identify the assigned compute connection and omit it for connected hosts", async () => {
-  await configureTestInfrastructureProvider();
-  const managed = await (await handleGetSettings(req())).json();
-  expect(managed.infrastructure_provider.id).toBeTruthy();
-  expect(managed.infrastructure_provider.name).toBeTruthy();
-  db.saveSetting("provider_assignments", "{}");
-  const connected = await (await handleGetSettings(req())).json();
-  expect(connected.infrastructure_provider).toBeNull();
+  test("rejects an unknown region or a single Object Storage key", async () => {
+    expect((await handleSaveSettings(req({ hetzner_s3_region: "us-east-1" }))).status).toBe(400);
+    expect((await handleSaveSettings(req({ hetzner_s3_access_key: "only-access" }))).status).toBe(400);
+    expect(await secretStore.get("hetzner_s3_access_key")).toBeNull();
+  });
 });

@@ -211,9 +211,6 @@ async function migrateWithVolume(
   if (!driver.portable) {
     throw new Error(`Volume ${app.volume_id} uses non-portable storage driver ${driver.id} and cannot move between servers`);
   }
-  if (!driver.supports(sourceServer) || !driver.supports(targetServer)) {
-    throw new Error(`Storage driver ${driver.id} does not support both migration servers`);
-  }
   if (sourceServer.location !== targetServer.location) {
     throw new Error(
       `Cannot migrate: volume lives in ${sourceServer.location}, target server is in ${targetServer.location}. The storage driver is bound to a single location.`,

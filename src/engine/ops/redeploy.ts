@@ -1,7 +1,7 @@
 import { reconcileNtfyService } from "../ntfy/service.ts";
 import { appNtfyEnv, prepareNtfyBindings, normalizeNtfyBindings } from "../../shared/ntfy.ts";
 import { resolveRuntimeEnv, serializeRuntimeConfig } from "../../shared/runtime-env.ts";
-import { appStorageEnv, prepareStorageBindings, resolveStorageBindings, getAppStorage } from "../../shared/object-storage.ts";
+import { appStorageEnv, prepareStorageBindings, resolveStorageBindings } from "../../shared/object-storage.ts";
 import * as db from "../../shared/db.ts";
 import {
   pullImmutableImageAndRun,
@@ -113,7 +113,7 @@ async function candidateEnvVars(app: AppRow, candidate: DeployRequest | null, ct
   const notifications = normalizeNtfyBindings(candidate.notifications);
   await prepareNtfyBindings(app.id, notifications);
   if (Object.keys(notifications).length) await reconcileNtfyService(ctx, true);
-  const bindings = resolveStorageBindings(candidate.storage, getAppStorage(app.id));
+  const bindings = resolveStorageBindings(candidate.storage);
   await prepareStorageBindings(app, bindings);
   const platform = platformEnvVars(effectiveApp);
   return { ...platform, ...values, ...await appStorageEnv(app.id, bindings), ...await appNtfyEnv(app.id, notifications), OCD_DEPLOY_TARGET: platform.OCD_DEPLOY_TARGET };

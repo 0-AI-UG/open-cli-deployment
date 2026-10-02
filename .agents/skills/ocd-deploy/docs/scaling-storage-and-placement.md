@@ -51,16 +51,16 @@ ocd scale migrate my-app 42 --to=7
 Declare the primary `volume` and `extra_volumes` in the manifest. The primary
 `volume` field is required: `null` means no attached volume, an object without
 `id` means an OCD-managed volume, and an object with `id` adopts that exact
-provider volume. `ocd deploy` is the only topology/size/path mutation path.
+Hetzner volume. `ocd deploy` is the only topology/size/path mutation path.
 
 Use `ocd volumes` and `ocd resources` only to inspect volumes, browse files,
 review deletion audit records, or permanently delete
 an unused volume. The browser shows manifest intent and observed attachment as
 separate read-only state; it has no volume controls.
 
-The default driver depends on server ownership and the assigned infrastructure
-provider. A compatible managed provider host prefers provider block storage;
-otherwise OCD selects server-local storage. Inspect the actual driver and mount
+There are two drivers. `hetzner-block` is a Hetzner volume that can be detached
+and moved to another server. `local-directory` is a server-local directory.
+Inspect the actual driver and mount
 instead of inferring it from the server's location or a manifest size.
 Server-local directories live under `/var/lib/ocd/volumes`; they survive
 container replacement but share the host disk, have no separate storage charge,
@@ -70,8 +70,8 @@ another server through replica migration.
 
 ### Inventory and disk usage
 
-- Infrastructure → Volumes and `ocd volumes` list provider block volumes only,
-  with capacity, attachment and estimated provider cost. A successful provider
+- Infrastructure → Volumes and `ocd volumes` list Hetzner volumes only,
+  with capacity, attachment and estimated Hetzner cost. A successful Hetzner
   listing excludes stale records for disks that no longer exist.
 - App → Storage and `ocd app show <app> --storage` show persistent mounts and
   measured usage; the CLI also shows image storage.
@@ -87,9 +87,9 @@ capacity. Inspect server free space because images and other workloads share it.
 
 Verify `SHOW data_directory` and its mount after deploying or consolidating a
 database. A host directory is persistent across containers but does not provide
-an independently detachable provider disk. Preserve the requested storage type
-when migrating; choosing a separate provider volume requires a compatible driver
-and confirmation of the actual provider attachment.
+an independently detachable Hetzner volume. Preserve the requested storage type
+when migrating; choosing a separate Hetzner volume requires the `hetzner-block`
+driver and confirmation of the actual volume attachment.
 
 OCD caps apps with a primary volume at one replica. Raising `replicas` does not
 configure PostgreSQL replication. Database replication needs separate data

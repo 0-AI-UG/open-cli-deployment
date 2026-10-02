@@ -100,7 +100,7 @@ ${BOLD}Commands:${RESET}
   source                 Connect private Git checkout credentials
   resources              Inventory and estimated cost
   volumes                Manage attached and retained volumes
-  buckets                Manage S3-compatible buckets
+  buckets                Manage Hetzner Object Storage buckets
   storage-readers        Manage read-only external bucket access
   gc [--server X]        Preview safe disk garbage collection (--execute to apply)
   ssh <app> <cmd>        Run a command in an app container
