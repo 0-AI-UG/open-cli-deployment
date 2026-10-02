@@ -395,7 +395,7 @@ export function PageShell({
         {head.length > 0 && (
           <>
             {divider()}
-            <div className="mb-px">{head}</div>
+            <div className="section-sides mb-px">{head}</div>
           </>
         )}
         {/* The header band and the panel share one divider: the tab bar's
@@ -411,7 +411,7 @@ export function PageShell({
         ))}
         {rest.length > 0 && (
           // The panel runs down to the footer rule, which closes it.
-          <div className={`zone-panel space-y-6 ${flush ? "zone-panel-flush" : ""} ${className}`}>{rest}</div>
+          <div className={`zone-panel section-sides space-y-6 ${flush ? "zone-panel-flush" : ""} ${className}`}>{rest}</div>
         )}
       </main>
       {/* The sheet closes with a full-width dashed rule, like the header's,
@@ -424,7 +424,7 @@ export function PageShell({
 // A band of its own between the page header and the content panel: solid
 // sides, no inset, so its content's rules meet the dividers (see PageShell).
 export function PageSection({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`zone-panel zone-panel-flush ${className}`}>{children}</section>;
+  return <section className={`zone-panel zone-panel-flush section-sides ${className}`}>{children}</section>;
 }
 
 export function PageHeader({

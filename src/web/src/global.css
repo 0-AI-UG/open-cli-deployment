@@ -286,6 +286,19 @@ body {
 .zone-panel { position: relative; padding-block: 16px; }
 /* The last band runs down to the footer rule, which closes it. */
 .page-rails > .zone-panel:last-child { flex: 1 0 auto; }
+/* Inside a section (header band, PageSection, content panel) the rails run
+   solid; only the empty bands between sections keep the dashes. The solid
+   sides are an overlay on the rails' own pixels, so nothing inside moves
+   and tinted rows can't hide them. */
+@media (min-width: 768px) {
+  .section-sides { position: relative; }
+  .section-sides::after {
+    content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background:
+      linear-gradient(rgb(var(--line-strong)), rgb(var(--line-strong))) left / 1px 100% no-repeat,
+      linear-gradient(rgb(var(--line-strong)), rgb(var(--line-strong))) right / 1px 100% no-repeat;
+  }
+}
 @media (min-width: 768px) {
   .zone-panel { padding-block: 32px; }
   .zone-panel .grid:has(> .frame) { gap: 24px; }
