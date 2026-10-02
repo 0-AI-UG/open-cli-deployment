@@ -398,6 +398,13 @@ body {
   border-right: 1px solid rgb(var(--line)); border-bottom: 1px solid rgb(var(--line));
   margin: 0 -1px -1px 0; background: transparent;
 }
+/* Card grid: the same rules for a grid of interactive cards, which keep
+   their own hover and busy tints. */
+.card-grid { overflow: hidden; }
+.card-grid > * {
+  border-right: 1px solid rgb(var(--line)); border-bottom: 1px solid rgb(var(--line));
+  margin: 0 -1px -1px 0;
+}
 
 /* Hero sheet: the lime flare (see .flare-lime) as a page lead. Tokens are
    re-pointed inside it: white type, a cream primary button with ink text and
