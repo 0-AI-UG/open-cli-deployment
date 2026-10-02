@@ -472,7 +472,7 @@ export function DashboardPage() {
       {opRows.length === 0
         ? <p className="px-4 py-5 text-sm text-muted">{recentOps == null && liveOps.length === 0 ? "You don't have access to operations." : "No operations yet."}</p>
         : (
-          <div className="divide-y">
+          <div className="divide-y border-b">
             {opRows.map((op) => (
               <a key={op.id} href={`#/engine/op/${op.id}`} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-subtle/50">
                 {opChip(op)}
@@ -595,11 +595,13 @@ export function DashboardPage() {
     <PageShell width="xl" flush>
       {header}
       <PageSection>{stats}</PageSection>
-      <div className="split-nodes grid lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="split-nodes grid lg:grid-cols-[minmax(0,1fr)_24px_380px]">
         <section className="flex min-w-0 flex-col">
+          {/* Counts sit on the right, like the side panels' links, so all
+              three headers are one line and the same height. */}
           <CardHeader
             title="Applications"
-            description={nothingDeployed ? undefined : `${standaloneApps.length} standalone · ${stacks.length} stack${stacks.length === 1 ? "" : "s"}`}
+            actions={nothingDeployed ? undefined : <span className="text-xs text-muted">{`${standaloneApps.length} standalone · ${stacks.length} stack${stacks.length === 1 ? "" : "s"}`}</span>}
           />
           {nothingDeployed ? (
             <EmptyState
@@ -609,7 +611,7 @@ export function DashboardPage() {
               description={<>Deploy your first app from the CLI with <code className="rounded bg-subtle px-1 py-0.5 font-mono text-xs text-fg">ocd deploy</code>; it will show up here.</>}
             />
           ) : (
-            <div className="divide-y">
+            <div className="divide-y border-b">
               {standaloneApps.map((app) => renderAppRow(app))}
               {stacks.map((stack) => renderStackGroup(stack, {
                 apps: appsByStack.get(stack.id) ?? [],
@@ -617,6 +619,8 @@ export function DashboardPage() {
             </div>
           )}
         </section>
+        {/* A gutter between two rules sets the columns apart. */}
+        <div aria-hidden="true" className="hidden border-l lg:block" />
         <div className="flex flex-col max-lg:border-t lg:border-l">
           {serversCard}
           {operationsCard}

@@ -35,7 +35,8 @@ export const securityHeaders: Record<string, string> = {
 // static-serving path (see src/server/index.ts).
 export const htmlCsp =
   "default-src 'self'; " +
-  "img-src 'self' data: blob:; " +
+  // GitHub avatars for accounts linked through GitHub sign-in.
+  "img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
   "style-src 'self' 'unsafe-inline'; " +
   "script-src 'self'; " +
   "font-src 'self' data:; " +

@@ -102,6 +102,8 @@ function UserMenu({ hash }: { hash: string }) {
   }, [open]);
 
   const initial = (user?.username || "?").charAt(0).toUpperCase();
+  // A blocked or broken avatar URL falls back to the initial instead of an empty ring.
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const itemClass = "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-fg-dim transition-colors hover:bg-subtle hover:text-fg";
 
   return (
@@ -114,8 +116,8 @@ function UserMenu({ hash }: { hash: string }) {
         title={user?.username}
         className={`grid h-8 w-8 place-items-center rounded-full border bg-surface p-0.5 transition-colors hover:border-frame ${open ? "border-frame" : "border-line-strong"}`}
       >
-        {user?.githubAvatarUrl
-          ? <img src={user.githubAvatarUrl} alt="" className="h-full w-full rounded-full" />
+        {user?.githubAvatarUrl && !avatarFailed
+          ? <img src={user.githubAvatarUrl} alt="" onError={() => setAvatarFailed(true)} className="h-full w-full rounded-full" />
           : <span className="grid h-full w-full place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">{initial}</span>}
       </button>
 
