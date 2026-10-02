@@ -21,22 +21,26 @@ export function StorageMounts({ mounts, title = "Storage" }: { mounts: StorageMo
     />
     {!mounts.length && <EmptyState message="No persistent directories recorded." icon={Folder} className="py-10" />}
     <div className="divide-y">
-      {mounts.map((mount, index) => {
+      {[...mounts].sort((a, b) => Number(a.state === "retained") - Number(b.state === "retained")).map((mount, index) => {
         const local = mount.kind === "local-directory";
+        const retained = mount.state === "retained";
         const Icon = local ? Folder : HardDrive;
-        return <div key={`${mount.id}:${index}`} className="px-4 py-3">
+        return <div key={`${mount.id}:${index}`} className={`px-4 py-3 ${retained ? "opacity-70" : ""}`}>
           <div className="flex items-center gap-3">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Icon size={15} /></span>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-medium text-fg">{mount.app_name}</span>
+                <span className="truncate text-sm font-medium text-fg">{retained ? <><span className="font-normal text-muted">formerly </span>{mount.app_name}</> : mount.app_name}</span>
                 <Badge tone={statusTone(mount.state)}>{humanize(mount.state)}</Badge>
               </div>
-              <div className="mt-0.5 text-xs text-muted">{local ? "Server-local directory" : "Hetzner block volume"}</div>
+              <div className="mt-0.5 text-xs text-muted">
+                {retained ? "Leftover server-local directory · not mounted by any app" : local ? "Server-local directory" : "Hetzner block volume"}
+              </div>
             </div>
           </div>
           <dl className="mt-2.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1.5 rounded-md border bg-canvas/50 px-3 py-2.5 text-xs">
             <Fact label="Usage">{storageUsage(mount.used_bytes)}</Fact>
+            {!local && <Fact label="Volume ID" mono>{mount.id}</Fact>}
             {local && <Fact label="Allocation">Shares server disk · no separate storage charge</Fact>}
             <Fact label="Server" mono={!!mount.server_name}>{mount.server_name || "Host unavailable"}</Fact>
             <Fact label="Host path" mono>{mount.host_path}</Fact>

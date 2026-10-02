@@ -34,7 +34,7 @@ interface HostProbe {
 }
 
 interface ServerDetail extends Server {
-  local_storage?: StorageMount[];
+  storage?: StorageMount[];
   status: string;
   ipv6: string;
   routing_address: string;
@@ -126,8 +126,8 @@ async function showServer(ref: string, diagnosticsOnly = false, storage = false)
   console.log(`${DIM}Cost:${RESET} ${detail.monthly_eur == null ? "-" : `${detail.currency} ${detail.monthly_eur.toFixed(2)}/month`}`);
 
   if (storage) {
-    console.log(`\n${BOLD}Server-local storage — shares server disk; no separate storage charge${RESET}`);
-    table(["APP", "STATE", "HOST PATH", "MOUNT", "USAGE"], (detail.local_storage || []).map(m => [m.app_name, m.state, m.host_path, m.container_path || "-", storageUsage(m.used_bytes)]));
+    console.log(`\n${BOLD}Server storage${RESET} ${DIM}— server-local directories share the server disk; retained ones are no longer mounted${RESET}`);
+    table(["APP", "TYPE", "STATE", "HOST PATH", "MOUNT", "USAGE"], (detail.storage || []).map(m => [m.app_name, m.kind, m.state, m.host_path, m.container_path || "-", storageUsage(m.used_bytes)]));
     return;
   }
 

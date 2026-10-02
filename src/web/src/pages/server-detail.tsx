@@ -51,7 +51,7 @@ type HostProbe = {
 };
 
 type ServerDetail = {
-  local_storage?: StorageMount[];
+  storage?: StorageMount[];
   id: number;
   name: string;
   provider_id: string;
@@ -299,7 +299,7 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
         )}
       </Card>
 
-      <StorageMounts mounts={detail.local_storage || []} title="Server storage" />
+      <StorageMounts mounts={detail.storage || []} title="Server storage" />
 
       <Card className="overflow-hidden">
         <CardHeader

@@ -1,4 +1,4 @@
-import { localStorageInventory, measureStorage } from "../lib/storage-inventory.ts";
+import { localStorageInventory, measureStorage, serverStorageInventory } from "../lib/storage-inventory.ts";
 import { localVolumeIdentity } from "../../shared/storage-display.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { requirePermission } from "../lib/permissions.ts";
@@ -699,7 +699,7 @@ export async function handleGetServerDetail(request: Request, serverId: number):
       memory_percent: latest?.memory_percent ?? null,
       disk_used_gb: latest?.disk_used_gb && latest.disk_used_gb > 0 ? latest.disk_used_gb : null,
       disk_total_gb: latest?.disk_total_gb && latest.disk_total_gb > 0 ? latest.disk_total_gb : null,
-      local_storage: await measureStorage(localStorageInventory().filter(m => m.server_id === server.id)),
+      storage: await measureStorage(serverStorageInventory(server.id)),
       disk_free_gb: latest?.disk_total_gb && latest.disk_total_gb > 0
         ? Math.round((latest.disk_total_gb - latest.disk_used_gb) * 10) / 10
         : null,

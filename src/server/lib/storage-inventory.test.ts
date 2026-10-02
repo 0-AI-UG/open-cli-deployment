@@ -2,7 +2,7 @@ import { useTempDataDir } from "../../shared/test-helpers.ts";
 useTempDataDir();
 import { expect, test } from "bun:test";
 import * as db from "../../shared/db.ts";
-import { appStorageMounts, localStorageInventory } from "./storage-inventory.ts";
+import { appStorageMounts, localStorageInventory, serverStorageInventory } from "./storage-inventory.ts";
 import { localVolumeIdentity, storageUsage } from "../../shared/storage-display.ts";
 
 test("local storage retains its host identity after app deletion and has no advertised capacity", () => {
@@ -36,4 +36,17 @@ test("invalid local IDs cannot become host paths and missing usage is not zero",
   expect(localVolumeIdentity("123456")).toBeNull();
   expect(storageUsage(null)).toBe("Usage unavailable");
   expect(storageUsage(0)).toBe("0.00 GiB used");
+});
+
+test("server storage includes attached block volumes alongside retained local directories", () => {
+  const server = db.insertServer({ name: "mixed-host", provider_id: "mixed-test", ipv4: "127.0.0.2", ipv6: "", type: "test", location: "nbg1", status: "ready" });
+  const app = db.insertApp({ name: "mixed-db", domain: "", image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 5432, env_vars: "{}" });
+  db.updateAppVolume(app.id, "777777", "/mnt/mixed:/var/lib/postgresql/data", true, "hetzner");
+  db.insertReplica({ app_id: app.id, server_id: server.id, container_name: "mixed-db", host_port: 0 });
+  db.retireVolume({ providerVolumeId: `local:${server.id}:old-mixed-db`, formerResourceType: "app", formerResourceId: app.id, formerResourceName: "mixed-db", reason: "test", driverId: "local-directory" });
+  const entries = serverStorageInventory(server.id);
+  expect(entries.map(m => [m.id, m.kind, m.state])).toEqual([
+    ["777777", "provider-volume", "attached"],
+    [`local:${server.id}:old-mixed-db`, "local-directory", "retained"],
+  ]);
 });

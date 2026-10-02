@@ -17,16 +17,28 @@ export function appStorageMounts(app: ReturnType<typeof db.getApps>[number]): St
   return mounts;
 }
 
-export function localStorageInventory(): StorageMount[] {
-  const mounts = db.getApps().flatMap(appStorageMounts).filter(m => m.kind === "local-directory");
+function retainedLocalDirectories(tracked: StorageMount[]): StorageMount[] {
+  const mounts: StorageMount[] = [];
   for (const retired of db.getRetiredVolumes()) {
     const local = localVolumeIdentity(retired.provider_volume_id);
-    if (!local || retired.state === "deleted" || mounts.some(m => m.id === retired.provider_volume_id)) continue;
+    if (!local || retired.state === "deleted" || tracked.some(m => m.id === retired.provider_volume_id)) continue;
     mounts.push({ id: retired.provider_volume_id, kind: "local-directory", server_id: local.serverId,
       server_name: db.getServer(local.serverId)?.name || "", app_name: retired.former_resource_name,
       host_path: local.hostPath, container_path: "", state: "retained", used_bytes: null });
   }
   return mounts;
+}
+
+export function localStorageInventory(): StorageMount[] {
+  const mounts = db.getApps().flatMap(appStorageMounts).filter(m => m.kind === "local-directory");
+  return [...mounts, ...retainedLocalDirectories(mounts)];
+}
+
+/** Everything persisted on one server: attached block volumes, live local
+ * directories, and retained local directories no app mounts anymore. */
+export function serverStorageInventory(serverId: number): StorageMount[] {
+  const mounts = db.getApps().flatMap(appStorageMounts);
+  return [...mounts, ...retainedLocalDirectories(mounts)].filter(m => m.server_id === serverId);
 }
 
 const usageCache = new Map<string, { until: number; bytes: number | null }>();
