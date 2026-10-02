@@ -22,6 +22,8 @@
     "engine": "OCD_MODE=engine bun run src/engine/entrypoint.ts",
     "engine:dev": "OCD_MODE=engine bun run src/engine/entrypoint.ts",
     "dev": "bun run build:css && OCD_MODE=server SKIP_2FA=1 bun --watch run src/server/index.ts",
+    "seed:demo": "bun run scripts/seed-demo.ts",
+    "dev:demo": "bun run seed:demo && bun run build:css && OCD_MODE=server OCD_DATA_DIR=.demo-data OCD_ENGINE=0 PORT=3002 SKIP_2FA=1 bun --watch run src/server/index.ts",
     "build:css": "tailwindcss -c tailwind.config.cjs -i src/web/src/tailwind.css -o src/web/src/tailwind.generated.css --minify",
     "build": "bun run build:css && bun build src/web/index.html --outdir=src/web/dist",
     "typecheck": "tsc --noEmit",
