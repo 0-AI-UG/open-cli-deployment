@@ -90,7 +90,7 @@ export function PanelProtection() {
               <NeoSelect value={validBucket ? form.backup_bucket : ""} onChange={value => set("backup_bucket", value)} options={buckets.map(name => ({ value: name, label: name }))} disabled={busy || bucketsLoading || !!bucketError || buckets.length === 0} placeholder={bucketsLoading ? "Loading buckets…" : bucketError ? "Buckets unavailable" : buckets.length === 0 ? "No buckets found" : "Select a bucket"} />
               {bucketError && <p role="alert" className="text-xs text-danger">{bucketError}</p>}
               {!bucketsLoading && !bucketError && form.backup_bucket && !validBucket && <p role="alert" className="text-xs text-danger">The saved bucket “{form.backup_bucket}” is unavailable. Select an existing bucket.</p>}
-              {!bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg">Resources</a>, then refresh this list.</p>}
+              {!bucketsLoading && !bucketError && buckets.length === 0 && <p className="text-xs text-muted">Create a bucket in <a href="#/resources" className="text-fg underline decoration-line-strong underline-offset-2">Resources</a>, then refresh this list.</p>}
               <Btn size="xs" variant="ghost" disabled={busy || bucketsLoading} onClick={() => { setBucketList(null); setBucketRefresh(value => value + 1); }}><RefreshCw size={12} /> {bucketError ? "Retry" : "Refresh buckets"}</Btn>
             </div>
           </Field>

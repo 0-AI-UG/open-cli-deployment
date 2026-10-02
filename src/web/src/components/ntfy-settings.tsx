@@ -59,7 +59,7 @@ export function NtfyServiceSettings() {
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Bell size={15} /></span>
         <div className="min-w-0"><div className="truncate text-sm font-medium text-fg">{state.app.name}</div><div className="truncate font-mono text-xs text-muted">{state.app.domain}</div></div>
       </div>
-      <a href={`#/apps/${state.app.id}`} className="inline-flex items-center gap-1 text-sm text-fg-dim hover:text-fg hover:underline">Open app <ExternalLink size={13} /></a>
+      <a href={`#/apps/${state.app.id}`} className="inline-flex items-center gap-1 text-sm text-fg-dim hover:text-fg">Open app <ExternalLink size={13} /></a>
     </div> : <div className="border-b">
       <div className="px-4 pt-4"><h3 className="text-sm font-semibold text-fg">Create notification app</h3><p className="mt-0.5 text-xs text-muted">Deploy a private ntfy server for OCD alerts.</p></div>
       <div className="px-4">
@@ -81,7 +81,7 @@ export function NtfyServiceSettings() {
       </div>
     </>}
     {!!(form.app_id || state?.opId || state?.delivery?.pending || state?.delivery?.failed) && <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-subtle/40 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">{state?.opId && <a className="font-medium text-fg hover:underline" href={`#/engine/op/${state.opId}`}>View operation →</a>}{!!state?.delivery?.pending && <span className="tabular-nums">{state.delivery.pending} queued</span>}{!!state?.delivery?.failed && <span className="tabular-nums text-danger">{state.delivery.failed} failed</span>}</div>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted">{state?.opId && <a className="font-medium text-fg" href={`#/engine/op/${state.opId}`}>View operation →</a>}{!!state?.delivery?.pending && <span className="tabular-nums">{state.delivery.pending} queued</span>}{!!state?.delivery?.failed && <span className="tabular-nums text-danger">{state.delivery.failed} failed</span>}</div>
       {!!form.app_id && <Btn variant="primary" loading={busy} onClick={() => apply()}>Save settings</Btn>}
     </div>}
   </Card>;
@@ -109,7 +109,7 @@ export function UserNtfySettings() {
       </div>
       <div className="flex justify-end gap-2 border-t bg-subtle/40 px-4 py-3"><Btn variant="primary" loading={busy} onClick={() => action(async () => { await put("/api/auth/notifications", form); setSecret(null); await load(); showToast("Notification preferences saved", "success"); })}>Save preferences</Btn></div>
       {state.connection && <div className="border-t">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4"><div className="flex items-center gap-2"><Server size={14} className="text-muted" /><h3 className="text-sm font-semibold text-fg">Connect your ntfy client</h3></div><a href={state.connection.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-fg-dim hover:text-fg hover:underline">Open server <ExternalLink size={13} /></a></div>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4"><div className="flex items-center gap-2"><Server size={14} className="text-muted" /><h3 className="text-sm font-semibold text-fg">Connect your ntfy client</h3></div><a href={state.connection.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-fg-dim hover:text-fg">Open server <ExternalLink size={13} /></a></div>
         <div className="mx-4 mb-4 mt-3 rounded-lg border bg-canvas/50 px-3"><ConnectionRow label="Server" value={state.connection.url} /><ConnectionRow label="Topic" value={state.connection.topic} /><ConnectionRow label="User" value={state.connection.username} />{secret && <ConnectionRow label="Password" value={secret.password} />}</div>
         <div className="flex flex-wrap items-center gap-2 border-t bg-subtle/40 px-4 py-3"><Btn size="xs" disabled={busy} onClick={() => action(async () => { if (secret) setSecret(null); else setSecret(await post("/api/auth/notifications/credentials", {})); })}>{secret ? "Hide password" : "Show password"}</Btn><Btn size="xs" disabled={busy || !state.available} onClick={() => action(async () => { await post("/api/auth/notifications/test", {}); showToast("Test notification queued", "success"); })}><Send size={12} /> Send test</Btn><Btn size="xs" variant="ghost" disabled={busy} onClick={() => action(load)}><RefreshCw size={12} /> Refresh</Btn>{state.delivery && <span className="ml-auto text-xs text-muted">{state.delivery.sent_at ? "Delivered" : state.delivery.error || "Queued"}</span>}</div>
       </div>}

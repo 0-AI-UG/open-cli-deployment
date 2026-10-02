@@ -38,7 +38,7 @@ export function OverviewTab({
           <DataRow label="Created">{new Date(stack.created_at).toLocaleString()}</DataRow>
           <DataRow label="Environment">
             {prodEnv
-              ? <a href="#/environments" className="font-medium text-fg hover:underline">{prodEnv}</a>
+              ? <a href="#/environments" className="font-medium text-fg">{prodEnv}</a>
               : <span className="text-muted">None</span>}
           </DataRow>
         </Card>
@@ -62,7 +62,7 @@ export function OverviewTab({
             {memberApps.map((a) => (
               <tr key={a.id}>
                 <td>
-                  <a href={`#/apps/${a.id}`} className="font-medium text-fg hover:underline">{a.name}</a>
+                  <a href={`#/apps/${a.id}`} className="font-medium text-fg">{a.name}</a>
                 </td>
                 <td>
                   <StatusBadge

@@ -83,7 +83,7 @@ export function IncidentPage({ id }: { id: string }) {
           {[ ["Opened", incidentDate(incident.opened_at ?? incident.first_seen)], ["Resolved", incident.resolved_at === null ? "Still active" : incidentDate(incident.resolved_at)], ["Duration", incidentDuration(incident)] ].map(([label, value]) => <div key={label} className="flex min-h-11 items-center justify-between gap-4 border-b px-4 py-2.5 last:border-b-0"><dt className="shrink-0 text-sm text-muted">{label}</dt><dd className="min-w-0 text-right text-sm tabular-nums text-fg">{value}</dd></div>)}
         </dl>
         <div className="border-t bg-subtle/40 px-4 py-2">
-          <a className="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-fg hover:underline max-md:min-h-11" href={`#${incident.path}`}>
+          <a className="inline-flex min-h-9 items-center gap-1.5 text-sm font-medium text-fg max-md:min-h-11" href={`#${incident.path}`}>
             {guide.linkLabel} <ArrowRight size={14} />
           </a>
         </div>

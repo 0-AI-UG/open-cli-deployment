@@ -63,7 +63,7 @@ export function IncidentsPanel() {
             <div className="flex min-w-0 items-center gap-3">
               <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border ${isResolved ? "bg-subtle text-muted" : "border-danger/20 bg-danger/10 text-danger"}`}><AlertTriangle size={15} /></span>
               <div className="min-w-0">
-                <div className="break-words text-sm font-medium text-fg group-hover:underline">{item.title}</div>
+                <div className="break-words text-sm font-medium text-fg">{item.title}</div>
                 <div className="mt-0.5 break-all text-xs text-muted">{incidentGuide(item.key).category}</div>
               </div>
             </div>

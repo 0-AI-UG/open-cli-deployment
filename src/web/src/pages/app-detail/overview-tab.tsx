@@ -80,7 +80,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, set
                 : <span className="text-muted">none</span>}
             </DataRow>
             {app.deployed_by_username && <DataRow label="Last deployed by">{app.deployed_by_username}</DataRow>}
-            {app.environment_name && <DataRow label="Environment"><a href="#/environments" className="font-medium text-fg hover:underline">{app.environment_name}</a></DataRow>}
+            {app.environment_name && <DataRow label="Environment"><a href="#/environments" className="font-medium text-fg">{app.environment_name}</a></DataRow>}
           </div>
         </Card>
 
@@ -89,7 +89,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, set
           <div>
             {app.domain && app.public ? (
               <DataRow label="Public URL">
-                <a href={`https://${app.domain}`} target="_blank" rel="noopener" className="truncate font-mono text-xs text-fg hover:underline">https://{app.domain}</a>
+                <a href={`https://${app.domain}`} target="_blank" rel="noopener" className="truncate font-mono text-xs text-fg">https://{app.domain}</a>
                 <CopyButton text={`https://${app.domain}`} />
                 <a href={`https://${app.domain}`} target="_blank" rel="noopener" title="Open in new tab" className="inline-grid shrink-0 place-items-center rounded p-1 text-muted transition-colors hover:bg-subtle hover:text-fg"><ExternalLink size={12} /></a>
               </DataRow>
@@ -116,7 +116,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, set
           <Table headers={["Server", "Declared", "Running"]}>
             {placement.map((entry) => (
               <tr key={entry.server_id}>
-                <td><a href={`#/resources/servers/${entry.server_id}`} className="text-fg hover:underline">{entry.server_name}</a></td>
+                <td><a href={`#/resources/servers/${entry.server_id}`} className="text-fg">{entry.server_name}</a></td>
                 <td className="tabular-nums text-fg-dim">{entry.replicas}</td>
                 <td className="tabular-nums text-fg-dim">{replicas.filter((replica) => replica.server_id === entry.server_id && replica.status === "running").length}</td>
               </tr>

@@ -224,7 +224,7 @@ function OpRow({ op, showProgress }: { op: OperationView; showProgress?: boolean
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-2">
-            <span className="truncate text-sm font-medium text-fg group-hover:underline">{op.label || op.kind}</span>
+            <span className="truncate text-sm font-medium text-fg">{op.label || op.kind}</span>
             <span className="shrink-0 font-mono text-xs text-muted">#{op.id}</span>
           </div>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">

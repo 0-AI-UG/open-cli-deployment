@@ -138,7 +138,7 @@ export function DashboardPage() {
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <a href={`#/apps/${app.id}`} className="truncate text-sm font-medium text-fg hover:underline">{app.name}</a>
+              <a href={`#/apps/${app.id}`} className="truncate text-sm font-medium text-fg">{app.name}</a>
               {address.private && <Badge>Private</Badge>}
               {(app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0) > 1 && <Badge>{(app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0)} replicas</Badge>}
             </div>
@@ -181,7 +181,7 @@ export function DashboardPage() {
         <div className="flex items-start gap-3">
           <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border bg-subtle text-muted ${app.status === "paused" ? "opacity-60" : ""}`}><Box size={16} /></span>
           <div className="min-w-0 flex-1">
-            <a href={`#/apps/${app.id}`} className="block truncate text-sm font-semibold text-fg hover:underline">{app.name}</a>
+            <a href={`#/apps/${app.id}`} className="block truncate text-sm font-semibold text-fg">{app.name}</a>
             <div className="mt-0.5 flex min-w-0 items-center gap-1 text-muted">
               {address.href ? (
                 <a href={address.href} target="_blank" rel="noopener" className="flex min-w-0 items-center gap-1 transition-colors hover:text-fg" title={address.label}>
@@ -225,7 +225,7 @@ export function DashboardPage() {
         <div className="flex items-start gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand text-brand-fg"><Boxes size={16} /></span>
           <div className="min-w-0 flex-1">
-            <a href={`#/stacks/${stack.id}`} onClick={(event) => event.stopPropagation()} className="block truncate text-sm font-semibold text-fg hover:underline">{stack.name}</a>
+            <a href={`#/stacks/${stack.id}`} onClick={(event) => event.stopPropagation()} className="block truncate text-sm font-semibold text-fg">{stack.name}</a>
             <div className="mt-0.5 truncate text-xs text-muted">Stack · {members.length} app{members.length === 1 ? "" : "s"}</div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
@@ -268,7 +268,7 @@ export function DashboardPage() {
                 <a
                   href={`#/stacks/${stack.id}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="truncate text-sm font-medium text-fg hover:underline"
+                  className="truncate text-sm font-medium text-fg"
                 >{stack.name}</a>
                 <Badge>Stack</Badge>
               </div>
@@ -362,7 +362,7 @@ export function DashboardPage() {
       <Stat label="Apps" value={apps.length} hint={`${running} running${paused > 0 ? ` · ${paused} paused` : ""}`} className="px-6 py-5" />
       <Stat label="Servers" value={servers ? servers.length : "—"} hint={servers ? `${readyServers} ready` : "No access"} className="px-6 py-5" />
       <Stat label="Need attention" value={attention} tone={attention > 0 ? "danger" : undefined} hint={attention > 0 ? "Failing or degraded" : "None"} className="px-6 py-5" />
-      <Stat label="Open incidents" value={activeIncidents ?? "—"} tone={incidents > 0 ? "danger" : undefined} hint={activeIncidents == null ? "No access" : incidents > 0 ? <a href="#/incidents" className="hover:underline">Review now →</a> : "None"} className="px-6 py-5" />
+      <Stat label="Open incidents" value={activeIncidents ?? "—"} tone={incidents > 0 ? "danger" : undefined} hint={activeIncidents == null ? "No access" : incidents > 0 ? <a href="#/incidents">Review now →</a> : "None"} className="px-6 py-5" />
     </div>
   );
 
@@ -387,7 +387,7 @@ export function DashboardPage() {
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Server size={16} /></span>
                     <div className="min-w-0">
-                      <div className="truncate font-mono text-sm font-semibold text-fg group-hover:underline">{server.name}</div>
+                      <div className="truncate font-mono text-sm font-semibold text-fg">{server.name}</div>
                       <div className="truncate text-xs text-muted">{[server.type?.toUpperCase(), server.location].filter(Boolean).join(" · ")}{server.build_worker ? " · build worker" : ""}</div>
                     </div>
                   </div>

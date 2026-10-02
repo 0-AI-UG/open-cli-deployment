@@ -39,10 +39,10 @@ export function ReplicasTable({
           <td className="whitespace-nowrap">
             {context === "app"
               ? r.server
-                ? <a href={`#/resources/servers/${r.server.id}`} className="text-fg-dim hover:text-fg hover:underline">{r.server.name}</a>
+                ? <a href={`#/resources/servers/${r.server.id}`} className="text-fg-dim hover:text-fg">{r.server.name}</a>
                 : <span className="text-muted">—</span>
               : r.app
-                ? <a href={`#/apps/${r.app.id}`} className="font-medium text-fg hover:underline">{r.app.name}</a>
+                ? <a href={`#/apps/${r.app.id}`} className="font-medium text-fg">{r.app.name}</a>
                 : <span className="text-muted">—</span>}
           </td>
           <td className="font-mono text-xs text-fg-dim">{r.host_port ?? "—"}</td>

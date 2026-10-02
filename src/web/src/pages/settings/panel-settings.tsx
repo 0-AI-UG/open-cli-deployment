@@ -67,7 +67,7 @@ export function PanelSettings() {
           <CardHeader icon={<ServerIcon size={15} />} title="Panel (self-hosted)" description="Redeploys automatically when main is pushed" actions={<StatusBadge status={panel.status} />} />
           <div>
             <DataRow label="Domain" mono>
-              <a href={`https://${panel.domain}`} target="_blank" rel="noreferrer" className="break-all text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg">{panel.domain}</a>
+              <a href={`https://${panel.domain}`} target="_blank" rel="noreferrer" className="break-all text-fg underline decoration-line-strong underline-offset-2">{panel.domain}</a>
             </DataRow>
             <DataRow label="Server" mono>{server ? `${server.name} (${server.ipv4})` : "—"}</DataRow>
             <DataRow label="Image" mono><span className="min-w-0 break-all">{image}</span>{image !== "—" && <CopyButton text={image} />}</DataRow>

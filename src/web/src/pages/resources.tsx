@@ -60,7 +60,7 @@ export function ResourcesPage() {
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <span className={tileClass}><Server size={15} /></span>
                   <div className="min-w-0">
-                    <a href={`#/resources/servers/${s.id}`} className="block truncate text-sm font-medium text-fg hover:underline">
+                    <a href={`#/resources/servers/${s.id}`} className="block truncate text-sm font-medium text-fg">
                       {s.name}
                     </a>
                     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">
@@ -114,7 +114,7 @@ export function ResourcesPage() {
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <span className={tileClass}><Cloud size={15} /></span>
                       <div className="min-w-0">
-                        <a href={`#/resources/buckets/${encodeURIComponent(bucket.name)}`} className="block truncate text-sm font-medium text-fg hover:underline">
+                        <a href={`#/resources/buckets/${encodeURIComponent(bucket.name)}`} className="block truncate text-sm font-medium text-fg">
                           {bucket.name}
                         </a>
                         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted">
@@ -157,7 +157,7 @@ export function ResourcesPage() {
                       <span className={tileClass}><HardDrive size={15} /></span>
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-2">
-                          <a href={`#/resources/volumes/${encodeURIComponent(v.id)}`} className="truncate text-sm font-medium text-fg hover:underline">
+                          <a href={`#/resources/volumes/${encodeURIComponent(v.id)}`} className="truncate text-sm font-medium text-fg">
                             {v.name}
                           </a>
                           {v.app_name && <Badge tone="info">{v.app_name}</Badge>}

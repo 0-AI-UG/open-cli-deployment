@@ -131,7 +131,7 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
                 </p>
               )}
               {op.error?.superseded_by && (
-                <a href={`#/engine/op/${op.error.superseded_by}`} className="inline-flex items-center gap-1 text-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg">
+                <a href={`#/engine/op/${op.error.superseded_by}`} className="inline-flex items-center gap-1 text-sm text-fg underline decoration-line-strong underline-offset-2">
                   Newer operation #{op.error.superseded_by} took ownership of these resources
                   <ArrowRight size={13} />
                 </a>
@@ -166,7 +166,7 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-baseline gap-2">
-                        <span className="min-w-0 truncate text-sm font-medium text-fg group-hover:underline">{c.label || c.kind}</span>
+                        <span className="min-w-0 truncate text-sm font-medium text-fg">{c.label || c.kind}</span>
                         <span className="shrink-0 font-mono text-xs text-muted">#{c.id}</span>
                       </div>
                       <div className="mt-0.5 break-words font-mono text-xs text-muted">{(c.resource_labels ?? c.resource_keys).join(", ")}</div>
