@@ -47,7 +47,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-4">
+      <div className="frame bg-surface"><div className="cells grid grid-cols-2 sm:grid-cols-4">
         <Stat
           className="bg-surface px-4 py-3.5"
           label="Uptime · 24h"
@@ -72,7 +72,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
           value={`r${app.config_revision ?? 1}`}
           hint={app.deployed_by_username ? `Deployed by ${app.deployed_by_username}` : "OCD revision"}
         />
-      </div>
+      </div></div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="min-w-0 overflow-hidden">

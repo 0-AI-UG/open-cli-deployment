@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import { get, post, del, put } from "../../api/client.ts";
 import { Card, CardHeader, Btn, Badge, Table, Field, DataRow, InfoTip, InlineNotice, EmptyState, StatusBadge, CopyButton, humanize, showToast, confirm, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
 import { TabBar } from "../../components/tab-bar.tsx";
+import { useHashParam } from "../../hooks/use-hash-param.ts";
 import { NeoSelect } from "../../components/neo-select.tsx";
-import { ArrowRight, Users, Plus, Trash2, Shield, ShieldCheck, Key, ShieldAlert, Save, RefreshCw, Server as ServerIcon, Settings, Copy, Check, Hammer, Cloud, Rocket, Package, GitBranch, LogIn, Webhook, History, ChevronDown, ChevronRight, Fingerprint } from "lucide-react";
+import { HetznerIcon, GitHubIcon, gitHostIcon } from "../../components/brand-icons";
+import { ArrowRight, Users, Plus, Trash2, Shield, ShieldCheck, Key, ShieldAlert, Save, RefreshCw, Server as ServerIcon, Settings, Copy, Check, Hammer, Cloud, Rocket, Package, GitBranch, History, ChevronDown, ChevronRight, Fingerprint } from "lucide-react";
 import type { PanelApp, DeploymentRecord } from "../../types.ts";
 import { DnsInstructionView } from "../../components/dns-instruction.tsx";
 import { runCliAction } from "../../api/cli-actions.ts";
@@ -76,7 +78,6 @@ type BuildSource = {
 
 type Readiness = {
   ready: boolean;
-  defaults: { status: string; server_type: string; location: string };
   worker: { status: string; online: number; total: number };
   registry: { status: string; configured: boolean; scope: string };
   source: { status: string; configured: boolean; host: string };
@@ -96,7 +97,7 @@ const ADMIN_SECTIONS: Array<{ key: AdminSection; label: string }> = [
 ];
 
 export function UsersPage() {
-  const [section, setSection] = useState<AdminSection>("overview");
+  const [section, setSection] = useHashParam("section", ADMIN_SECTIONS.map((item) => item.key), "overview");
   // --- Users ---
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -539,16 +540,17 @@ export function UsersPage() {
           title={<span className="inline-flex items-center gap-1">Deploy readiness <InfoTip>The first deploy can create missing build capacity automatically. Review required actions below before deploying.</InfoTip></span>}
           actions={<Btn size="xs" variant="ghost" onClick={refreshReadiness}><RefreshCw size={12} /> Recheck</Btn>}
         />
-        <div className="grid grid-cols-2 gap-px bg-line lg:grid-cols-4">
+        <div className="cells grid grid-cols-2 lg:grid-cols-4">
           {[
-            ["Hetzner", hetznerStatus.configured ? "Connected" : "Not configured", hetznerStatus.configured],
-            ["Server defaults", readiness.defaults.server_type ? `${readiness.defaults.server_type} / ${readiness.defaults.location}` : "Not configured", !!readiness.defaults.server_type],
-            ["Build worker", `${readiness.worker.online} online`, readiness.worker.online > 0],
-            ["Registry", readiness.registry.configured ? readiness.registry.scope : "Not connected", readiness.registry.configured],
-          ].map(([label, value, ok]) => <div key={String(label)} className="min-w-0 bg-surface px-4 py-3.5">
+            { label: "Hetzner", value: hetznerStatus.configured ? "Connected" : "Not configured", ok: hetznerStatus.configured, Logo: HetznerIcon },
+            { label: "Git source", value: readiness.source.configured ? readiness.source.host : "Not connected", ok: readiness.source.configured, Logo: gitHostIcon(readiness.source.host) },
+            { label: "Build worker", value: `${readiness.worker.online} online`, ok: readiness.worker.online > 0 },
+            { label: "Registry", value: readiness.registry.configured ? readiness.registry.scope : "Not connected", ok: readiness.registry.configured },
+          ].map(({ label, value, ok, Logo }) => <div key={String(label)} className="min-w-0 bg-surface px-4 py-3.5">
             <div className="flex items-center gap-1.5 text-xs text-muted">
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ok ? "bg-success" : "bg-warning"}`} />
               {label}
+              {Logo && <Logo size={12} className="ml-auto" />}
             </div>
             <div className="mt-1 break-all text-sm font-medium text-fg">{value}</div>
           </div>)}
@@ -566,17 +568,17 @@ export function UsersPage() {
       </Card>}
 
       {section === "overview" && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="frame bg-surface"><div className="cells grid sm:grid-cols-2 lg:grid-cols-3">
           {[
-            { key: "hetzner" as const, label: "Hetzner", value: hetznerStatus.configured ? "Connected" : "Not set", unit: hetznerStatus.s3Configured ? "Object Storage connected" : "Object Storage not configured", icon: Cloud },
+            { key: "hetzner" as const, label: "Hetzner", value: hetznerStatus.configured ? "Connected" : "Not set", unit: hetznerStatus.s3Configured ? "Object Storage connected" : "Object Storage not configured", icon: HetznerIcon },
             { key: "infrastructure" as const, label: "Infrastructure", value: settingsForm.default_domain_suffix || "—", unit: "App domain", icon: ServerIcon },
             { key: "build" as const, label: "Build & Registry", value: readiness?.worker.online ?? 0, unit: "workers online", icon: Hammer },
             { key: "panel" as const, label: "Panel", value: panel ? panel.status : "—", unit: panel ? "Self-hosted" : "External", icon: Settings },
             { key: "users" as const, label: "Users & Security", value: users.length, unit: require2fa ? "users · 2FA required" : "users", icon: Users },
           ].map((item) => (
-            <button key={item.key} type="button" onClick={() => setSection(item.key)} className="group flex min-h-28 w-full flex-col justify-between rounded-lg border bg-surface p-4 text-left shadow-xs transition-colors hover:border-line-strong hover:bg-subtle/40 focus-visible:outline-none focus-visible:ring-2">
+            <button key={item.key} type="button" onClick={() => setSection(item.key)} className="group flex min-h-28 w-full flex-col justify-between px-5 py-4 text-left transition-colors hover:bg-brand/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset">
               <span className="flex w-full items-center gap-2.5 text-sm font-medium text-fg">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><item.icon size={15} /></span>
+                <item.icon size={16} className="shrink-0 text-muted transition-colors group-hover:text-fg" />
                 {item.label}
                 <ArrowRight size={14} className="ml-auto text-muted transition-colors group-hover:text-fg" />
               </span>
@@ -586,12 +588,12 @@ export function UsersPage() {
               </span>
             </button>
           ))}
-        </div>
+        </div></div>
       )}
 
       {section === "hetzner" && <Card className="overflow-hidden">
         <CardHeader
-          icon={<Cloud size={15} />}
+          icon={<HetznerIcon size={15} />}
           title="Hetzner"
           description={`Cloud API ${hetznerStatus.configured ? "connected" : "not configured"} · Object Storage ${hetznerStatus.s3Configured ? `connected (${settingsForm.hetzner_s3_region})` : "not configured"}`}
           actions={<Btn size="xs" onClick={() => setHetznerEditing((open) => !open)}>{hetznerEditing ? "Close" : "Edit"}</Btn>}
@@ -702,7 +704,7 @@ export function UsersPage() {
 
         <div>
           <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><GitBranch size={15} /></span>
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted">{(() => { const SourceIcon = gitHostIcon(settingsForm.github_build_host || readiness?.source.host); return <SourceIcon size={15} />; })()}</span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 text-sm font-medium text-fg">
                 Private Git repositories
@@ -801,7 +803,7 @@ export function UsersPage() {
 
         {buildSources.length > 0 && <div className="border-t">
           <div className="flex items-center gap-2 px-4 py-3">
-            <Webhook size={15} className="text-muted" />
+            <GitHubIcon size={15} className="text-fg" />
             <h3 className="text-sm font-semibold text-fg">GitHub push webhooks</h3>
           </div>
           <div className="border-t">
@@ -905,7 +907,7 @@ export function UsersPage() {
 
       {section === "users" && <Card className="overflow-hidden">
         <CardHeader
-          icon={<LogIn size={15} />}
+          icon={<GitHubIcon size={15} className="text-fg" />}
           title="GitHub sign-in"
           description={settingsForm.github_oauth_client_id ? "Configured" : "Not configured"}
           actions={<Btn size="xs" onClick={() => setOauthEditing((open) => !open)}>{oauthEditing ? "Close" : settingsForm.github_oauth_client_id ? "Edit" : "Configure"}</Btn>}

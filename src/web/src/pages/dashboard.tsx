@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { get } from "../api/client.ts";
 import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
-import { Badge, Card, CardHeader, StatusBadge, Stat, Btn, EmptyState, showToast, confirm, CopyButton, PageShell, PageHeader, PageState, statusTone } from "../components/ui.tsx";
+import { Badge, Card, CardHeader, StatusBadge, Stat, Btn, EmptyState, showToast, confirm, CopyButton, PageShell, PageSection, PageHeader, PageState, statusTone } from "../components/ui.tsx";
 import { PermissionGate } from "../components/permission-gate.tsx";
-import { useActiveOperations } from "../hooks/useOperation.ts";
-import { RefreshCw, Play, Pause, RotateCcw, Trash2, ExternalLink, Check, Box, Boxes, ChevronDown, MoreHorizontal, Settings2 } from "lucide-react";
+import { useActiveOperations, humanizeStep, type OperationView } from "../hooks/useOperation.ts";
+import { formatDistanceToNowStrict } from "date-fns";
+import { RefreshCw, Server, Play, Pause, RotateCcw, Trash2, ExternalLink, Check, Box, Boxes, ChevronDown, MoreHorizontal, Settings2 } from "lucide-react";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
 import { MobileActionSheet, MobileSheetAction } from "../components/mobile-action-sheet.tsx";
 import { ContextActionItem, ContextActionMenu } from "../components/context-action-menu.tsx";
@@ -26,6 +27,7 @@ type StackData = {
   environment_id: number | null; app_count: number;
 };
 type DashboardData = { apps: AppData[] };
+type ServerData = { id: number; name: string; status: string; type: string; location: string; ipv4: string; apps?: unknown[] };
 
 const APP_OP_KINDS = new Set([
   "restart_app", "pause_app", "unpause_app", "redeploy", "destroy_app",
@@ -44,6 +46,13 @@ export function DashboardPage() {
   const isMobile = useMobileLayout();
   const [data, setData] = useState<DashboardData>({ apps: [] });
   const [stacks, setStacks] = useState<StackData[]>([]);
+  // Hero figures outside the app list. Null when the viewer may not read them,
+  // so the tile can say so instead of showing a misleading zero.
+  const [servers, setServers] = useState<ServerData[] | null>(null);
+  const [activeIncidents, setActiveIncidents] = useState<number | null>(null);
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
+  // Latest finished operations for the side panel. Null without access.
+  const [recentOps, setRecentOps] = useState<OperationView[] | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const seenStacks = useRef<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -58,6 +67,8 @@ export function DashboardPage() {
     (op) => APP_OP_KINDS.has(op.kind) || STACK_OP_KINDS.has(op.kind),
     { rehydrateToasts: true },
   );
+  // Every running op, not just app and stack ones, for the operations panel.
+  const allOps = useActiveOperations();
 
   const armOrRun = (key: string, run: () => void, close?: () => void) => {
     if (confirmKey === key) {
@@ -80,6 +91,12 @@ export function DashboardPage() {
       ]);
       setData(dash);
       setStacks(stackList);
+      setLoadedAt(new Date());
+      void Promise.all([
+        (get("/api/servers") as Promise<ServerData[]>).then((rows) => setServers(rows ?? []), () => setServers(null)),
+        (get("/api/incidents?status=active&offset=0") as Promise<{ counts: { active: number } }>).then((res) => setActiveIncidents(res.counts.active), () => setActiveIncidents(null)),
+        (get("/api/operations?limit=6&offset=0&filter=all") as Promise<{ recent: OperationView[] }>).then((res) => setRecentOps(res.recent ?? []), () => setRecentOps(null)),
+      ]);
       // Auto-expand a stack the first time we see it; preserve the user's
       // collapse choices across the reconciler's polling reloads.
       setExpanded((prev) => {
@@ -360,6 +377,119 @@ export function DashboardPage() {
     </Card>
   );
 
+  const readyServers = servers?.filter((server) => server.status === "ready").length ?? 0;
+  const liveOps = allOps.active.filter((op) => op.status === "running" || op.status === "pending");
+  const incidents = activeIncidents ?? 0;
+  const headline = nothingDeployed
+    ? "Nothing deployed yet"
+    : attention > 0
+      ? `${attention} app${attention === 1 ? " needs" : "s need"} attention`
+      : incidents > 0
+        ? `Healthy, ${incidents} open incident${incidents === 1 ? "" : "s"}`
+        : "Everything is healthy";
+  const meta = nothingDeployed
+    ? <>Deploy your first app from the CLI with <code className="font-mono">ocd deploy</code>.</>
+    : [
+        `${apps.length} app${apps.length === 1 ? "" : "s"}`,
+        `${stacks.length} stack${stacks.length === 1 ? "" : "s"}`,
+        servers && `${servers.length} server${servers.length === 1 ? "" : "s"}`,
+        loadedAt && `updated ${loadedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+      ].filter(Boolean).join(" · ");
+
+  const header = (
+    <PageHeader
+      title={headline}
+      description={meta}
+      actions={<>
+        <Btn variant="primary" onClick={() => { window.location.hash = "#/engine"; }}>View operations</Btn>
+        <Btn onClick={load}><RefreshCw size={14} /> Refresh</Btn>
+      </>}
+    />
+  );
+
+  // Desktop: the stats row is a section of its own; below it the flush panel is
+  // one grid of hairline cells, a wide applications column beside servers over
+  // operations.
+  const stats = (
+    <div className="split-nodes grid grid-cols-2 sm:grid-cols-4 [&>*]:border-line max-sm:[&>*:nth-child(odd)]:border-r max-sm:[&>*:nth-child(n+3)]:border-t sm:[&>*+*]:border-l">
+      <Stat label="Apps" value={apps.length} hint={`${running} running${paused > 0 ? ` · ${paused} paused` : ""}`} className="px-6 py-5" />
+      <Stat label="Servers" value={servers ? servers.length : "—"} hint={servers ? `${readyServers} ready` : "No access"} className="px-6 py-5" />
+      <Stat label="Need attention" value={attention} tone={attention > 0 ? "danger" : undefined} hint={attention > 0 ? "Failing or degraded" : "None"} className="px-6 py-5" />
+      <Stat label="Open incidents" value={activeIncidents ?? "—"} tone={incidents > 0 ? "danger" : undefined} hint={activeIncidents == null ? "No access" : incidents > 0 ? <a href="#/incidents" className="hover:underline">Review now →</a> : "None"} className="px-6 py-5" />
+    </div>
+  );
+
+  const headerLink = (href: string, label: string) => (
+    <a href={href} className="text-xs font-medium text-muted transition-colors hover:text-fg">{label}</a>
+  );
+
+  const serversCard = (
+    <section>
+      <CardHeader title="Servers" actions={servers && servers.length > 0 ? headerLink("#/resources?section=servers", `View all ${servers.length}`) : undefined} />
+      {servers == null ? <p className="px-4 py-5 text-sm text-muted">You don't have access to servers.</p>
+        : servers.length === 0 ? <p className="px-4 py-5 text-sm text-muted">No servers yet.</p>
+        : (
+          <div className="divide-y">
+            {servers.slice(0, 5).map((server) => (
+              <a key={server.id} href={`#/resources/servers/${server.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-subtle/50">
+                <Server size={15} className="shrink-0 text-muted" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate font-mono text-sm font-medium text-fg">{server.name}</span>
+                    {server.status === "ready"
+                      ? <span className="shrink-0 font-mono text-xs text-muted">{server.ipv4}</span>
+                      : <StatusBadge status={server.status} />}
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between gap-3 text-xs text-muted">
+                    <span className="truncate">{[server.type?.toUpperCase(), server.location].filter(Boolean).join(" · ")}</span>
+                    <span className="shrink-0 tabular-nums">{server.apps?.length ?? 0} app{server.apps?.length === 1 ? "" : "s"}</span>
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+    </section>
+  );
+
+  // Running and queued ops first, then the latest finished ones.
+  const opRows = [...liveOps, ...(recentOps ?? []).filter((op) => !liveOps.some((live) => live.id === op.id))].slice(0, 6);
+  const opAge = (op: OperationView) => {
+    const raw = op.finished_at ?? op.started_at ?? op.enqueued_at;
+    if (op.status === "running" || op.status === "pending" || !raw) return "now";
+    return formatDistanceToNowStrict(new Date(raw.replace(" ", "T") + (raw.endsWith("Z") ? "" : "Z")));
+  };
+  const opChip = (op: OperationView) => {
+    const failed = op.status === "failed" || op.status === "compensation_failed" || op.status === "compensated";
+    const live = op.status === "running" || op.status === "pending";
+    const tone = failed ? "border-danger/40 bg-danger/10 text-danger" : live ? "border-primary bg-primary text-primary-fg" : "border-line-strong text-fg";
+    return <span className={`inline-flex h-5 w-[76px] shrink-0 items-center justify-center rounded border font-mono text-2xs font-semibold uppercase tracking-wide ${tone}`}>{op.kind.split("_")[0]}</span>;
+  };
+
+  const operationsCard = (
+    <section className="flex-1 border-t">
+      <CardHeader title="Operations" actions={headerLink("#/engine", "History")} />
+      {opRows.length === 0
+        ? <p className="px-4 py-5 text-sm text-muted">{recentOps == null && liveOps.length === 0 ? "You don't have access to operations." : "No operations yet."}</p>
+        : (
+          <div className="divide-y">
+            {opRows.map((op) => (
+              <a key={op.id} href={`#/engine/op/${op.id}`} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-subtle/50">
+                {opChip(op)}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-fg">{op.label}</span>
+                  {(op.status === "running" || op.status === "pending") && (
+                    <span className="block truncate text-xs text-muted">{op.status === "pending" ? "Queued" : op.last_step ? humanizeStep(op.last_step) : "Starting"}</span>
+                  )}
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-muted">{opAge(op)}</span>
+              </a>
+            ))}
+          </div>
+        )}
+    </section>
+  );
+
   if (isMobile) {
     const selectedApp = mobileSelection?.kind === "app" ? apps.find((app) => app.id === mobileSelection.id) : undefined;
     const selectedStack = mobileSelection?.kind === "stack" ? stacks.find((stack) => stack.id === mobileSelection.id) : undefined;
@@ -401,7 +531,7 @@ export function DashboardPage() {
       const memberApps = appsByStack.get(stack.id) ?? [];
       const open = expanded.has(stack.id);
       return (
-        <section key={`mobile-stack-${stack.id}`} className="overflow-hidden rounded-xl border bg-surface shadow-xs">
+        <section key={`mobile-stack-${stack.id}`} className="frame bg-surface">
           <div onClick={() => toggleStack(stack.id)} className="flex items-center gap-3 px-4 py-3 active:bg-subtle">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border bg-subtle text-muted"><Boxes size={18} /></span>
             <div className="min-w-0 flex-1">
@@ -428,18 +558,12 @@ export function DashboardPage() {
 
     return (
       <main className="animate-fade-in px-4 pb-6 pt-5">
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-fg">Overview</h1>
-            <p className="mt-0.5 text-sm text-muted">{apps.length} apps · {stacks.length} stacks</p>
-          </div>
-          <Btn onClick={load} ariaLabel="Refresh overview"><RefreshCw size={18} /></Btn>
-        </div>
+        <div className="mb-5">{header}</div>
 
         {nothingDeployed ? emptyState : (
           <div className="space-y-3">
             {standaloneApps.length > 0 && (
-              <div className="divide-y overflow-hidden rounded-xl border bg-surface shadow-xs">
+              <div className="divide-y frame bg-surface">
                 {standaloneApps.map((app) => appCard(app))}
               </div>
             )}
@@ -468,40 +592,36 @@ export function DashboardPage() {
   }
 
   return (
-    <PageShell>
-      <PageHeader
-        title="Overview"
-        description="Every app and stack deployed to your fleet."
-        actions={<Btn onClick={load}><RefreshCw size={14} /> Refresh</Btn>}
-      />
-
-      {nothingDeployed ? emptyState : (
-        <>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-4">
-            {[
-              { label: "Apps", value: apps.length },
-              { label: "Stacks", value: stacks.length },
-              { label: "Running", value: running, tone: running > 0 ? "success" as const : undefined },
-              { label: attention > 0 ? "Need attention" : "Paused", value: attention > 0 ? attention : paused, tone: attention > 0 ? "danger" as const : undefined },
-            ].map((stat) => (
-              <Stat key={stat.label} label={stat.label} value={stat.value} tone={stat.tone} className="bg-surface px-4 py-3.5" />
-            ))}
-          </div>
-
-          <Card className="overflow-hidden">
-            <CardHeader
-              title="Applications"
-              description={`${standaloneApps.length} standalone · ${stacks.length} stack${stacks.length === 1 ? "" : "s"}`}
+    <PageShell width="xl" flush>
+      {header}
+      <PageSection>{stats}</PageSection>
+      <div className="split-nodes grid lg:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="flex min-w-0 flex-col">
+          <CardHeader
+            title="Applications"
+            description={nothingDeployed ? undefined : `${standaloneApps.length} standalone · ${stacks.length} stack${stacks.length === 1 ? "" : "s"}`}
+          />
+          {nothingDeployed ? (
+            <EmptyState
+              className="flex-1"
+              message="Nothing deployed yet"
+              icon={Box}
+              description={<>Deploy your first app from the CLI with <code className="rounded bg-subtle px-1 py-0.5 font-mono text-xs text-fg">ocd deploy</code>; it will show up here.</>}
             />
+          ) : (
             <div className="divide-y">
               {standaloneApps.map((app) => renderAppRow(app))}
               {stacks.map((stack) => renderStackGroup(stack, {
                 apps: appsByStack.get(stack.id) ?? [],
               }))}
             </div>
-          </Card>
-        </>
-      )}
+          )}
+        </section>
+        <div className="flex flex-col max-lg:border-t lg:border-l">
+          {serversCard}
+          {operationsCard}
+        </div>
+      </div>
     </PageShell>
   );
 }

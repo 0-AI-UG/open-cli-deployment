@@ -121,7 +121,7 @@ export function NeoSelect({ value, options, onChange, placeholder, compact, disa
           role="listbox"
           data-neoselect-menu
           style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.width }}
-          className="z-[95] max-h-64 animate-pop-in overflow-auto rounded-lg border bg-surface p-1 shadow-pop"
+          className="z-[95] max-h-64 animate-pop-in overflow-auto bg-surface p-1 rounded-lg shadow-pop"
         >
           {options.length === 0 && (
             <div className={`text-muted ${compact ? "px-2 py-1 text-xs" : "px-2.5 py-1.5 text-sm"}`}>

@@ -3,6 +3,8 @@ import { AlertTriangle, BellRing, ChevronRight, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
 import { Badge, Btn, Card, EmptyState, InlineNotice, PageHeader, PageShell, Spinner } from "../components/ui.tsx";
 import type { Incident as IncidentItem } from "../../../shared/incidents.ts";
+import { useHashParam } from "../hooks/use-hash-param.ts";
+import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
 import { incidentDate as date, incidentDuration, incidentGuide } from "../lib/incidents.ts";
 
 type Filter = "all" | "active" | "resolved";
@@ -10,7 +12,8 @@ type ResponseData = { incidents: IncidentItem[]; nextOffset: number | null; coun
 const filters: Array<{ key: Filter; label: string }> = [{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "resolved", label: "Resolved" }];
 
 export function IncidentsPage() {
-  const [filter, setFilter] = useState<Filter>("active");
+  const [filter, setFilter] = useHashParam("status", filters.map((item) => item.key), "active");
+  const filterSlider = useActiveIndicator<HTMLDivElement>(filter);
   const [items, setItems] = useState<IncidentItem[]>([]);
   const [counts, setCounts] = useState<Record<Filter, number>>({ all: 0, active: 0, resolved: 0 });
   const [nextOffset, setNextOffset] = useState<number | null>(null);
@@ -37,12 +40,13 @@ export function IncidentsPage() {
   const cols = "md:grid-cols-[minmax(0,1fr)_9rem_11rem_7rem_1rem]";
   return <PageShell>
     <PageHeader title="Incidents" eyebrow="Operations" description="Monitor active conditions and review recovery history." actions={<Btn disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>} />
-    <div className="inline-flex max-w-full rounded-md border bg-subtle p-0.5" role="group" aria-label="Filter incidents">
+    <div ref={filterSlider.containerRef} className="relative inline-flex max-w-full rounded-full border border-line-strong bg-surface p-0.5" role="group" aria-label="Filter incidents">
+      <span aria-hidden="true" className="rounded-full bg-primary" style={filterSlider.indicatorStyle} />
       {filters.map(item => {
         const active = filter === item.key;
-        return <button key={item.key} type="button" aria-pressed={active} onClick={() => { request.current++; setLoading(true); setFilter(item.key); }} disabled={active} className={`inline-flex h-7 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] px-3 text-sm font-medium transition-colors disabled:cursor-default max-md:h-10 ${active ? "bg-surface text-fg shadow-xs" : "text-muted hover:text-fg"}`}>
+        return <button key={item.key} type="button" aria-pressed={active} data-active={active} onClick={() => { request.current++; setLoading(true); setFilter(item.key); }} disabled={active} className={`relative inline-flex h-7 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-medium transition-colors duration-200 disabled:cursor-default max-md:h-10 ${active ? "text-primary-fg" : "text-muted hover:text-fg"}`}>
           {item.label}
-          <span className={`rounded-full px-1.5 text-2xs tabular-nums ${active ? (item.key === "active" && counts.active > 0 ? "bg-danger/10 text-danger" : "bg-subtle text-fg-dim") : "text-muted"}`}>{counts[item.key]}</span>
+          <span className={`rounded-full px-1.5 text-2xs tabular-nums ${active ? (item.key === "active" && counts.active > 0 ? "bg-danger-solid text-white" : "bg-black/10 text-primary-fg") : "text-muted"}`}>{counts[item.key]}</span>
         </button>;
       })}
     </div>

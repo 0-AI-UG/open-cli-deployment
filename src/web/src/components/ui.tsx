@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useId, useRef, type ReactNode 
 import { AlertTriangle, AlertCircle, ArrowLeft, Check, CheckCircle2, Copy, Info, Loader2, XCircle } from "lucide-react";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
 import { useDialogFocus } from "../hooks/use-dialog-focus.ts";
+import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
+import { useGridReveal } from "../hooks/use-grid-reveal.ts";
 export { portalAnchorRect } from "./portal-position.ts";
 
 // --- Toast system ---
@@ -76,7 +78,7 @@ export function Toasts() {
         return (
           <div
             key={t.id}
-            className="pointer-events-auto flex w-full animate-slide-up items-start gap-3 rounded-lg border bg-surface px-3.5 py-3 shadow-pop"
+            className="pointer-events-auto flex w-full animate-slide-up items-start gap-3 bg-surface px-3.5 py-3 rounded-lg shadow-pop"
           >
             <Icon size={16} className={`mt-0.5 shrink-0 ${tone} ${spinning ? "animate-spin" : ""}`} />
             <div className="min-w-0 flex-1">
@@ -165,7 +167,7 @@ export function ConfirmDialog() {
 
   return (
     <div className={`fixed inset-0 z-[90] flex animate-fade-in bg-black/40 backdrop-blur-[2px] ${isMobile ? "items-end" : "items-center justify-center p-4"}`}>
-      <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" className={isMobile ? "w-full max-h-[90dvh] overflow-y-auto rounded-t-2xl border border-b-0 bg-surface px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 shadow-pop animate-slide-up" : "w-full max-w-md animate-pop-in overflow-hidden rounded-xl border bg-surface shadow-pop"}>
+      <div ref={dialogRef} role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message" className={isMobile ? "w-full max-h-[90dvh] overflow-y-auto rounded-t-lg border border-b-0 border-frame bg-surface px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 animate-slide-up" : "w-full max-w-md animate-pop-in bg-surface rounded-lg shadow-pop"}>
         {isMobile && <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line-strong" />}
         <div className={isMobile ? "" : "p-5"}>
           <div className="flex items-start gap-3">
@@ -200,7 +202,7 @@ export function ConfirmDialog() {
             </div>
           )}
         </div>
-        <div className={isMobile ? "mt-5 flex gap-2" : "flex justify-end gap-2 border-t bg-subtle/50 px-5 py-3"}>
+        <div className={isMobile ? "mt-5 flex gap-2" : "flex justify-end gap-2 border-t px-5 py-3"}>
           <Btn onClick={() => close(false)} className={isMobile ? "flex-1" : ""}>Cancel</Btn>
           <Btn
             onClick={() => close(true)}
@@ -222,8 +224,17 @@ export function Spinner({ className = "" }: { className?: string }) {
 }
 
 // --- Logo ---
-// The brand mark: a lime arrow on a dark tile. Used by the nav and auth pages.
-export function Logo({ size = 24 }: { size?: number }) {
+// The brand mark: a lime arrow on a dark tile, matching the favicon.
+// `mono` draws a bolder arrow alone in currentColor, for the headers.
+export function Logo({ size = 24, mono = false }: { size?: number; mono?: boolean }) {
+  if (mono) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" fill="none" role="img" aria-label="OCD" className="shrink-0">
+        <path d="M32 6 52 30H39.5v16h-15V30H12z" fill="currentColor" />
+        <rect x="18" y="51" width="28" height="6.5" rx="3.25" fill="currentColor" />
+      </svg>
+    );
+  }
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true" className="shrink-0">
       <rect x="2" y="2" width="60" height="60" rx="15" fill="#18181B" />
@@ -296,11 +307,13 @@ export function statusTone(status: string): StatusTone {
   return "neutral";
 }
 
-const STATUS_DOT: Record<StatusTone, string> = {
-  success: "bg-success",
-  warning: "bg-warning",
-  danger: "bg-danger",
-  neutral: "bg-muted/60",
+// Status reads as a tag: running is lime on ink, failures are solid red, work
+// in progress keeps a pulsing dot.
+const STATUS_TAG: Record<StatusTone, string> = {
+  success: "bg-brand text-brand-fg",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger-solid text-white",
+  neutral: "bg-subtle text-fg-dim",
 };
 
 export function humanize(value: string): string {
@@ -314,13 +327,12 @@ export function StatusBadge({ status, subLabel }: { status: string; subLabel?: s
   const live = s === "deploying" || s === "working";
 
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-fg-dim">
-      <span className="relative flex h-2 w-2 shrink-0">
-        {live && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${STATUS_DOT[tone]}`} />}
-        <span className={`relative inline-flex h-2 w-2 rounded-full ${STATUS_DOT[tone]}`} />
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className={`inline-flex h-5 items-center gap-1.5 rounded-sm px-1.5 font-mono text-2xs font-medium ${STATUS_TAG[tone]}`}>
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full bg-current ${live ? "pulse" : ""}`} />
+        {humanize(status || "unknown")}
       </span>
-      {humanize(status || "unknown")}
-      {subLabel && <span className="font-normal text-muted">· {subLabel}</span>}
+      {subLabel && <span className="text-xs text-muted">{subLabel}</span>}
     </span>
   );
 }
@@ -333,22 +345,90 @@ export function PageShell({
   children,
   width = "lg",
   className = "",
+  reveal = true,
+  flush = false,
 }: {
   children: ReactNode;
   width?: "md" | "lg" | "xl";
   className?: string;
+  /** Drop the panel's inner padding so the content's own rules meet the
+   *  dividers and the panel sides: for a page that is one connected grid. */
+  flush?: boolean;
+  /** Grow the grid and resolve the sections on mount (see hooks/use-grid-reveal.ts).
+   *  "skeleton" is the loading shell, whose content is already a skeleton. */
+  reveal?: boolean | "skeleton";
 }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useGridReveal(wrapRef, reveal === "skeleton" ? "skeleton" : reveal ? "content" : "off");
   const widths = { md: "max-w-3xl", lg: "max-w-5xl", xl: "max-w-6xl" };
-  return (
-    <main className={`${widths[width]} mx-auto animate-fade-in space-y-6 px-4 py-6 md:px-6 md:py-8 ${className}`}>
-      {children}
-    </main>
+  // Rails run down both edges of the column (see .page-rails in global.css).
+  // Sections sit edge to edge between full-width dividers, with an empty band
+  // between each pair, so every card and the hero land on the grid lines.
+  // The page header (plus a tab bar that follows it) sits in an open band,
+  // directly followed by one content panel with solid sides holding everything
+  // else. PageSections placed before the panel each get their own flush,
+  // solid-sided band, set off from what follows by an empty band. A leading
+  // Hero is lifted out above the grid entirely.
+  const all = React.Children.toArray(children);
+  const hero = React.isValidElement(all[0]) && all[0].type === Hero ? all[0] : null;
+  const rest = hero ? all.slice(1) : all;
+  const head: ReactNode[] = [];
+  if (React.isValidElement(rest[0]) && rest[0].type === PageHeader) {
+    head.push(rest.shift());
+    while (React.isValidElement(rest[0]) && (rest[0].type as { joinsHeader?: boolean }).joinsHeader) head.push(rest.shift());
+  }
+  const sections: ReactNode[] = [];
+  while (React.isValidElement(rest[0]) && rest[0].type === PageSection) sections.push(rest.shift());
+  // The divider after a section moves up 1px to overlap the section's bottom
+  // edge instead of doubling it.
+  const divider = (end = false) => (
+    <div aria-hidden="true" className={`section-divider ${end ? "section-divider-end" : ""}`}>
+      <span className="node node-l" />
+      <span className="node node-r" />
+    </div>
   );
+  return (
+    <div ref={wrapRef} className="page-wrap">
+      {hero}
+      <main className={`page-rails flex flex-col ${widths[width]} mx-auto px-4 md:px-0`}>
+        <div aria-hidden="true" className="section-band" />
+        {head.length > 0 && (
+          <>
+            {divider()}
+            <div className="mb-px">{head}</div>
+          </>
+        )}
+        {/* The header band and the panel share one divider: the tab bar's
+            underline sits on it and the panel starts right below. */}
+        {(head.length > 0 || sections.length > 0 || rest.length > 0) && divider(head.length > 0)}
+        {sections.map((section, i) => (
+          <React.Fragment key={i}>
+            {section}
+            {/* With no panel after it, the footer rule closes the last band. */}
+            {(i < sections.length - 1 || rest.length > 0) && divider(true)}
+            {(i < sections.length - 1 || rest.length > 0) && <><div aria-hidden="true" className="section-band" />{divider()}</>}
+          </React.Fragment>
+        ))}
+        {rest.length > 0 && (
+          // The panel runs down to the footer rule, which closes it.
+          <div className={`zone-panel space-y-6 ${flush ? "zone-panel-flush" : ""} ${className}`}>{rest}</div>
+        )}
+      </main>
+      {/* The sheet closes with a full-width dashed rule, like the header's,
+          pinned near the window bottom on short pages. */}
+      <div aria-hidden="true" className="page-foot" />
+    </div>
+  );
+}
+
+// A band of its own between the page header and the content panel: solid
+// sides, no inset, so its content's rules meet the dividers (see PageShell).
+export function PageSection({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <section className={`zone-panel zone-panel-flush ${className}`}>{children}</section>;
 }
 
 export function PageHeader({
   title,
-  eyebrow,
   description,
   meta,
   backHref,
@@ -357,6 +437,7 @@ export function PageHeader({
   className = "",
 }: {
   title: ReactNode;
+  /** Accepted for older call sites; no longer rendered. */
   eyebrow?: ReactNode;
   description?: ReactNode;
   meta?: ReactNode;
@@ -366,21 +447,15 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <header className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}>
+    <header className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between md:px-6 md:py-6 ${className}`}>
       <div className="min-w-0">
-        {(backHref || eyebrow) && (
-          <div className="mb-2 flex min-w-0 items-center gap-2 text-sm text-muted">
-            {backHref && (
-              <a href={backHref} className="inline-flex items-center gap-1 rounded transition-colors hover:text-fg">
-                <ArrowLeft size={14} />
-                {backLabel}
-              </a>
-            )}
-            {backHref && eyebrow && <span className="text-line-strong">/</span>}
-            {eyebrow && <span className="truncate">{eyebrow}</span>}
-          </div>
+        {backHref && (
+          <a href={backHref} className="mb-2 inline-flex items-center gap-1 rounded text-sm text-muted transition-colors hover:text-fg">
+            <ArrowLeft size={14} />
+            {backLabel}
+          </a>
         )}
-        <h1 className="truncate text-2xl font-semibold tracking-tight text-fg">{title}</h1>
+        <h1 className="truncate text-[28px] font-semibold leading-9 tracking-[-0.025em] text-fg">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm text-fg-dim">{description}</p>}
         {meta && <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">{meta}</div>}
       </div>
@@ -401,13 +476,48 @@ export function SectionHeader({
   className?: string;
 }) {
   return (
-    <div className={`flex items-end justify-between gap-4 ${className}`}>
+    <div className={`flex items-end justify-between gap-4 md:px-6 ${className}`}>
       <div className="min-w-0">
         <h2 className="text-base font-semibold text-fg">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>}
     </div>
+  );
+}
+
+// While a page loads it shows its grid with skeleton cells in place of content,
+// so the reveal that follows resolves the same blocks into the real page.
+function SkeletonBar({ className = "" }: { className?: string }) {
+  return <span aria-hidden="true" className={`skeleton block ${className}`} />;
+}
+
+export function PageSkeleton({ title }: { title?: ReactNode }) {
+  return (
+    <PageShell reveal="skeleton">
+      <PageHeader title={<SkeletonBar className="h-7 w-48" />} description={<SkeletonBar className="mt-1 h-4 w-72 max-w-full" />} />
+      <div role="status" className="space-y-6">
+        <span className="sr-only">{title ?? "Loading"}</span>
+        <div className="frame grid grid-cols-2 bg-surface sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="space-y-2 px-5 py-4">
+              <SkeletonBar className="h-3 w-16" />
+              <SkeletonBar className="h-6 w-20" />
+            </div>
+          ))}
+        </div>
+        <div className="frame bg-surface">
+          <div className="border-b border-line px-5 py-4"><SkeletonBar className="h-4 w-32" /></div>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-4 border-b border-line px-5 py-3.5 last:border-b-0">
+              <SkeletonBar className="h-4 w-40" />
+              <SkeletonBar className="h-4 flex-1" />
+              <SkeletonBar className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </PageShell>
   );
 }
 
@@ -422,14 +532,14 @@ export function PageState({
   description?: ReactNode;
   action?: ReactNode;
 }) {
+  if (kind === "loading") return <PageSkeleton title={title} />;
   return (
     <PageShell>
       <div role={kind === "error" ? "alert" : "status"} className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
-        {kind === "loading" && <Spinner />}
         {kind === "error" && (
           <span className="grid h-10 w-10 place-items-center rounded-full bg-danger/10 text-danger"><AlertCircle size={18} /></span>
         )}
-        {title && <div className={`text-sm font-medium ${kind === "loading" ? "text-muted" : "text-fg"}`}>{title}</div>}
+        {title && <div className="text-sm font-medium text-fg">{title}</div>}
         {description && <p className="max-w-md text-sm text-muted">{description}</p>}
         {action}
       </div>
@@ -494,40 +604,104 @@ export function AuthShell({
   description,
   children,
   width = "sm",
+  aside,
 }: {
   icon?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
   children: ReactNode;
   width?: "sm" | "md" | "lg";
+  /** Shown beside the form on wide screens; the lime sheet then takes the left half. */
+  aside?: ReactNode;
 }) {
   const widths = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg" };
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
+  // The sign-in pages fill the screen with a lime flare sheet (halftone dots
+  // and a cream glow along the bottom); the form card sits on top. With an
+  // aside, the screen splits and the aside gets the right half.
+  const sheet = (
+    <div className={`flare-lime relative isolate flex items-center justify-center overflow-hidden px-4 py-20 ${aside ? "min-h-screen flex-1 lg:max-w-[46%]" : "min-h-screen w-full"}`}>
+      <span className="absolute left-6 top-6 flex items-center gap-2.5 text-white md:left-8 md:top-7">
+        <Logo size={26} mono />
+      </span>
       <div className={`w-full ${widths[width]} animate-slide-up`}>
         <header className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-5"><Logo size={40} /></div>
-          {icon && <div className="mb-3 flex justify-center text-muted">{icon}</div>}
-          <h1 className="text-xl font-semibold tracking-tight text-fg">{title}</h1>
-          {description && <p className="mt-1.5 text-sm text-muted">{description}</p>}
+          {icon && <div className="mb-3 flex justify-center">{icon}</div>}
+          <h1 className="text-[28px] font-semibold leading-9 tracking-[-0.025em]">{title}</h1>
+          {description && <p className="mt-1.5 text-sm opacity-90">{description}</p>}
         </header>
-        {children}
+        <div className="theme-light">{children}</div>
       </div>
+    </div>
+  );
+  if (!aside) return <main>{sheet}</main>;
+  return (
+    <main className="flex min-h-screen">
+      {sheet}
+      <aside className="theme-light sticky top-0 hidden h-screen min-w-0 flex-1 self-start overflow-hidden bg-[#E6E2D6] lg:block"><div className="absolute left-12 top-[9vh] xl:left-16">{aside}</div></aside>
     </main>
   );
 }
 
 // --- Card ---
+// A frame (see .frame in global.css): a hairline box with corner nodes.
+// Corners are square, so content never needs clipping, and clipping would hide
+// the nodes; any overflow-hidden passed in is dropped for that reason.
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const classes = className.split(/\s+/).filter((c) => c !== "overflow-hidden").join(" ");
   return (
-    <div className={`rounded-lg border bg-surface shadow-xs ${className}`}>
+    <div className={`frame bg-surface ${classes}`}>
       {children}
     </div>
   );
 }
 
-// A card's title bar. Put it first inside <Card className="overflow-hidden">;
-// the body that follows owns its own padding.
+// A row of Stats in one frame, split by hairline rules.
+export function StatRow({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`frame grid grid-cols-2 bg-surface sm:grid-cols-4 [&>*]:border-line max-sm:[&>*:nth-child(odd)]:border-r max-sm:[&>*:nth-child(n+3)]:border-t sm:[&>*+*]:border-l ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+// --- Hero ---
+// The page's lead: a lime flare sheet that spans the window with a small inset
+// and rounded corners, like Cloudflare's hero, 50vh tall on desktop and 80vh
+// on phones. PageShell lifts it out of the rails grid. `status` is a live line
+// (a rollout in progress, say) and should be omitted when nothing is happening.
+export function Hero({
+  title,
+  description,
+  status,
+  actions,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  status?: { label: ReactNode; href?: string };
+  actions?: ReactNode;
+}) {
+  const pill = status && (
+    <a href={status.href} className="inline-flex max-w-full items-center gap-2.5 rounded-full border border-ink-fg/35 py-1 pl-3.5 pr-1 text-sm font-medium text-ink-fg transition-colors hover:border-ink-fg/70">
+      <span className="truncate">{status.label}</span>
+      <span aria-hidden="true" className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full bg-ink-fg text-xs text-ink">→</span>
+    </a>
+  );
+  return (
+    // An opaque canvas fill hides the outer rails beside the sheet; a dashed rule
+    // the width of the window closes it off, one inset below.
+    <section className="rule-dashed bg-canvas p-2 md:p-2.5">
+      <div className="hero-sheet flare-lime relative isolate flex min-h-[80vh] flex-col items-center justify-center gap-3.5 overflow-hidden rounded-[18px] px-6 py-14 text-center md:min-h-[50vh] md:px-10">
+        {pill}
+        <h1 className="mt-1 text-balance text-[44px] font-semibold leading-none tracking-[-0.035em] md:text-[64px]">{title}</h1>
+        {description && <p className="max-w-[52ch] text-base text-ink-fg/90 md:text-lg">{description}</p>}
+        {actions && <div className="hero-actions mt-3 flex flex-wrap justify-center gap-2.5">{actions}</div>}
+      </div>
+    </section>
+  );
+}
+
+// A card's title bar. Put it first inside <Card>; the body that follows owns
+// its own padding.
 export function CardHeader({
   title,
   description,
@@ -594,8 +768,8 @@ export function Stat({
   const valueTone = tone ? { success: "text-success", warning: "text-warning", danger: "text-danger", info: "text-info" }[tone] : "text-fg";
   return (
     <div className={`min-w-0 ${className}`}>
-      <div className="truncate text-xs text-muted">{label}</div>
-      <div className={`mt-1 truncate text-xl font-semibold tabular-nums tracking-tight ${valueTone}`}>{value}</div>
+      <div className={`truncate font-mono text-[28px] font-medium leading-9 tabular-nums tracking-[-0.03em] ${valueTone}`}>{value}</div>
+      <div className="truncate text-sm text-muted">{label}</div>
       {hint && <div className="mt-0.5 truncate text-xs text-muted">{hint}</div>}
     </div>
   );
@@ -615,8 +789,10 @@ export function SegmentedControl<K extends string>({
   className?: string;
   ariaLabel?: string;
 }) {
+  const { containerRef, indicatorStyle } = useActiveIndicator<HTMLDivElement>(value);
   return (
-    <div role="radiogroup" aria-label={ariaLabel} className={`inline-flex rounded-md border bg-subtle p-0.5 ${className}`}>
+    <div ref={containerRef} role="radiogroup" aria-label={ariaLabel} className={`relative inline-flex rounded-full border border-line-strong bg-surface p-0.5 ${className}`}>
+      <span aria-hidden="true" className="rounded-full bg-primary" style={indicatorStyle} />
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -625,9 +801,10 @@ export function SegmentedControl<K extends string>({
             type="button"
             role="radio"
             aria-checked={active}
+            data-active={active}
             onClick={() => onChange(option.value)}
-            className={`inline-flex h-7 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] px-3 text-sm font-medium transition-colors max-md:h-9 ${
-              active ? "bg-surface text-fg shadow-xs" : "text-muted hover:text-fg"
+            className={`relative inline-flex h-7 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 text-sm font-medium transition-colors duration-200 max-md:h-9 ${
+              active ? "text-primary-fg" : "text-muted hover:text-fg"
             }`}
           >
             {option.label}
@@ -664,19 +841,19 @@ export function Btn({
 }) {
   const isMobile = useMobileLayout();
   const iconOnly = isIconOnly(children);
-  const base = "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-[background-color,border-color,color,box-shadow] select-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
+  const base = "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-medium transition-[background-color,border-color,color,box-shadow] select-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
   const heights = isMobile
     ? { xs: "h-10", sm: "h-11", md: "h-12" }
     : { xs: "h-7", sm: "h-8", md: "h-9" };
   const pads = iconOnly
     ? (isMobile ? { xs: "w-10", sm: "w-11", md: "w-12" } : { xs: "w-7", sm: "w-8", md: "w-9" })
-    : { xs: "px-2.5", sm: "px-3", md: "px-4" };
+    : { xs: "px-3", sm: "px-3.5", md: "px-5" };
   const text = size === "xs" ? "text-xs" : "text-sm";
 
   const variants = {
-    default: "border border-line-strong bg-surface text-fg shadow-xs hover:bg-subtle",
-    primary: "border border-primary bg-primary text-primary-fg shadow-xs hover:opacity-90",
-    danger: "border border-danger-solid bg-danger-solid text-white shadow-xs hover:opacity-90",
+    default: "border border-line-strong bg-surface text-fg hover:border-frame",
+    primary: "border border-primary bg-primary text-primary-fg hover:opacity-90",
+    danger: "border border-danger-solid bg-danger-solid text-white hover:opacity-90",
     ghost: "border border-transparent text-fg-dim hover:bg-subtle hover:text-fg",
   };
 
@@ -757,7 +934,7 @@ export function Table({ headers, children }: { headers: string[]; children: Reac
           return (
             <div
               key={row.key ?? rowIndex}
-              className={`rounded-lg border bg-surface px-4 py-1.5 shadow-xs ${rowProps.onClick ? "cursor-pointer active:bg-subtle" : ""}`}
+              className={`frame bg-surface px-4 py-1.5 ${rowProps.onClick ? "cursor-pointer active:bg-subtle" : ""}`}
               role={rowProps.onClick ? "link" : undefined}
               tabIndex={rowProps.onClick ? 0 : undefined}
               onClick={rowProps.onClick ? (event) => rowProps.onClick?.(event as unknown as React.MouseEvent<HTMLTableRowElement>) : undefined}
@@ -792,9 +969,9 @@ export function Table({ headers, children }: { headers: string[]; children: Reac
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm [&_td]:px-4 [&_td]:py-2.5 [&_td]:align-middle [&_tbody_tr:hover]:bg-subtle/50 [&_tbody_tr]:transition-colors">
+      <table className="w-full text-sm [&_td]:px-4 [&_td]:py-2.5 [&_td]:align-middle [&_tbody_tr:hover]:bg-brand/[0.07] [&_tbody_tr]:transition-colors">
         <thead>
-          <tr className="border-b bg-subtle/50">
+          <tr className="border-b">
             {headers.map((h, i) => (
               <th key={`${h}-${i}`} className="whitespace-nowrap px-4 py-2 text-left text-xs font-medium text-muted">
                 {h}
@@ -912,7 +1089,7 @@ export function EmptyState({
   return (
     <div className={`flex flex-col items-center justify-center px-4 py-14 text-center ${className}`}>
       {Icon && (
-        <span className="mb-3 grid h-10 w-10 place-items-center rounded-lg border bg-subtle text-muted">
+        <span className="mb-3 grid h-10 w-10 dash-box place-items-center bg-surface text-fg">
           <Icon size={18} />
         </span>
       )}

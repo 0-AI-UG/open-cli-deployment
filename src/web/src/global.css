@@ -1,111 +1,183 @@
-/* Fonts are declared here rather than via @fontsource's index.css: Bun's CSS
-   bundler rewrites its format('woff2-variations') unquoted, which Chrome
-   rejects, silently dropping every face. Latin + Latin Extended cover the UI. */
+/* Fonts are declared here rather than via @fontsource's index.css so only the
+   weights the UI uses load. Latin + Latin Extended cover the UI. */
 @font-face {
-  font-family: "Geist Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
-  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2");
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 400;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Geist Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
-  src: url("../../../node_modules/@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2") format("woff2");
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 400;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-ext-400-normal.woff2") format("woff2");
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 @font-face {
-  font-family: "Geist Mono Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
-  src: url("../../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2");
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 500;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 @font-face {
-  font-family: "Geist Mono Variable"; font-style: normal; font-display: swap; font-weight: 100 900;
-  src: url("../../../node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-ext-wght-normal.woff2") format("woff2");
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 500;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-ext-500-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 600;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 600;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-ext-600-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 700;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-700-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Sans"; font-style: normal; font-display: swap; font-weight: 700;
+  src: url("../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-ext-700-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-display: swap; font-weight: 400;
+  src: url("../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-display: swap; font-weight: 400;
+  src: url("../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-ext-400-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-display: swap; font-weight: 500;
+  src: url("../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-display: swap; font-weight: 500;
+  src: url("../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-ext-500-normal.woff2") format("woff2");
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-display: swap; font-weight: 600;
+  src: url("../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: "IBM Plex Mono"; font-style: normal; font-display: swap; font-weight: 600;
+  src: url("../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-ext-600-normal.woff2") format("woff2");
   unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
 }
 
-/* Design tokens. Values are RGB channels so Tailwind opacity modifiers work.
-   The light theme is the default; dark applies via the OS preference unless the
-   user forced a theme (data-theme on <html>, see stores/theme.ts). */
-:root {
+/* Design tokens: "Blueprint". Paper, ink and a lime highlighter, drawn like an
+   engineering sheet: dashed frames with + corner marks over a faint grid.
+   Values are RGB channels so Tailwind opacity modifiers work. Light is the
+   default (data-theme="light" on <html>). Dark applies when the user picks it,
+   or via the OS preference when they choose "System" (see stores/theme.ts). */
+:root, .theme-light {
   color-scheme: light;
-  --canvas: 250 250 250;
-  --surface: 255 255 255;
-  --subtle: 244 244 245;
-  --fg: 24 24 27;
-  --fg-dim: 82 82 91;
-  --muted: 113 113 122;
-  --line: 228 228 231;
-  --line-strong: 212 212 216;
-  --primary: 24 24 27;
-  --primary-fg: 250 250 250;
+  --canvas: 247 245 238;
+  --surface: 253 252 248;
+  --subtle: 239 236 226;
+  --grid: 236 233 223;
+  --fg: 28 28 26;
+  --fg-dim: 74 72 66;
+  --muted: 109 106 96;
+  --line: 226 221 208;
+  --line-strong: 205 200 185;
+  --frame: 28 28 26;
+  --primary: 186 255 57;
+  --primary-fg: 28 28 26;
   --brand: 186 255 57;
-  --brand-fg: 24 24 27;
-  --ring: 99 102 241;
-  --success: 21 128 61;
-  --warning: 180 83 9;
-  --danger: 220 38 38;
-  --danger-solid: 220 38 38;
-  --info: 37 99 235;
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.04);
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04), 0 1px 3px rgb(0 0 0 / 0.06);
-  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.04), 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06);
+  --brand-fg: 28 28 26;
+  --ink: 28 28 26;
+  --ink-fg: 244 242 234;
+  --ring: 28 28 26;
+  --success: 47 125 50;
+  --warning: 168 107 0;
+  --danger: 198 47 34;
+  --danger-solid: 198 47 34;
+  --info: 45 91 196;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  /* Active header nav pill: a clear ink hairline so it reads on the cream canvas. */
+  --nav-active-bg: 255 255 255;
+  --nav-active-ring: 28 28 26 / 0.28;
+  /* Floating layers (menus, selects, dialogs): a hairline and a soft lift. */
+  --shadow-pop: 0 0 0 1px rgb(205 200 185), 0 2px 6px -2px rgb(28 28 26 / 0.08), 0 16px 40px -14px rgb(28 28 26 / 0.24);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --canvas: 10 10 11;
-    --surface: 19 19 21;
-    --subtle: 31 31 35;
-    --fg: 244 244 245;
-    --fg-dim: 190 190 198;
-    --muted: 140 140 150;
-    --line: 39 39 44;
-    --line-strong: 58 58 64;
-    --primary: 244 244 245;
-    --primary-fg: 19 19 21;
-    --ring: 129 140 248;
-    --success: 74 222 128;
-    --warning: 251 191 36;
-    --danger: 248 113 113;
-    --danger-solid: 220 38 38;
-    --info: 96 165 250;
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5);
-    --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.06), 0 12px 32px -4px rgb(0 0 0 / 0.6);
+    --canvas: 17 18 16;
+    --surface: 24 25 23;
+    --subtle: 34 35 31;
+    --grid: 26 27 24;
+    --fg: 236 235 228;
+    --fg-dim: 196 194 184;
+    --muted: 154 152 141;
+    --line: 42 43 38;
+    --line-strong: 58 59 53;
+    --frame: 119 118 108;
+    --primary: 196 255 77;
+    --primary-fg: 28 28 26;
+    --brand: 196 255 77;
+    --ink: 34 35 31;
+    --ink-fg: 236 235 228;
+    --ring: 196 255 77;
+    --success: 139 216 143;
+    --warning: 240 190 90;
+    --danger: 255 138 122;
+    --danger-solid: 205 52 38;
+    --info: 143 179 255;
+    --nav-active-bg: 24 25 23;
+    --nav-active-ring: 58 59 53;
+    --shadow-pop: 0 0 0 1px rgb(58 59 53), 0 2px 6px -2px rgb(0 0 0 / 0.4), 0 18px 44px -14px rgb(0 0 0 / 0.65);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: 10 10 11;
-  --surface: 19 19 21;
-  --subtle: 31 31 35;
-  --fg: 244 244 245;
-  --fg-dim: 190 190 198;
-  --muted: 140 140 150;
-  --line: 39 39 44;
-  --line-strong: 58 58 64;
-  --primary: 244 244 245;
-  --primary-fg: 19 19 21;
-  --ring: 129 140 248;
-  --success: 74 222 128;
-  --warning: 251 191 36;
-  --danger: 248 113 113;
-  --danger-solid: 220 38 38;
-  --info: 96 165 250;
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.5);
-  --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.06), 0 12px 32px -4px rgb(0 0 0 / 0.6);
+  --canvas: 17 18 16;
+  --surface: 24 25 23;
+  --subtle: 34 35 31;
+  --grid: 26 27 24;
+  --fg: 236 235 228;
+  --fg-dim: 196 194 184;
+  --muted: 154 152 141;
+  --line: 42 43 38;
+  --line-strong: 58 59 53;
+  --frame: 119 118 108;
+  --primary: 196 255 77;
+  --primary-fg: 28 28 26;
+  --brand: 196 255 77;
+  --ink: 34 35 31;
+  --ink-fg: 236 235 228;
+  --ring: 196 255 77;
+  --success: 139 216 143;
+  --warning: 240 190 90;
+  --danger: 255 138 122;
+  --danger-solid: 205 52 38;
+  --info: 143 179 255;
+  --nav-active-bg: 24 25 23;
+  --nav-active-ring: 58 59 53;
+  --shadow-pop: 0 0 0 1px rgb(58 59 53), 0 2px 6px -2px rgb(0 0 0 / 0.4), 0 18px 44px -14px rgb(0 0 0 / 0.65);
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* Always keep the scrollbar's lane so pages that do and don't scroll lay out
+   identically (the styled scrollbar is a classic, non-overlay one).
+   overflow-y: scroll covers browsers without scrollbar-gutter; the track is
+   transparent, so a page with nothing to scroll just shows an empty lane. */
+html { -webkit-text-size-adjust: 100%; overflow-y: scroll; scrollbar-gutter: stable; }
 body {
   background-color: rgb(var(--canvas));
   color: rgb(var(--fg));
   font-size: 13px;
   line-height: 20px;
-  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: clip;
@@ -118,8 +190,262 @@ body {
 ::-webkit-scrollbar-thumb { background: rgb(var(--line-strong)); border: 3px solid transparent; background-clip: padding-box; border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--muted)); }
 
+/* Scrolls when it must (narrow screens) without showing a scrollbar. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Focus */
-:focus-visible { outline: 2px solid rgb(var(--ring)); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid rgb(var(--ring)); outline-offset: 2px; }
+:is(input, select, textarea):focus-visible { outline: none; }
+
+/* .dash-box: one dash pattern for small dashed accents (empty-state icons):
+   12px dashes, 8px gaps. Native dashed borders can't be sized, so its four
+   edges are gradients over a transparent 1px border. */
+.dash-box {
+  position: relative; border: 1px solid transparent;
+  background-image:
+    repeating-linear-gradient(90deg, rgb(var(--frame)) 0 12px, transparent 12px 20px),
+    repeating-linear-gradient(90deg, rgb(var(--frame)) 0 12px, transparent 12px 20px),
+    repeating-linear-gradient(180deg, rgb(var(--frame)) 0 12px, transparent 12px 20px),
+    repeating-linear-gradient(180deg, rgb(var(--frame)) 0 12px, transparent 12px 20px);
+  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%;
+  background-position: left top, left bottom, left top, right top;
+  background-repeat: no-repeat;
+  background-origin: border-box;
+}
+/* .frame: the one box in the app (cards, stat rows, tiles). A solid hairline
+   with a small rounded node on each corner, like Cloudflare's grid. Frames
+   never nest visually: a frame inside a frame is a plain hairline box with no
+   nodes. The border colour sits in :where() so tone classes (border-danger/30)
+   still win. Nodes are drawn on desktop only; on phones the column has no
+   rails for them to sit on. */
+.frame { position: relative; border-width: 1px; border-style: solid; }
+:where(.frame) { border-color: rgb(var(--line-strong)); }
+@media (min-width: 768px) {
+  /* Both layers span the border box plus 6px, so each 13px node centres on the
+     border line at its corner: ::after fills the nodes to hide the line
+     passing through, ::before outlines them. */
+  .frame::before, .frame::after {
+    content: ""; position: absolute; z-index: 1; inset: -7px; pointer-events: none;
+    -webkit-mask: var(--node-mask) left top / 13px 13px no-repeat, var(--node-mask) right top / 13px 13px no-repeat,
+                  var(--node-mask) left bottom / 13px 13px no-repeat, var(--node-mask) right bottom / 13px 13px no-repeat;
+            mask: var(--node-mask) left top / 13px 13px no-repeat, var(--node-mask) right top / 13px 13px no-repeat,
+                  var(--node-mask) left bottom / 13px 13px no-repeat, var(--node-mask) right bottom / 13px 13px no-repeat;
+  }
+  .frame::after {
+    --node-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Crect width='13' height='13' rx='3.5'/%3E%3C/svg%3E");
+    background: rgb(var(--canvas));
+  }
+  .frame::before {
+    --node-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13'%3E%3Crect x='.5' y='.5' width='12' height='12' rx='3' fill='none' stroke='%23000'/%3E%3C/svg%3E");
+    z-index: 2; background: rgb(var(--muted) / 0.8);
+  }
+  .frame .frame::before, .frame .frame::after,
+  .flare-lime .frame::before, .flare-lime .frame::after { display: none; }
+}
+
+/* Page rails: long-dash lines down both edges of the page column, full
+   height. On desktop the column has no side padding, so cards sit right on
+   the rails; text-only headers pad themselves. Section dividers are solid
+   rules from rail to rail between a page's sections, with a connector node
+   where each end meets a rail. */
+.page-rails {
+  --pad: 16px;
+  position: relative; flex: 1 0 auto; width: 100%;
+}
+.page-rails::before, .page-rails::after {
+  content: ""; position: absolute; top: 0; bottom: calc(-1 * var(--foot-h, 0px)); width: 1px; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgb(var(--line-strong)) 0 12px, transparent 12px 20px);
+}
+.page-rails::before { left: 0; }
+.page-rails::after { right: 0; }
+.section-divider { position: relative; z-index: 2; height: 0; }
+.section-divider-end { top: -1px; }
+.section-band { height: 24px; }
+@media (min-width: 768px) { .section-band { height: 40px; } }
+.section-divider::before {
+  content: ""; position: absolute; top: 0; height: 1px;
+  left: calc(-1 * var(--pad)); right: calc(-1 * var(--pad)); background: rgb(var(--line-strong));
+}
+.node {
+  position: absolute; z-index: 3; top: -6px; width: 13px; height: 13px;
+  border: 1px solid rgb(var(--muted) / 0.8); border-radius: 3px; background: rgb(var(--canvas));
+}
+.node-l { left: calc(-1 * var(--pad) - 6px); }
+.node-r { right: calc(-1 * var(--pad) - 6px); }
+@media (min-width: 768px) { .page-rails { --pad: 0px; } }
+/* Content panel: the page's one content section. It is open space, not a
+   box: its frames span rail to rail on desktop and stand apart with gaps, so
+   the only lines are each frame's own hairline. Grids of frames get the same
+   gap as the stack so the nodes of neighbours never crowd. */
+.zone-panel { position: relative; padding-block: 16px; }
+/* The last band runs down to the footer rule, which closes it. */
+.page-rails > .zone-panel:last-child { flex: 1 0 auto; }
+@media (min-width: 768px) {
+  .zone-panel { padding-block: 32px; }
+  .zone-panel .grid:has(> .frame) { gap: 24px; }
+}
+/* Flush panel: the content is itself a grid of hairline cells, so it runs
+   straight to the dividers above and below with no inset, and stretches
+   with the panel down to the footer rule so its column rules reach it. */
+.zone-panel.zone-panel-flush { padding-block: 0; display: flex; flex-direction: column; }
+.zone-panel.zone-panel-flush > * { flex: 1 0 auto; }
+/* Split nodes: where a cell's left rule meets the dividers above and below,
+   a connector node like the ones on the rails, so every column split reads
+   as running the full height of its section. Desktop only; narrow layouts
+   wrap the cells. */
+@media (min-width: 768px) {
+  .split-nodes > * + * { position: relative; }
+  .split-nodes > * + *::before, .split-nodes > * + *::after {
+    content: ""; position: absolute; z-index: 3; left: -6px; width: 13px; height: 13px; pointer-events: none;
+    border: 1px solid rgb(var(--muted) / 0.8); border-radius: 3px; background: rgb(var(--canvas));
+  }
+  .split-nodes > * + *::before { top: -6px; }
+  .split-nodes > * + *::after { bottom: -6px; }
+  /* The last panel has no closing divider, only the plain dashed footer
+     rule, which carries no nodes; its splits just run into it. */
+  .page-rails > .zone-panel:last-child > .split-nodes > * + *::after { display: none; }
+}
+/* Outer rails (desktop): a second pair of long-dash lines 10px in from the
+   window edges, in line with the hero's inset, the full height of the page.
+   Section dividers stop at the inner rails and never reach these. */
+.page-wrap {
+  position: relative; isolation: isolate;
+  display: flex; flex-direction: column; min-height: calc(100vh - 64px);
+  --foot-h: 24px;
+}
+@media (min-width: 768px) { .page-wrap { --foot-h: 40px; } }
+/* Closing rule: the header's long dashes across the full window, with a band
+   below so it always sits above the page bottom. The rails run on through it. */
+.page-foot {
+  flex: none; height: var(--foot-h);
+  background-image: repeating-linear-gradient(90deg, rgb(var(--line-strong)) 0 12px, transparent 12px 20px);
+  background-size: 100% 1px; background-repeat: no-repeat; background-position: 0 0;
+}
+
+.page-wrap::before, .page-wrap::after {
+  content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; width: 1px; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgb(var(--line-strong)) 0 12px, transparent 12px 20px);
+}
+.page-wrap::before { left: 10px; }
+.page-wrap::after { right: 10px; }
+@media (max-width: 767px) {
+  .page-wrap::before, .page-wrap::after { display: none; }
+}
+@media (max-width: 767px) {
+  .page-rails::before, .page-rails::after, .node { display: none; }
+}
+
+/* Header rule: long dashes, like a drafting sheet's border. */
+.rule-dashed {
+  background-image: repeating-linear-gradient(90deg, rgb(var(--line-strong)) 0 12px, transparent 12px 20px);
+  background-size: 100% 1px; background-repeat: no-repeat; background-position: 0 100%;
+}
+
+/* Lime flare: the sign-in sheet, built like Cloudflare's hero. A flat brand
+   green, a fine white dot field over all of it, darker edges, and a cream
+   glow rising from the bottom that the dots run through.
+   The sheet is a step deeper than --brand (#9CDB2A); white on it is ~1.7:1,
+   so keep type on the sheet large. Text directly on the sheet (outside cards)
+   follows --flare-fg. */
+:root { --flare: 156 219 42; --flare-fg: 255 255 255; }
+/* Pins a subtree to the light palette whatever the app theme is. */
+.theme-light { color: rgb(var(--fg)); }
+.flare-lime {
+  color: rgb(var(--flare-fg));
+  background-color: rgb(var(--flare));
+  background-image:
+    radial-gradient(ellipse 120% 90% at 50% 40%, transparent 55%, rgb(0 0 0 / 0.16) 100%),
+    linear-gradient(to bottom, rgb(0 0 0 / 0.06), transparent 18%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+/* Glow: a wide cream bloom under the bottom edge. */
+.flare-lime::before {
+  content: ""; position: absolute; z-index: -2; left: 50%; bottom: -40%;
+  width: min(1100px, 95%); height: 72%; min-height: 220px; transform: translateX(-50%);
+  background: radial-gradient(closest-side, #fffbe2 0%, #fbf3b8 28%, rgb(236 245 150 / 0.6) 55%, transparent 100%);
+  filter: blur(6px);
+}
+/* Dot field: an LED screen like Cloudflare's, not round dots. Each pixel is
+   a short vertical tick on a dense 3px by 5px pitch, over faint scan lines
+   on the same columns. Strongest in the glow so the bloom reads as halftone, faint toward the top. */
+.flare-lime::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background-image:
+    radial-gradient(0.6px 1.4px at 50% 50%, #fff 0%, rgb(255 255 255 / 0.6) 50%, transparent 100%),
+    linear-gradient(90deg, transparent 1px, rgb(255 255 255 / 0.1) 1px 2px, transparent 2px);
+  background-size: 3px 5px, 3px 100%;
+  -webkit-mask-image:
+    radial-gradient(ellipse 60% 55% at 50% 100%, #000 0%, rgb(0 0 0 / 0.55) 55%, transparent 100%),
+    linear-gradient(to bottom, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.3));
+  mask-image:
+    radial-gradient(ellipse 60% 55% at 50% 100%, #000 0%, rgb(0 0 0 / 0.55) 55%, transparent 100%),
+    linear-gradient(to bottom, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.3));
+}
+.flare-lime :is(.text-muted, .text-fg-dim, .text-fg):not(.frame, .frame *) { color: rgb(var(--flare-fg) / 0.9); }
+.flare-lime :is(a, button):not(.frame, .frame *, .hero-actions *):hover { color: rgb(var(--flare-fg)); }
+
+/* Cells: a grid split by solid rules. Each cell draws its right and bottom
+   rule and hangs 1px past its track; the grid clips the outer edges, so it
+   works at any column count. Put it inside a frame (or a Card). */
+.cells { overflow: hidden; }
+.cells.cells > * {
+  border-right: 1px solid rgb(var(--line)); border-bottom: 1px solid rgb(var(--line));
+  margin: 0 -1px -1px 0; background: transparent;
+}
+
+/* Hero sheet: the lime flare (see .flare-lime) as a page lead. Tokens are
+   re-pointed inside it: white type, a cream primary button with ink text and
+   white outline buttons, like Cloudflare's hero. */
+.hero-sheet {
+  --ink: var(--flare); --ink-fg: 255 255 255;
+  --surface: var(--flare); --fg: 255 255 255; --line-strong: 236 248 214; --frame: 255 255 255;
+  --primary: 255 251 240; --primary-fg: 28 28 26;
+}
+.hero-actions button { height: 44px; padding-inline: 22px; font-size: 14px; font-weight: 600; }
+/* Hero buttons lift on hover: the cream primary brightens to white and keeps
+   its ink text, outline buttons fill with a white wash. Same on both themes,
+   since the sheet is lime either way. */
+.hero-actions button {
+  transition: transform .2s cubic-bezier(0.16, 1, 0.3, 1), background-color .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
+}
+.hero-actions button:not(:disabled):hover {
+  opacity: 1; transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.35) inset, 0 8px 20px -10px rgb(40 70 0 / 0.55);
+}
+.hero-actions button:not(:disabled):active { transform: translateY(0); box-shadow: none; transition-duration: .08s; }
+.hero-actions button.bg-primary:not(:disabled):hover { background-color: #fff; border-color: #fff; color: rgb(28 28 26); }
+.hero-actions button.bg-surface:not(:disabled):hover { background-color: rgb(255 255 255 / 0.16); border-color: #fff; color: #fff; }
+
+/* Active header nav pill (components/nav-menu.tsx). */
+.nav-pill-active { background-color: rgb(var(--nav-active-bg)); box-shadow: inset 0 0 0 1px rgb(var(--nav-active-ring)); }
+
+/* Header menu panel (components/nav-menu.tsx). Hidden panels stay mounted so
+   they can fade out; data-morph turns on the size transition while the open
+   panel switches between menus, and the new menu slides in from that side. */
+.menu-panel {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translate(-50%, -6px) scale(0.985);
+  transform-origin: top center;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .16s ease, transform .22s var(--ease-out), visibility 0s linear .22s;
+}
+.menu-panel[data-open="true"] {
+  transform: translate(-50%, 0);
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition-delay: 0s;
+}
+.menu-clip { overflow: hidden; }
+.menu-panel[data-morph="true"],
+.menu-panel[data-morph="true"] .menu-clip {
+  transition: opacity .16s ease, transform .22s var(--ease-out), visibility 0s, width .32s var(--ease-out), height .32s var(--ease-out);
+}
+.menu-content { animation: menuFade .18s ease-out both; }
+.menu-content[data-dir="right"] { animation: menuFromRight .32s var(--ease-out) both; }
+.menu-content[data-dir="left"] { animation: menuFromLeft .32s var(--ease-out) both; }
+@keyframes menuFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes menuFromRight { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes menuFromLeft { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
 
 /* Form control styles live in tailwind.css (@layer base) so they always
    follow preflight regardless of how the bundler orders stylesheets. */
@@ -128,6 +454,33 @@ body {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 .pulse { animation: pulse 1.4s ease-in-out infinite; }
+/* Skeleton blocks in the loading shell (PageSkeleton). */
+.skeleton { background: rgb(var(--line)); animation: pulse 1.4s ease-in-out .6s infinite; }
+
+/* Page entrance (hooks/use-grid-reveal.ts): while data-grow is set, the rails,
+   the content panel and the hero sheet grow downward, and each divider runs
+   out to the right when the rails reach it. The hook sets --grow-at (start,
+   negative when resuming) and --grow-ms (duration) on every animated element,
+   so all of them grow at one speed. */
+.page-wrap[data-grow]::before, .page-wrap[data-grow]::after,
+.page-wrap[data-grow] .page-rails::before, .page-wrap[data-grow] .page-rails::after,
+.page-wrap[data-grow] .zone-panel, .page-wrap[data-grow] .hero-sheet {
+  animation: gridGrowY var(--grow-ms, 0ms) linear var(--grow-at, 0ms) backwards;
+}
+.page-wrap[data-grow] .section-divider::before {
+  animation: gridGrowX .26s cubic-bezier(0.16, 1, 0.3, 1) var(--grow-at, 0ms) backwards;
+}
+.page-wrap[data-grow] .section-divider .node {
+  animation: gridNode .2s ease-out var(--grow-at, 0ms) backwards;
+}
+@keyframes gridGrowY { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
+@keyframes gridGrowX { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+@keyframes gridNode { from { opacity: 0; transform: scale(.4); } }
+/* Skeleton traced over a section's content until the grid closes around it.
+   Square, like the drafting frames, so nothing changes shape on the swap. */
+.grid-skeleton-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.grid-skeleton-layer span { position: absolute; background: rgb(var(--line)); }
+.grid-skeleton-layer .on-flare span { background: rgb(255 255 255 / 0.22); }
 .spin { animation: spin .6s linear infinite; }
 
 /* Phone UI has its own component tree. These rules provide the native-feeling

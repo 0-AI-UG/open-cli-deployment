@@ -29,7 +29,7 @@ type Props = {
 };
 
 const DEFAULT_OPTIONS: ITerminalOptions = {
-  fontFamily: "Geist Mono Variable, monospace",
+  fontFamily: "IBM Plex Mono, monospace",
   fontSize: 12,
   lineHeight: 1.2,
   // A fixed dark well in both light and dark panel themes (see the logs style).
@@ -94,7 +94,7 @@ export const TerminalViewport = forwardRef<TerminalViewportHandle, Props>(functi
       onReadyRef.current?.();
     });
     // The web font may arrive after xterm's initial character measurement.
-    void document.fonts.load('12px "Geist Mono Variable"').then(fitAndNotify).catch(() => {});
+    void document.fonts.load('12px "IBM Plex Mono"').then(fitAndNotify).catch(() => {});
 
     const dataSubscription = terminal.onData((data) => onDataRef.current?.(data));
     const resizeObserver = new ResizeObserver(fitAndNotify);

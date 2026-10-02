@@ -144,11 +144,11 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
         </>}
       />
 
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-line shadow-xs min-[380px]:grid-cols-3">
+      <div className="frame bg-surface"><div className="cells grid grid-cols-1 min-[380px]:grid-cols-3">
         <Meta label="Enqueued" value={fmtTs(op.enqueued_at)} />
         <Meta label="Started" value={fmtTs(op.started_at)} />
         <Meta label="Finished" value={fmtTs(op.finished_at)} />
-      </div>
+      </div></div>
 
       {hasOutcome && (
         <section aria-label="Operation outcome">

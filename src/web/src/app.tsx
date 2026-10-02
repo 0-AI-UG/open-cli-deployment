@@ -29,10 +29,16 @@ import { EngineOpLogsPage } from "./pages/engine-op-logs.tsx";
 import { IncidentPage } from "./pages/incident.tsx";
 import { IncidentsPage } from "./pages/incidents.tsx";
 
+// The route without its query: "?section=…" style params belong to the page
+// (see hooks/use-hash-param.ts), not to routing.
+function routeHash() {
+  return (window.location.hash || "#/").split("?")[0];
+}
+
 function useHash() {
-  const [hash, setHash] = useState(window.location.hash || "#/");
+  const [hash, setHash] = useState(routeHash);
   useEffect(() => {
-    const handler = () => setHash(window.location.hash || "#/");
+    const handler = () => setHash(routeHash());
     window.addEventListener("hashchange", handler);
     return () => window.removeEventListener("hashchange", handler);
   }, []);

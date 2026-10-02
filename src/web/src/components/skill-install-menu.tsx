@@ -5,11 +5,11 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Copy, Sparkles } from "lucide-react";
+import { Check, Copy, Sparkles } from "lucide-react";
 import { SKILL_AGENT_TARGETS } from "../../../shared/skill-agents.ts";
 import { portalAnchorRect } from "./ui.tsx";
 
-const MENU_WIDTH = 248;
+const MENU_WIDTH = 288;
 
 export function SkillInstallMenu() {
   const [open, setOpen] = useState(false);
@@ -100,10 +100,8 @@ export function SkillInstallMenu() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors ${
-          open
-            ? "bg-subtle text-fg"
-            : "text-fg-dim hover:bg-subtle hover:text-fg"
+        className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border bg-surface px-3 text-sm font-medium text-fg transition-colors ${
+          open ? "border-frame" : "border-line-strong hover:border-frame"
         }`}
         title={
           copiedTarget
@@ -118,13 +116,7 @@ export function SkillInstallMenu() {
         ) : (
           <Sparkles size={14} />
         )}
-        <span>{copiedAgent ? "Copied" : "Agent skill"}</span>
-        {!copiedAgent && (
-          <ChevronDown
-            size={14}
-            className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        )}
+        <span>{copiedAgent ? "Copied" : "Skill"}</span>
       </button>
 
       {open &&
@@ -141,17 +133,18 @@ export function SkillInstallMenu() {
               left: position.left,
               width: MENU_WIDTH,
             }}
-            className="z-[90] animate-pop-in overflow-hidden rounded-lg border bg-surface shadow-pop"
+            className="z-[90] animate-pop-in rounded-lg bg-canvas/95 p-1.5 shadow-pop backdrop-blur-md"
           >
-            <div className="border-b px-3 py-2.5">
-              <div className="text-sm font-semibold text-fg">
+            <div className="border border-line bg-surface">
+            <div className="border-b px-3.5 py-3">
+              <div className="text-sm font-medium text-fg">
                 Install agent skill
               </div>
               <div className="mt-0.5 text-xs text-muted">
                 Choose an agent to copy its command
               </div>
             </div>
-            <div className="p-1">
+            <div className="p-1.5">
               {SKILL_AGENT_TARGETS.map((agent) => {
                 const command = `ocd skill install --agent ${agent.name}`;
                 return (
@@ -161,11 +154,9 @@ export function SkillInstallMenu() {
                     role="menuitem"
                     onClick={() => void copyInstallCommand(agent.name)}
                     title={command}
-                    className="group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-subtle focus:bg-subtle focus:outline-none"
+                    className="group flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-subtle focus:bg-subtle focus:outline-none"
                   >
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-subtle text-muted">
-                      <Sparkles size={13} />
-                    </span>
+                    <Sparkles size={15} strokeWidth={1.75} className="shrink-0 text-muted transition-colors group-hover:text-fg" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-fg">
                         {agent.label}
@@ -176,11 +167,12 @@ export function SkillInstallMenu() {
                     </span>
                     <Copy
                       size={14}
-                      className="shrink-0 text-muted transition-colors group-hover:text-fg"
+                      className="shrink-0 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100"
                     />
                   </button>
                 );
               })}
+            </div>
             </div>
           </div>,
           document.body,

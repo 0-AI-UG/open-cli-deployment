@@ -7,10 +7,12 @@ import { PermissionGate } from "../components/permission-gate.tsx";
 import { NeoSelect } from "../components/neo-select.tsx";
 import { useServerTypes, typeOptions, locationOptions } from "../hooks/use-server-types.ts";
 import { ArrowRight, HardDrive, Server, Trash2, RefreshCw, Plus, History, Cloud, Hammer } from "lucide-react";
+import { HetznerIcon } from "../components/brand-icons";
 import type { ResourcesData } from "../types.ts";
 import { serverProvisioningResourceId } from "../../../shared/server-provisioning.ts";
 import { InfrastructureTools } from "../components/infrastructure-tools.tsx";
 import { TabBar } from "../components/tab-bar.tsx";
+import { useHashParam } from "../hooks/use-hash-param.ts";
 
 type ResourceSection = "overview" | "servers" | "volumes" | "object-storage" | "tools";
 
@@ -23,7 +25,7 @@ const RESOURCE_SECTIONS: Array<{ key: ResourceSection; label: string }> = [
 ];
 
 export function ResourcesPage() {
-  const [section, setSection] = useState<ResourceSection>("overview");
+  const [section, setSection] = useHashParam("section", RESOURCE_SECTIONS.map((item) => item.key), "overview");
   const [data, setData] = useState<ResourcesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -240,18 +242,18 @@ export function ResourcesPage() {
             title={<span className="inline-flex items-center gap-1">Estimated monthly cost <InfoTip text="Estimates based on Hetzner's list prices. Excludes traffic overage and snapshots." /></span>}
             actions={<span className="text-xs text-muted">Gross · {data.totals.currency || "EUR"}</span>}
           />
-          <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-3">
+          <div className="frame bg-surface"><div className="cells grid grid-cols-1 sm:grid-cols-3">
             <Stat label="Servers" value={fmtPrice(data.totals.servers)} className="bg-surface px-4 py-3.5" />
             <Stat label="Volumes" value={fmtPrice(data.totals.volumes)} className="bg-surface px-4 py-3.5" />
             <Stat label="Total / month" value={fmtPrice(data.totals.total)} hint="Servers + volumes" className="bg-subtle px-4 py-3.5" />
-          </div>
+          </div></div>
         </section>
       )}
 
       {section === "overview" && (
         <section className="space-y-3">
           <SectionHeader title="Inventory" />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="frame bg-surface"><div className="cells grid sm:grid-cols-2">
             {[
               { key: "servers" as const, label: "Servers", value: data?.servers?.length || 0, unit: "hosts", icon: Server },
               { key: "volumes" as const, label: "Volumes", value: data?.volumes?.length || 0, unit: "volumes", icon: HardDrive },
@@ -266,11 +268,9 @@ export function ResourcesPage() {
                 key={item.key}
                 type="button"
                 onClick={() => setSection(item.key)}
-                className="group flex w-full items-center gap-3.5 rounded-lg border bg-surface p-4 text-left shadow-xs transition-colors hover:border-line-strong hover:bg-subtle/40 focus-visible:outline-none focus-visible:ring-2"
+                className="group flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-brand/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border bg-subtle text-muted transition-colors group-hover:text-fg">
-                  <item.icon size={18} />
-                </span>
+                <item.icon size={20} className="shrink-0 text-muted transition-colors group-hover:text-fg" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-fg">{item.label}</span>
                   <span className="mt-0.5 flex items-baseline gap-1.5">
@@ -281,7 +281,7 @@ export function ResourcesPage() {
                 <ArrowRight size={15} className="shrink-0 text-muted transition-colors group-hover:text-fg" />
               </button>
             ))}
-          </div>
+          </div></div>
         </section>
       )}
 
@@ -299,7 +299,7 @@ export function ResourcesPage() {
                 </Btn>
               </PermissionGate>
               {showCreate && (
-                <div className="absolute right-0 top-full z-50 mt-1.5 w-64 animate-pop-in space-y-2 rounded-lg border bg-surface p-3 shadow-pop">
+                <div className="absolute right-0 top-full z-50 mt-1.5 w-64 animate-pop-in space-y-2 bg-surface p-3 rounded-lg shadow-pop">
                   <div className="pb-1 text-xs font-medium text-muted">New Hetzner server</div>
                   <NeoSelect
                     value={createType}
@@ -387,11 +387,11 @@ export function ResourcesPage() {
       {section === "object-storage" && <Card className="overflow-hidden">
         <CardHeader
           title="S3 buckets"
-          icon={<Cloud size={15} />}
+          icon={<HetznerIcon size={15} />}
           description={data?.s3_configured ? `${data?.buckets?.length || 0} bucket${(data?.buckets?.length || 0) === 1 ? "" : "s"} · Hetzner · ${data.s3_region}` : "Hetzner Object Storage"}
         />
         {!data?.s3_configured ? (
-          <EmptyState icon={Cloud} message="Hetzner Object Storage is not configured" description="Add S3 credentials under Admin → Hetzner." />
+          <EmptyState icon={HetznerIcon} message="Hetzner Object Storage is not configured" description="Add S3 credentials under Admin → Hetzner." />
         ) : data.s3_error ? (
           <div className="p-4"><InlineNotice tone="danger"><span className="break-words font-mono text-xs">{data.s3_error}</span></InlineNotice></div>
         ) : (

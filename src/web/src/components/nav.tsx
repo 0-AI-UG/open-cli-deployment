@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
   Cpu,
   HardDrive,
   Home,
@@ -11,26 +10,18 @@ import {
   Menu,
   Monitor,
   Moon,
-  Server,
   Sun,
   TerminalSquare,
   User,
   Users,
 } from "lucide-react";
 import { useAuth, logout } from "../stores/auth.ts";
-import { setThemePreference, useThemePreference } from "../stores/theme.ts";
+import { setThemePreference, useResolvedTheme, useThemePreference } from "../stores/theme.ts";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
 import { MobileActionSheet, MobileSheetAction } from "./mobile-action-sheet.tsx";
 import { SkillInstallMenu } from "./skill-install-menu.tsx";
+import { DesktopMenuNav } from "./nav-menu.tsx";
 import { Logo, SegmentedControl } from "./ui.tsx";
-
-const navItems = [
-  { hash: "#/", label: "Overview", icon: Server, match: /^#\/?$|^#\/(apps|stacks)\// },
-  { hash: "#/environments", label: "Environments", icon: Layers, match: /^#\/environments/ },
-  { hash: "#/resources", label: "Resources", icon: HardDrive, match: /^#\/resources/ },
-  { hash: "#/incidents", label: "Incidents", icon: AlertTriangle, match: /^#\/incidents/ },
-  { hash: "#/engine", label: "Operations", icon: Cpu, match: /^#\/engine/ },
-];
 
 const themeOptions = [
   { value: "system", label: <Monitor size={14} aria-label="System" /> },
@@ -54,11 +45,29 @@ function CliCopyButton() {
   return (
     <button
       onClick={copy}
-      className="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-fg-dim transition-colors hover:bg-subtle hover:text-fg"
+      className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong bg-surface px-3 text-sm font-medium text-fg transition-colors hover:border-frame"
       title={installCmd}
     >
       {copied ? <Check size={14} className="text-success" /> : <TerminalSquare size={14} />}
-      {copied ? "Copied" : "Install CLI"}
+      {copied ? "Copied" : "CLI"}
+    </button>
+  );
+}
+
+// One-click light/dark switch in the header. It pins an explicit theme; the
+// user menu still offers "System" to follow the OS again.
+function ThemeToggle() {
+  const resolved = useResolvedTheme();
+  const next = resolved === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setThemePreference(next)}
+      aria-label={`Switch to ${next} mode`}
+      title={`Switch to ${next} mode`}
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-line-strong bg-surface text-fg transition-colors hover:border-frame"
+    >
+      {resolved === "dark" ? <Sun size={15} /> : <Moon size={15} />}
     </button>
   );
 }
@@ -101,17 +110,18 @@ function UserMenu({ hash }: { hash: string }) {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`inline-flex h-8 items-center gap-2 rounded-md pl-1 pr-2 text-sm font-medium transition-colors hover:bg-subtle ${open ? "bg-subtle" : ""}`}
+        aria-label={`Account menu for ${user?.username ?? "user"}`}
+        title={user?.username}
+        className={`grid h-8 w-8 place-items-center rounded-full border bg-surface p-0.5 transition-colors hover:border-frame ${open ? "border-frame" : "border-line-strong"}`}
       >
         {user?.githubAvatarUrl
-          ? <img src={user.githubAvatarUrl} alt="" className="h-6 w-6 rounded-full border" />
-          : <span className="grid h-6 w-6 place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">{initial}</span>}
-        <span className="max-w-32 truncate text-fg">{user?.username}</span>
-        <ChevronDown size={14} className={`text-muted transition-transform ${open ? "rotate-180" : ""}`} />
+          ? <img src={user.githubAvatarUrl} alt="" className="h-full w-full rounded-full" />
+          : <span className="grid h-full w-full place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">{initial}</span>}
       </button>
 
       {open && (
-        <div role="menu" className="absolute right-0 top-full z-[60] mt-1.5 w-60 animate-pop-in rounded-lg border bg-surface p-1 shadow-pop">
+        <div role="menu" className="absolute right-0 top-full z-[60] mt-1.5 w-64 animate-pop-in rounded-lg bg-canvas/95 p-1.5 shadow-pop backdrop-blur-md">
+          <div className="border border-line bg-surface p-1">
           <div className="px-2.5 pb-2 pt-1.5">
             <div className="truncate text-sm font-medium text-fg">{user?.username}</div>
             <div className="text-xs text-muted">{user?.isAdmin ? "Administrator" : "Member"}</div>
@@ -126,6 +136,7 @@ function UserMenu({ hash }: { hash: string }) {
           </div>
           <div className="my-1 border-t" />
           <button role="menuitem" onClick={logoutAndRedirect} className={itemClass}><LogOut size={15} /> Log out</button>
+          </div>
         </div>
       )}
     </div>
@@ -134,40 +145,18 @@ function UserMenu({ hash }: { hash: string }) {
 
 function DesktopNav({ hash }: { hash: string }) {
   const { user } = useAuth();
-  const items = user?.isAdmin
-    ? [...navItems, { hash: "#/admin", label: "Admin", icon: Users, match: /^#\/admin/ }]
-    : navItems;
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-surface/85 backdrop-blur-md supports-[backdrop-filter]:bg-surface/75">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
-        <div className="flex min-w-0 items-center gap-6">
-          <a href="#/" className="flex shrink-0 items-center gap-2 rounded-md text-fg" aria-label="OCD overview">
-            <Logo size={24} />
-            <span className="text-base font-semibold tracking-tight">OCD</span>
-          </a>
-          <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto" aria-label="Primary navigation">
-            {items.map((item) => {
-              const active = item.match.test(hash);
-              return (
-                <a
-                  key={item.hash}
-                  href={item.hash}
-                  aria-current={active ? "page" : undefined}
-                  className={`relative inline-flex h-8 shrink-0 items-center rounded-md px-3 text-sm font-medium transition-colors ${
-                    active ? "bg-subtle text-fg" : "text-muted hover:text-fg"
-                  }`}
-                >
-                  {item.label}
-                </a>
-              );
-            })}
-          </nav>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
+    <header className="rule-dashed sticky top-0 z-50 bg-canvas/90 backdrop-blur-md">
+      <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4 px-6">
+        <a href="#/" className="flex h-10 shrink-0 items-center gap-2 justify-self-start rounded-md text-fg" aria-label="OCD overview">
+          <span className="text-brand"><Logo size={28} mono /></span>
+        </a>
+        <DesktopMenuNav hash={hash} isAdmin={!!user?.isAdmin} />
+        <div className="flex shrink-0 items-center gap-1 justify-self-end">
           <CliCopyButton />
           <SkillInstallMenu />
-          <div className="mx-1.5 h-5 w-px bg-line" />
+          <ThemeToggle />
           <UserMenu hash={hash} />
         </div>
       </div>
@@ -191,22 +180,24 @@ function MobileNav({ hash }: { hash: string }) {
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b bg-surface/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
+      <header className="rule-dashed sticky top-0 z-50 bg-canvas/90 pt-[env(safe-area-inset-top)] backdrop-blur-md">
         <div className="flex h-[52px] items-center justify-between px-4">
           <a href="#/" className="flex h-11 items-center gap-2 font-semibold tracking-tight text-fg" aria-label="OCD overview">
-            <Logo size={26} />
-            <span className="text-base">OCD</span>
+            <span className="text-brand"><Logo size={26} mono /></span>
           </a>
-          <button onClick={() => setMoreOpen(true)} className="flex h-11 max-w-[55%] items-center gap-2 pl-2 text-sm font-medium text-fg-dim" aria-label="Open account and navigation menu">
+          <div className="flex min-w-0 max-w-[65%] items-center gap-1">
+          <ThemeToggle />
+          <button onClick={() => setMoreOpen(true)} className="flex h-11 min-w-0 items-center gap-2 pl-2 text-sm font-medium text-fg-dim" aria-label="Open account and navigation menu">
             <span className="truncate">{user?.username}</span>
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-fg">
               {(user?.username || "?").charAt(0).toUpperCase()}
             </span>
           </button>
+          </div>
         </div>
       </header>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md" aria-label="Primary navigation">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md" aria-label="Primary navigation">
         <div className="grid h-[60px] grid-cols-4">
           {primaryItems.map((item) => {
             const Icon = item.icon;
@@ -229,11 +220,11 @@ function MobileNav({ hash }: { hash: string }) {
         {user?.isAdmin && <MobileSheetAction icon={<Users size={19} />} label="Admin" detail="Setup, integrations, and users" onClick={() => { window.location.hash = "#/admin"; }} />}
         <MobileSheetAction icon={<User size={19} />} label="Account" detail="Security and profile" onClick={() => { window.location.hash = "#/account"; }} />
         <MobileSheetAction icon={copied ? <Check size={19} /> : <TerminalSquare size={19} />} label={copied ? "Copied install command" : "Copy CLI install command"} onClick={copy} />
-        <div className="flex items-center justify-between rounded-lg border bg-surface px-4 py-2.5">
+        <div className="frame flex items-center justify-between bg-surface px-4 py-2.5">
           <span className="text-sm font-medium">Agent skill</span>
           <SkillInstallMenu />
         </div>
-        <div className="flex items-center justify-between rounded-lg border bg-surface px-4 py-2.5">
+        <div className="frame flex items-center justify-between bg-surface px-4 py-2.5">
           <span className="text-sm font-medium">Theme</span>
           <SegmentedControl ariaLabel="Theme" options={themeOptions} value={theme} onChange={setThemePreference} />
         </div>

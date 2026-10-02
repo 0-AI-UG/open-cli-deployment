@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Eye, GitBranch, Hammer, HardDrive, KeyRound, RefreshCw, Trash2 } from "lucide-react";
+import { GitHubIcon } from "./brand-icons";
 import { get } from "../api/client.ts";
 import { runCliAction } from "../api/cli-actions.ts";
 import { Badge, Btn, Card, CardHeader, CopyButton, EmptyState, Field, InlineNotice, StatusBadge, Table, confirm, showToast } from "./ui.tsx";
@@ -112,7 +113,7 @@ export function InfrastructureTools() {
     </Card>
 
     {(sources.length > 0 || webhook) && <Card className="overflow-hidden">
-      <CardHeader title="Repository webhooks" icon={<GitBranch size={15} />} description="GitHub push sources that trigger builds" />
+      <CardHeader title="Repository webhooks" icon={<GitHubIcon size={15} className="text-fg" />} description="GitHub push sources that trigger builds" />
       {webhook && <div className="border-b p-4"><InlineNotice tone="warning" title="Webhook secret — shown once">
         <div className="mt-1.5 space-y-1">
           <div className="flex min-w-0 items-center gap-2"><span className="w-12 shrink-0 text-xs text-muted">URL</span><code className="min-w-0 break-all font-mono text-xs text-fg">{webhook.url}</code><CopyButton text={webhook.url} /></div>

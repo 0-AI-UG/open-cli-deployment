@@ -55,7 +55,7 @@ export function PlacementTab({
     <div className="space-y-6">
       <Card className="overflow-hidden">
         <CardHeader title="Placement" icon={<MapPin size={15} />} description="Declared in the manifest; OCD runs exactly this many replicas on each server" />
-        <div className="grid grid-cols-2 gap-px bg-line">
+        <div className="cells grid grid-cols-2">
           <Stat className="bg-surface px-4 py-3.5" label="Running" value={running} tone={running < desired ? "warning" : undefined} />
           <Stat className="bg-surface px-4 py-3.5" label="Declared" value={desired} />
         </div>

@@ -3,6 +3,7 @@ import { post } from "../api/client.ts";
 import { setTempToken } from "../stores/auth.ts";
 import { showToast, Card, Btn, AuthShell } from "../components/ui.tsx";
 import { ArrowRight } from "lucide-react";
+import { DashboardPreview } from "../components/dashboard-preview.tsx";
 
 export function SetupPage() {
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,12 @@ export function SetupPage() {
   const fieldLabel = "block text-sm font-medium text-fg";
 
   return (
-    <AuthShell title="Initial setup" description="Create the administrator account for this panel." width="md">
+    <AuthShell
+      title="Initial setup"
+      description="Create the administrator account for this panel."
+      width="md"
+      aside={<DashboardPreview domainSuffix={form.default_domain_suffix} />}
+    >
       <Card className="p-6">
         <div className="space-y-4">
           <label className="block space-y-1.5">
@@ -67,9 +73,6 @@ export function SetupPage() {
           </Btn>
         </div>
       </Card>
-      <p className="mt-4 text-center text-xs text-muted">
-        Cloud credentials are optional and can be configured later. You can also connect an existing server.
-      </p>
     </AuthShell>
   );
 }

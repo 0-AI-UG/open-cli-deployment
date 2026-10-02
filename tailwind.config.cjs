@@ -7,8 +7,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Geist Variable", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["Geist Mono Variable", "ui-monospace", "SFMono-Regular", "monospace"],
+        sans: ["IBM Plex Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["IBM Plex Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       fontSize: {
         "2xs": ["11px", "16px"],
@@ -28,6 +28,9 @@ module.exports = {
         muted: token("muted"),
         line: token("line"),
         "line-strong": token("line-strong"),
+        frame: token("frame"),
+        ink: token("ink"),
+        "ink-fg": token("ink-fg"),
         primary: token("primary"),
         "primary-fg": token("primary-fg"),
         brand: token("brand"),
@@ -49,11 +52,12 @@ module.exports = {
         DEFAULT: token("surface"),
       },
       borderRadius: {
-        sm: "4px",
-        DEFAULT: "6px",
-        md: "6px",
-        lg: "8px",
-        xl: "12px",
+        sm: "2px",
+        DEFAULT: "3px",
+        md: "3px",
+        lg: "4px",
+        xl: "4px",
+        "2xl": "4px",
       },
       boxShadow: {
         xs: "var(--shadow-xs)",
@@ -63,12 +67,12 @@ module.exports = {
       animation: {
         "fade-in": "fadeIn 0.15s ease-out",
         "slide-up": "slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-        "pop-in": "popIn 0.12s ease-out",
+        "pop-in": "popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1)",
       },
       keyframes: {
         fadeIn: { "0%": { opacity: "0" }, "100%": { opacity: "1" } },
         slideUp: { "0%": { opacity: "0", transform: "translateY(6px)" }, "100%": { opacity: "1", transform: "translateY(0)" } },
-        popIn: { "0%": { opacity: "0", transform: "scale(0.97)" }, "100%": { opacity: "1", transform: "scale(1)" } },
+        popIn: { "0%": { opacity: "0", transform: "translateY(-4px) scale(0.985)" }, "100%": { opacity: "1", transform: "translateY(0) scale(1)" } },
       },
     },
   },

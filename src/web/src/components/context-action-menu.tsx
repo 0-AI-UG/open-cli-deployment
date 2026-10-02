@@ -85,7 +85,7 @@ export function ContextActionMenu({
           role="menu"
           aria-label={label}
           style={{ position: "fixed", top: position.top, left: position.left, width: MENU_WIDTH }}
-          className="z-[70] max-h-[min(380px,calc(100vh-16px))] animate-pop-in overflow-y-auto rounded-lg border bg-surface p-1 shadow-pop"
+          className="z-[70] max-h-[min(380px,calc(100vh-16px))] animate-pop-in overflow-y-auto bg-surface p-1 rounded-lg shadow-pop"
         >
           {children(close)}
         </div>,

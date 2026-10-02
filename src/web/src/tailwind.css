@@ -7,7 +7,7 @@
   input:where([type="text"], [type="email"], [type="password"], [type="number"], [type="search"], [type="url"], [type="tel"], :not([type])), select, textarea {
     background: rgb(var(--surface));
     border: 1px solid rgb(var(--line-strong));
-    border-radius: 6px;
+    border-radius: 3px;
     color: rgb(var(--fg));
     padding: 0 10px;
     height: 32px;
@@ -15,7 +15,6 @@
     font-size: 13px;
     outline: none;
     width: 100%;
-    box-shadow: var(--shadow-xs);
     transition: border-color .12s, box-shadow .12s;
   }
   textarea { height: auto; padding: 8px 10px; line-height: 20px; }
@@ -23,20 +22,19 @@
     border-color: rgb(var(--muted) / 0.6);
   }
   input:focus, select:focus, textarea:focus {
-    border-color: rgb(var(--ring));
-    box-shadow: 0 0 0 3px rgb(var(--ring) / 0.18);
+    border-color: rgb(var(--frame));
+    box-shadow: 0 0 0 3px rgb(var(--brand) / 0.55);
   }
   input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; background: rgb(var(--subtle)); }
   input::placeholder, textarea::placeholder { color: rgb(var(--muted)); }
-  input:where(.font-mono), textarea:where(.font-mono) { font-family: "Geist Mono Variable", ui-monospace, monospace; font-size: 12px; }
+  input:where(.font-mono), textarea:where(.font-mono) { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
   select { cursor: pointer; appearance: none; }
 
   input:where([type="checkbox"]) {
     appearance: none; -webkit-appearance: none;
     width: 16px; height: 16px; min-width: 16px;
-    border: 1px solid rgb(var(--line-strong)); border-radius: 4px; background: rgb(var(--surface));
+    border: 1px solid rgb(var(--frame)); border-radius: 2px; background: rgb(var(--surface));
     cursor: pointer; position: relative; display: inline-block; vertical-align: middle;
-    box-shadow: var(--shadow-xs);
     transition: background-color .12s, border-color .12s;
   }
   input:where([type="checkbox"]):hover:not(:disabled) { border-color: rgb(var(--muted)); }

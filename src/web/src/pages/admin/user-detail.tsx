@@ -461,7 +461,7 @@ function ScopeModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Scope ${permission}`}
-        className="flex max-h-[80vh] w-full max-w-lg animate-pop-in flex-col overflow-hidden rounded-xl border bg-surface shadow-pop"
+        className="flex max-h-[80vh] w-full max-w-lg animate-pop-in flex-col overflow-hidden bg-surface rounded-lg shadow-pop"
       >
         <div className="flex items-start gap-3 border-b px-5 py-4">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Target size={15} /></span>

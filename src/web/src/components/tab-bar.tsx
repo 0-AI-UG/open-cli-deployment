@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
+import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
+
+// Joins the page header's section in PageShell rather than starting its own.
+TabBar.joinsHeader = true;
 
 export function TabBar<K extends string>({
   tabs,
@@ -12,7 +16,7 @@ export function TabBar<K extends string>({
 }) {
   const isMobile = useMobileLayout();
   const activeRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const { containerRef: listRef, indicatorStyle } = useActiveIndicator<HTMLDivElement>(active);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -24,8 +28,9 @@ export function TabBar<K extends string>({
         : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
     event.preventDefault();
     onChange(tabs[nextIndex].key);
+    const list = event.currentTarget;
     requestAnimationFrame(() => {
-      const buttons = listRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+      const buttons = list.querySelectorAll<HTMLButtonElement>('[role="tab"]');
       buttons?.[nextIndex]?.focus();
     });
   };
@@ -37,7 +42,8 @@ export function TabBar<K extends string>({
   if (isMobile) {
     return (
       <div className="sticky top-[calc(52px+env(safe-area-inset-top))] z-30 -mx-4 mb-4 border-b bg-canvas/90 px-4 py-2 backdrop-blur-md">
-        <div ref={listRef} onKeyDown={onKeyDown} className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Page sections">
+        <div ref={listRef} onKeyDown={onKeyDown} className="relative flex gap-2 overflow-x-auto" role="tablist" aria-label="Page sections">
+          <span aria-hidden="true" className="rounded-full bg-primary" style={indicatorStyle} />
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -45,9 +51,10 @@ export function TabBar<K extends string>({
               onClick={() => onChange(tab.key)}
               role="tab"
               aria-selected={active === tab.key}
+              data-active={active === tab.key}
               tabIndex={active === tab.key ? 0 : -1}
-              className={`h-9 shrink-0 rounded-full px-4 text-sm font-medium transition-colors ${
-                active === tab.key ? "bg-primary text-primary-fg" : "bg-subtle text-fg-dim"
+              className={`relative h-9 shrink-0 rounded-full px-4 text-sm font-medium transition-colors duration-200 ${
+                active === tab.key ? "text-primary-fg" : "bg-subtle text-fg-dim"
               }`}
             >
               {tab.label}
@@ -58,19 +65,22 @@ export function TabBar<K extends string>({
     );
   }
 
+  // PageShell places the tab bar at the bottom of the page-header band. The
+  // active tab is a filled pill that slides between tabs; the side padding
+  // lines the first label up with the page title.
   return (
-    <div ref={listRef} onKeyDown={onKeyDown} className="mb-6 flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="Page sections">
+    <div ref={listRef} onKeyDown={onKeyDown} className="no-scrollbar relative flex gap-1 overflow-x-auto pb-4 md:px-2" role="tablist" aria-label="Page sections">
+      <span aria-hidden="true" className="rounded-full bg-subtle" style={indicatorStyle} />
       {tabs.map((t) => (
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
           role="tab"
           aria-selected={active === t.key}
+          data-active={active === t.key}
           tabIndex={active === t.key ? 0 : -1}
-          className={`relative -mb-px shrink-0 border-b-2 px-3 pb-2.5 pt-1 text-sm font-medium transition-colors ${
-            active === t.key
-              ? "border-primary text-fg"
-              : "border-transparent text-muted hover:text-fg"
+          className={`relative inline-flex h-9 shrink-0 items-center rounded-full px-4 text-sm font-medium transition-colors duration-200 ${
+            active === t.key ? "text-fg" : "text-muted hover:text-fg"
           }`}
         >{t.label}</button>
       ))}

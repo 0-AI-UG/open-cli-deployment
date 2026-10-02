@@ -202,7 +202,7 @@ export function EnvironmentsPage() {
           >
             <EnvVarEditor entries={editVars} onChange={setEditVars} />
             {typeof id === "number" && (attachedApps[id] || []).map((app) => (
-              <details key={app.id} className="group mt-3 rounded-lg border bg-surface">
+              <details key={app.id} className="group mt-3 frame bg-surface">
                 <summary className="flex cursor-pointer select-none items-center gap-1.5 px-3 py-2 text-xs text-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
                   <ChevronRight size={13} className="shrink-0 transition-transform group-open:rotate-90" />
                   Injected at runtime · <span className="font-medium text-fg-dim">{app.name}</span>
@@ -252,7 +252,7 @@ export function EnvironmentsPage() {
                 <Copy size={14} /> Copy
               </Btn>
               {copy && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border bg-surface shadow-pop">
+                <div className="absolute right-0 top-full z-50 mt-2 w-72 bg-surface rounded-lg shadow-pop">
                   <div className="border-b px-3 py-2.5">
                     <div className="text-sm font-semibold text-fg">Duplicate environment</div>
                     <p className="text-xs text-muted">Copies every variable into a new environment.</p>

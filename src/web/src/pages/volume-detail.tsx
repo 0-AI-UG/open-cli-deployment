@@ -134,12 +134,12 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
         </>}
       />
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-line shadow-xs sm:grid-cols-4">
+      <div className="frame bg-surface"><div className="cells grid grid-cols-2 sm:grid-cols-4">
         <Stat label="Size" value={local ? "Shared" : `${detail.size} GB`} hint={local ? "Shares server disk · no quota" : undefined} className="bg-surface px-4 py-3.5" />
         <Stat label="Monthly cost" value={local ? "—" : detail.monthly_eur != null ? `€${detail.monthly_eur.toFixed(2)}` : "—"} hint={local ? "No separate storage charge" : "€/mo"} className="bg-surface px-4 py-3.5" />
         <Stat label="Server" value={<span title={detail.server_name || undefined}>{detail.server_name || "—"}</span>} hint={`Location ${detail.location || "—"}`} className="bg-surface px-4 py-3.5" />
         <Stat label="App" value={<span title={detail.app_name || undefined}>{detail.app_name || "—"}</span>} hint={detail.app_name ? "Mounted by this app" : "Not in use"} className="bg-surface px-4 py-3.5" />
-      </div>
+      </div></div>
 
       {detail.host_path && (
         <Card>

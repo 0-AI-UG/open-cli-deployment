@@ -195,7 +195,7 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
         </>}
       />
 
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border bg-line shadow-xs md:grid-cols-3">
+      <div className="frame bg-surface"><div className="cells grid grid-cols-1 md:grid-cols-3">
         <div className={metricCell}>
           <div className="flex items-end justify-between gap-3">
             <Stat
@@ -244,7 +244,7 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
             <Stat label="Disk" value="—" hint="No data" />
           )}
         </div>
-      </div>
+      </div></div>
 
       <Card className="overflow-hidden">
         <CardHeader title="Details" icon={<Server size={15} />} />

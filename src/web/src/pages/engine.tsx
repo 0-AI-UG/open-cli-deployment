@@ -3,6 +3,8 @@ import { formatDistanceToNow } from "date-fns";
 import { get } from "../api/client.ts";
 import { Activity, Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, RotateCcw, XCircle } from "lucide-react";
 import { Badge, Btn, Card, PageShell, PageHeader, PageState, Spinner, StatusBadge } from "../components/ui.tsx";
+import { useHashParam } from "../hooks/use-hash-param.ts";
+import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
 import { humanizeStep, type OperationView } from "../hooks/useOperation.ts";
 
 type Snapshot = {
@@ -49,8 +51,10 @@ function heartbeatLabel(raw: string | null): { text: string; healthy: boolean } 
 
 export function EnginePage() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
-  const [filter, setFilter] = useState<RecentFilter>("all");
+  const [filter, setFilter] = useHashParam("filter", FILTERS.map((option) => option.value), "all");
   const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [filter]);
+  const filterSlider = useActiveIndicator<HTMLDivElement>(filter);
   const [loadedHistoryKey, setLoadedHistoryKey] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState(false);
   const historyKey = `${filter}:${page}`;
@@ -116,15 +120,17 @@ export function EnginePage() {
         title="History"
         count={historyLoading ? undefined : historyTotal}
         actions={
-          <div className="inline-flex rounded-md border bg-subtle p-0.5" role="group" aria-label="Filter operation history">
+          <div ref={filterSlider.containerRef} className="relative inline-flex rounded-full border border-line-strong bg-surface p-0.5" role="group" aria-label="Filter operation history">
+            <span aria-hidden="true" className="rounded-full bg-primary" style={filterSlider.indicatorStyle} />
             {FILTERS.map((option) => (
               <button
                 key={option.value}
                 type="button"
                 aria-pressed={filter === option.value}
-                onClick={() => { setFilter(option.value); setPage(0); }}
-                className={`inline-flex h-7 items-center whitespace-nowrap rounded-[5px] px-2.5 text-sm font-medium transition-colors max-md:h-9 ${
-                  filter === option.value ? "bg-surface text-fg shadow-xs" : "text-muted hover:text-fg"
+                data-active={filter === option.value}
+                onClick={() => setFilter(option.value)}
+                className={`relative inline-flex h-7 items-center whitespace-nowrap rounded-full px-3 text-sm font-medium transition-colors duration-200 max-md:h-9 ${
+                  filter === option.value ? "text-primary-fg" : "text-muted hover:text-fg"
                 }`}
               >
                 {option.label}
