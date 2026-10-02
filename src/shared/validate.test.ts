@@ -215,6 +215,7 @@ describe("validateDeployRequest", () => {
     image_ref: `ghcr.io/acme/my-app@sha256:${"a".repeat(64)}`,
     container_port: 3000,
     env: { NODE_ENV: "production" },
+    placement: { "server-2": 1 },
   };
 
   test("accepts valid request", () => {
@@ -500,14 +501,14 @@ describe("validateGitHubPat", () => {
 
 describe("validateDeployManifest", () => {
   test("accepts a minimal manifest with explicit no-volume state", () => {
-    const r = validateDeployManifest({ volume: null, name: "demo" });
+    const r = validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "demo" });
     expect(r.ok).toBe(true);
   });
 
   test("requires a source build contract", () => {
-    expect(validateDeployManifestRaw({ volume: null, name: "demo" }).ok).toBe(false);
+    expect(validateDeployManifestRaw({ volume: null, placement: { "server-2": 1 }, name: "demo" }).ok).toBe(false);
     expect(validateDeployManifestRaw({
-      volume: null,
+      volume: null, placement: { "server-2": 1 },
       name: "demo",
       build: { ...TEST_BUILD, image_repository: "ghcr.io/acme/demo:latest" },
     }).ok).toBe(false);
@@ -521,7 +522,7 @@ describe("validateDeployManifest", () => {
       container_port: 3000,
       env: { DATABASE_URL: { from: "environment.DATABASE_URL" }, API_KEY: { from: "environment.API_KEY" } },
       volume: { size: 5, path: "/data" },
-      replicas: 3,
+      placement: { "server-2": 1 },
     });
     expect(r.ok).toBe(true);
   });
@@ -533,39 +534,39 @@ describe("validateDeployManifest", () => {
   });
 
   test("rejects missing / empty name", () => {
-    expect(validateDeployManifest({ volume: null }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "" }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "   " }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: 42 }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 } }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "" }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "   " }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: 42 }).ok).toBe(false);
   });
 
   test("rejects wrong $schema version", () => {
-    const r = validateDeployManifest({ volume: null, $schema: 2, name: "x" });
+    const r = validateDeployManifest({ volume: null, placement: { "server-2": 1 }, $schema: 2, name: "x" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/schema/i);
   });
 
   test("accepts a valid memory_mb", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", memory_mb: 2048 }).ok).toBe(true);
-    expect(validateDeployManifest({ volume: null, name: "x", memory_mb: 0 }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", memory_mb: 2048 }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", memory_mb: 0 }).ok).toBe(true);
   });
 
   test("rejects an out-of-range memory_mb", () => {
-    const r = validateDeployManifest({ volume: null, name: "x", memory_mb: 10 });
+    const r = validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", memory_mb: 10 });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/memory_mb/);
   });
 
   test("rejects non-integer container_port", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", container_port: 3.14 }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", container_port: 0 }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", container_port: 99999 }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", container_port: 3.14 }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", container_port: 0 }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", container_port: 99999 }).ok).toBe(false);
   });
 
   test("rejects env entries with invalid keys", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", env: [{ key: "1BAD" }] }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", env: [{ key: "has-dash" }] }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", env: "not-an-array" }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", env: [{ key: "1BAD" }] }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", env: [{ key: "has-dash" }] }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", env: "not-an-array" }).ok).toBe(false);
   });
 
   test("rejects volume with invalid size / non-absolute path", () => {
@@ -580,14 +581,16 @@ describe("validateDeployManifest", () => {
     if (!r.ok) expect(r.error).toMatch(/volume/);
   });
 
-  test("rejects replicas <1", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", replicas: 0 }).ok).toBe(false);
+  test("rejects an empty placement or a non-positive replica count", () => {
+    expect(validateDeployManifest({ volume: null, name: "x", placement: {} }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, name: "x", placement: { "server-2": 0 } }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, name: "x", placement: { "server-2": 1.5 } }).ok).toBe(false);
   });
 
   test("accepts a full ingress manifest", () => {
     const r = validateDeployManifest({
       name: "x",
-      volume: null,
+      volume: null, placement: { "server-2": 1 },
       internal_protocol: "http",
       sticky: true,
       rate_limit_rps: 100,
@@ -601,39 +604,39 @@ describe("validateDeployManifest", () => {
   });
 
   test("rejects non-boolean sticky / compress", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", sticky: "yes" }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", compress: 1 }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", sticky: "yes" }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", compress: 1 }).ok).toBe(false);
   });
 
   test("rejects an invalid rate_limit_rps / ip_allowlist / health_check.path", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", rate_limit_rps: -1 }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", ip_allowlist: "not-an-ip" }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: { path: "healthz" } }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", rate_limit_rps: -1 }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", ip_allowlist: "not-an-ip" }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: { path: "healthz" } }).ok).toBe(false);
   });
 
   test("rejects a malformed health_check object", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: true }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: { enabled: "yes" } }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: { path: 1 } }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: true }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: { enabled: "yes" } }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: { path: 1 } }).ok).toBe(false);
   });
 
   test("accepts a nested health_check with enabled and path", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: { enabled: false } }).ok).toBe(true);
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: { path: "/healthz" } }).ok).toBe(true);
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: {} }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: { enabled: false } }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: { path: "/healthz" } }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: {} }).ok).toBe(true);
   });
 
   test("rejects health_check.path on a raw-TCP manifest", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", internal_protocol: "tcp", health_check: { path: "/healthz" } }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", internal_protocol: "tcp", health_check: { path: "/healthz" } }).ok).toBe(false);
     // Decoupled: enabled:false no longer implies tcp routing (defaults to http),
     // so a path alongside a disabled probe is accepted at the routing rule.
-    expect(validateDeployManifest({ volume: null, name: "x", health_check: { enabled: false, path: "/healthz" } }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", health_check: { enabled: false, path: "/healthz" } }).ok).toBe(true);
   });
 
   test("rejects a public_port outside its protocol pool", () => {
-    expect(validateDeployManifest({ volume: null, name: "x", public_port: 30051, public_protocol: "tcp" }).ok).toBe(false);
-    expect(validateDeployManifest({ volume: null, name: "x", public_port: "auto" }).ok).toBe(true);
-    expect(validateDeployManifest({ volume: null, name: "x", public_protocol: "sctp" }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", public_port: 30051, public_protocol: "tcp" }).ok).toBe(false);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", public_port: "auto" }).ok).toBe(true);
+    expect(validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "x", public_protocol: "sctp" }).ok).toBe(false);
   });
 });
 
@@ -662,7 +665,7 @@ describe("validateIngressFields (shared by deploy + ingress endpoint)", () => {
   test("deploy and ingress agree: same rule yields the same error string", () => {
     const viaDeploy = validateDeployRequest({
       app_name: "a", image_ref: `ghcr.io/acme/a@sha256:${"a".repeat(64)}`, container_port: 3000,
-      auth_password: "pw", internal_protocol: "tcp",
+      auth_password: "pw", internal_protocol: "tcp", placement: { "server-2": 1 },
     });
     const viaHelper = validateIngressFields({ auth_password: "pw" }, { httpRouted: false });
     expect(viaDeploy.valid).toBe(false);

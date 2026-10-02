@@ -5,7 +5,6 @@ import { get, post, del, put } from "../../api/client.ts";
 import { Card, CardHeader, Btn, Badge, Table, Field, DataRow, InfoTip, InlineNotice, EmptyState, StatusBadge, CopyButton, humanize, showToast, confirm, PageShell, PageHeader, PageState } from "../../components/ui.tsx";
 import { TabBar } from "../../components/tab-bar.tsx";
 import { NeoSelect } from "../../components/neo-select.tsx";
-import { useServerTypes, typeOptions, locationOptions } from "../../hooks/use-server-types.ts";
 import { ArrowRight, Users, Plus, Trash2, Shield, ShieldCheck, Key, ShieldAlert, Save, RefreshCw, Server as ServerIcon, Settings, Copy, Check, Hammer, Cloud, Rocket, Package, GitBranch, LogIn, Webhook, History, ChevronDown, ChevronRight, Fingerprint } from "lucide-react";
 import type { PanelApp, DeploymentRecord } from "../../types.ts";
 import { DnsInstructionView } from "../../components/dns-instruction.tsx";
@@ -59,7 +58,7 @@ type User = {
 };
 
 type RunnerServer = {
-  id: number; name: string; ipv4: string; status: string; pool: string;
+  id: number; name: string; ipv4: string; status: string;
   apps?: Array<{ id: number; name: string }>;
 };
 
@@ -112,7 +111,7 @@ export function UsersPage() {
     hetzner_api_token: "",
     hetzner_s3_access_key: "", hetzner_s3_secret_key: "", hetzner_s3_region: "fsn1",
     github_oauth_client_id: "", github_oauth_client_secret: "",
-    default_domain_suffix: "", default_server_type: "", default_location: "",
+    default_domain_suffix: "",
     oci_artifact_ref: "", oci_registry_username: "", oci_registry_password: "",
     github_build_host: "", github_build_username: "", github_build_token: "",
   });
@@ -130,7 +129,6 @@ export function UsersPage() {
   const [registryEditing, setRegistryEditing] = useState(false);
   const [sourceEditing, setSourceEditing] = useState(false);
   const [oauthEditing, setOauthEditing] = useState(false);
-  const { serverTypes, refresh: refreshServerTypes } = useServerTypes();
 
   // --- Panel ---
   const [panel, setPanel] = useState<PanelApp | null>(null);
@@ -239,8 +237,6 @@ export function UsersPage() {
           github_oauth_client_id: s.github_oauth_client_id ?? "",
           github_oauth_client_secret: s.github_oauth_client_secret ?? "",
           default_domain_suffix: s.default_domain_suffix ?? "",
-          default_server_type: s.default_server_type ?? "",
-          default_location: s.default_location ?? "",
           oci_artifact_ref: s.oci_artifact_ref ?? "",
           oci_registry_username: s.oci_registry_username ?? "",
           oci_registry_password: "",
@@ -270,11 +266,6 @@ export function UsersPage() {
   const refreshInfrastructure = async () => {
     const settings = await get("/api/admin/settings");
     applyHetznerSettings(settings);
-    setSettingsForm((current) => ({ ...current,
-      default_server_type: settings.default_server_type ?? "",
-      default_location: settings.default_location ?? "",
-    }));
-    await refreshServerTypes();
   };
 
   const setS = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -338,11 +329,7 @@ export function UsersPage() {
         hetzner_s3_region: _s3Region,
         ...instanceSettings
       } = settingsForm;
-      const { default_server_type, default_location, ...generalSettings } = instanceSettings;
-      await put("/api/admin/settings", {
-        ...generalSettings,
-        ...(hetznerStatus.configured ? { default_server_type, default_location } : {}),
-      });
+      await put("/api/admin/settings", instanceSettings);
       await refreshReadiness();
       showToast("Settings saved", "success");
       setInfrastructureEditing(false);
@@ -507,7 +494,7 @@ export function UsersPage() {
   };
 
   const removeRunner = async (runner: BuildWorker) => {
-    if (!await confirm("Remove build worker", `Remove ${runner.name} and release ${runner.server?.name || "its server"} back to its previous capacity pool?`, true)) return;
+    if (!await confirm("Remove build worker", `Remove ${runner.name} and release ${runner.server?.name || "its server"} for apps?`, true)) return;
     setRunnerBusy(true);
     try {
       await runCliAction("runners.remove", { runner: String(runner.id) }, { confirmed: true });
@@ -542,7 +529,7 @@ export function UsersPage() {
 
   return (
     <PageShell>
-      <PageHeader title="Admin" description="Hetzner, infrastructure defaults, build delivery, panel settings, and user access." />
+      <PageHeader title="Admin" description="Hetzner, app domain, build delivery, panel settings, and user access." />
 
       <TabBar tabs={ADMIN_SECTIONS} active={section} onChange={setSection} />
 
@@ -582,7 +569,7 @@ export function UsersPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           {[
             { key: "hetzner" as const, label: "Hetzner", value: hetznerStatus.configured ? "Connected" : "Not set", unit: hetznerStatus.s3Configured ? "Object Storage connected" : "Object Storage not configured", icon: Cloud },
-            { key: "infrastructure" as const, label: "Infrastructure", value: settingsForm.default_server_type || "—", unit: settingsForm.default_location || "Server defaults", icon: ServerIcon },
+            { key: "infrastructure" as const, label: "Infrastructure", value: settingsForm.default_domain_suffix || "—", unit: "App domain", icon: ServerIcon },
             { key: "build" as const, label: "Build & Registry", value: readiness?.worker.online ?? 0, unit: "workers online", icon: Hammer },
             { key: "panel" as const, label: "Panel", value: panel ? panel.status : "—", unit: panel ? "Self-hosted" : "External", icon: Settings },
             { key: "users" as const, label: "Users & Security", value: users.length, unit: require2fa ? "users · 2FA required" : "users", icon: Users },
@@ -650,13 +637,11 @@ export function UsersPage() {
         <CardHeader
           icon={<ServerIcon size={15} />}
           title="Infrastructure settings"
-          description={<>{settingsForm.default_server_type || "No server default"}{settingsForm.default_location && ` · ${settingsForm.default_location}`}</>}
+          description={settingsForm.default_domain_suffix || "No default app domain"}
           actions={<Btn size="xs" onClick={() => setInfrastructureEditing((open) => !open)}>{infrastructureEditing ? "Close" : "Edit"}</Btn>}
         />
         {!infrastructureEditing && <div>
           <DataRow label="App domain" mono>{settingsForm.default_domain_suffix || <span className="font-sans text-sm text-muted">Not set</span>}</DataRow>
-          <DataRow label="Server type" mono>{settingsForm.default_server_type || <span className="font-sans text-sm text-muted">Not set</span>}</DataRow>
-          <DataRow label="Location" mono>{settingsForm.default_location || <span className="font-sans text-sm text-muted">Not set</span>}</DataRow>
         </div>}
         {infrastructureEditing && <div className="animate-slide-up">
           <div className="px-4">
@@ -664,30 +649,6 @@ export function UsersPage() {
               <input type="text" className="font-mono" value={settingsForm.default_domain_suffix} onChange={setS("default_domain_suffix")} placeholder="apps.example.com" />
             </Field>
           </div>
-          {hetznerStatus.configured ? <>
-            <div className="border-t px-4 pt-4">
-              <h3 className="text-sm font-semibold text-fg">Server defaults</h3>
-              <p className="mt-0.5 text-xs text-muted">Used when OCD creates new Hetzner servers.</p>
-            </div>
-            <div className="px-4">
-              <Field divider label="Server type">
-                <NeoSelect
-                  value={settingsForm.default_server_type}
-                  onChange={(v) => {
-                    setSettingsForm((f) => {
-                      const locs = locationOptions(serverTypes, v);
-                      const locValid = locs.some((l) => l.value === f.default_location);
-                      return { ...f, default_server_type: v, ...(!locValid ? { default_location: locs[0]?.value ?? "" } : {}) };
-                    });
-                  }}
-                  options={[{ value: "", label: "Select server type" }, ...typeOptions(serverTypes)]}
-                />
-              </Field>
-              <Field divider label="Location">
-                <NeoSelect value={settingsForm.default_location} onChange={(v) => setSettingsForm((f) => ({ ...f, default_location: v }))} options={[{ value: "", label: "Select location" }, ...locationOptions(serverTypes, settingsForm.default_server_type)]} />
-              </Field>
-            </div>
-          </> : <div className="border-t p-4"><InlineNotice tone="info">Add a Hetzner API token in the Hetzner tab to configure server defaults.</InlineNotice></div>}
           <div className={FORM_FOOTER}>
             <Btn onClick={() => setInfrastructureEditing(false)}>Cancel</Btn>
             <Btn variant="primary" loading={saving} onClick={saveSettings}><Save size={14} /> Save</Btn>
@@ -815,7 +776,7 @@ export function UsersPage() {
                 onChange={(serverId) => setRunnerForm((current) => ({ ...current, server_id: serverId }))}
                 options={availableRunnerServers.map((server) => ({
                   value: String(server.id),
-                  label: `${server.name} (${server.pool || "general"})`,
+                  label: server.name,
                 }))}
                 placeholder="Select server"
               />

@@ -37,8 +37,9 @@ verification.
 ## Install a worker
 
 Deploying a `build` manifest checks readiness first. When no worker exists it can reserve
-an empty server or, after browser approval, provision and install a dedicated
-worker before resuming the deploy. This can also be run explicitly:
+an empty server and install a dedicated worker before resuming the deploy. It
+never creates servers: when no empty server exists, create one with
+`ocd servers create` first. This can also be run explicitly:
 
 ```bash
 ocd doctor
@@ -109,8 +110,8 @@ ocd ops logs <id> --follow
 
 A failed build never changes desired runtime image or configuration. Fix the
 source/build/credential problem and push a new commit, or retry the operation.
-Removing a worker returns the server to its prior capacity pool; it does not
-delete the VPS.
+Removing a worker releases the server so apps can be placed on it again; it
+does not delete the VPS.
 
 Workers are probed in parallel and require a fresh health observation, an amd64
 architecture, and at least 12 GiB free. OCD holds a durable, heartbeated worker
@@ -120,8 +121,8 @@ After an artifact is recorded, recovery instead re-verifies every persisted
 digest before it adopts the checkpoint.
 
 Existing rollout hosts are checked for at least 5 GiB free on Docker's
-filesystem before a build starts. New app placements use recent disk metrics
-and check the selected host again before changing app state. Every image pull
+filesystem before a build starts. A new app's deploy checks every server in its
+placement before changing app state. Every image pull
 rechecks the host directly. The panel alerts when host disk usage reaches 85%
 or free space falls below 5 GiB; periodic maintenance trims build cache on
 hosts above 75% usage.

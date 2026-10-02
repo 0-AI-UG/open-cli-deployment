@@ -39,7 +39,7 @@ export async function handleAdminNtfy(request: Request): Promise<Response> {
       app: app ? { id: app.id, name: app.name, status: app.status, domain: app.domain } : null,
       status: app?.status || "unconfigured", delivery: counts,
       apps: db.getApps().filter(isNtfyApp).map(a => ({ id: a.id, name: a.name, status: a.status })),
-      servers: db.getServers().filter(s => s.status === "ready" && s.pool !== "build-workers").map(s => ({ id: s.id, name: s.name })),
+      servers: db.getServers().filter(s => s.status === "ready" && !db.getBuildWorkerByServerId(s.id)).map(s => ({ id: s.id, name: s.name })),
     });
   } catch (error) { return handleError(error); }
 }
@@ -95,7 +95,7 @@ export async function handleCreateNtfyApp(request: Request): Promise<Response> {
     if (findActiveOperationByResourceKey("configure_ntfy", "service:ntfy")) return json({ error: "ntfy app creation is already in progress" }, 409);
     const input = parsed.data;
     const server = db.getServer(input.server_id);
-    if (!server || server.status !== "ready" || server.pool === "build-workers") return json({ error: "Select a ready application server" }, 400);
+    if (!server || server.status !== "ready" || db.getBuildWorkerByServerId(server.id)) return json({ error: "Select a ready application server" }, 400);
     if (db.getAppByName(input.name) || db.getApps().some(a => a.domain === input.domain) || db.getPanel()?.domain === input.domain) return json({ error: "App name or domain is already in use" }, 409);
     const operation = db.default.transaction(() => {
       db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, app_id: null, alerts: true, apps: true })));

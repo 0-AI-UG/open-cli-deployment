@@ -25,7 +25,6 @@ import { STATUS_PORT as PROXY_STATUS_PORT } from "../../proxy/status.ts";
 import { collectDesiredState, type DesiredState } from "./traefik-render.ts";
 import { tryAcquire, release, NON_OP_HOLDER } from "../scheduler.ts";
 import { renderProxyConfigJson } from "./proxy-render.ts";
-import { ingestProxyActivity } from "./request-metrics.ts";
 import {
   PROXY_BIN_PATH,
   PROXY_CONFIG_PATH,
@@ -42,8 +41,8 @@ export type ServerAccess = {
   name: string;
   ipv4: string;
   hostKey: string | undefined;
-  /** servers.id — lets the converge pass feed the proxy's activity report
-   *  into request-metrics. Optional: probe-only callers don't need it. */
+  /** servers.id — keys the per-server converge lock. Optional: probe-only
+   *  callers don't need it. */
   id?: number;
 };
 
@@ -290,14 +289,12 @@ async function scpTo(server: ServerAccess, localPath: string, remotePath: string
 // --- Probe / converge --------------------------------------------------------
 
 /** JSON served by the proxy's loopback /status endpoint (src/proxy/status.ts).
- *  `ok` = NAT ruleset applied && every desired VIP listener bound;
- *  `lastActivity` (appId-string → epoch ms) feeds idle detection. */
+ *  `ok` = NAT ruleset applied && every desired VIP listener bound. */
 export type ProxyStatus = {
   ok: boolean;
   natApplied?: boolean;
   listenersBound?: number;
   listenersTotal?: number;
-  lastActivity?: Record<string, number>;
 };
 
 const PROXY_STATUS_URL = `http://127.0.0.1:${PROXY_STATUS_PORT}/status`;
@@ -412,7 +409,7 @@ export async function convergeServerProxy(
   const desiredVersion = await desiredProxyVersion();
   const probe = await probeServerProxy(server);
 
-  // Mode 600 — the config embeds the wake secret.
+  // Mode 600 — the config lists every app's backends.
   if (probe.configSha !== remoteFileSha(rendered)) {
     await writeRemoteFileAtomic(server, PROXY_CONFIG_PATH, rendered, "600");
     log("sync", `wrote config.json on ${server.name}`);
@@ -470,8 +467,7 @@ export function wasProxyEverReady(ipv4: string): boolean {
   return proxyEverReady.has(ipv4);
 }
 
-/** Converge one server and record the outcome in the readiness gate; also
- *  feeds the proxy's lastActivity report into idle detection. Never throws —
+/** Converge one server and record the outcome in the readiness gate. Never throws —
  *  a failure is logged, marks the server not-ready, and retries next tick. */
 async function convergeAndTrack(server: ServerAccess, rendered: string): Promise<void> {
   try {
@@ -482,9 +478,6 @@ async function convergeAndTrack(server: ServerAccess, rendered: string): Promise
     const ready = status ? status.ok : true;
     proxyReady.set(server.ipv4, ready);
     if (ready) proxyEverReady.add(server.ipv4);
-    if (server.id !== undefined && status?.lastActivity) {
-      ingestProxyActivity(server.id, { lastActivity: status.lastActivity });
-    }
   } catch (err) {
     proxyReady.set(server.ipv4, false);
     log("reconcile", `convergence failed on ${server.name}: ${err}`);
@@ -526,39 +519,4 @@ export async function reconcileProxy(): Promise<void> {
   const state = collectDesiredState();
   const rendered = renderProxyConfigJson(state);
   await Promise.all(getAllServerAccess().map((server) => convergeAndTrackLocked(server, rendered, 10_000)));
-}
-
-// --- Immediate topology push -------------------------------------------------
-
-// Test seam mirroring __setWakerDeps: override (or, with null, restore) the
-// implementation pushProxyForApp delegates to.
-let proxyPush: ((appId: number) => Promise<void>) | null = null;
-
-export function __setProxyPush(fn: ((appId: number) => Promise<void>) | null): void {
-  proxyPush = fn;
-}
-
-/**
- * Immediately converge the ocd-proxy config on the servers hosting `appId`'s
- * replicas (including the sleeping anchor's server) after a topology change.
- * Sleep (scale-down) and wake call this so the fleet proxy stops routing the
- * app's VIP at dead backends / starts routing to the woken replica without
- * waiting for the 30s reconciler tick; servers not touching the app pick up
- * the identical fleet-wide config next tick. Best-effort: failures are logged
- * and retried by the reconciler, never thrown into the calling op.
- */
-export async function pushProxyForApp(appId: number): Promise<void> {
-  if (proxyPush) return proxyPush(appId);
-  try {
-    const app = db.getApp(appId);
-    if (!app) return;
-    const serverIds = new Set<number>(db.getReplicas(appId).map((r) => r.server_id));
-    if (app.sleeping_server_id) serverIds.add(app.sleeping_server_id);
-    const servers = getAllServerAccess().filter((s) => s.id !== undefined && serverIds.has(s.id));
-    if (servers.length === 0) return;
-    const rendered = renderProxyConfigJson(collectDesiredState());
-    await Promise.all(servers.map((server) => convergeAndTrackLocked(server, rendered)));
-  } catch (err) {
-    log("push", `proxy push for app ${appId} failed: ${err}`);
-  }
 }

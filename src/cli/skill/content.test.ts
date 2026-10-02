@@ -47,7 +47,7 @@ describe("embedded OCD skill", () => {
       expect(appManifest).toContain(`\`${field}\``);
     }
     expect(appManifest).toContain("`environment`");
-    expect(appManifest).toContain("`autoscaling`");
+    expect(appManifest).not.toContain("`autoscaling`");
     expect(appManifest).toContain("`build`");
     expect(appManifest).toContain("`container_port`");
     expect(appManifest).toContain("Dockerfile");
@@ -90,12 +90,12 @@ describe("embedded OCD skill", () => {
     for (const command of [
       "deploy", "release", "apps", "logs", "restart", "rollback", "promote", "pause",
       "unpause", "envs", "stack", "ops", "servers",
-      "ssh", "app", "scale", "resources", "volumes", "buckets", "runners",
+      "ssh", "app", "move", "resources", "volumes", "buckets", "runners",
     ]) {
       expect(cli).toContain(`ocd ${command}`);
     }
     for (const flag of [
-      "--dry-run", "--config-only", "--auth-password-env", "--server",
+      "--dry-run", "--config-only", "--auth-password-env", "--to",
       "--tail", "--since", "--app",
     ]) {
       expect(cli).toContain(flag);

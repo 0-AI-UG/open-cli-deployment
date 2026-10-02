@@ -50,7 +50,6 @@ its current immutable image. Use it only when source bytes do not need a build.
 
 ```text
 --auth-password-env=KEY
---server=ID
 --app=EXISTING_APP
 --commit=SOURCE_SHA
 --dry-run
@@ -59,8 +58,8 @@ its current immutable image. Use it only when source bytes do not need a build.
 ```
 
 Set stored values with `ocd envs set`; `--auth-password-env` reads a local basic-auth password.
-`--server` is a one-deploy placement override; persistent intent belongs in the
-manifest.
+Servers and replica counts come only from the manifest's `placement`; move an
+existing app between servers with `ocd move`.
 
 For an intentional artifact-only update of an existing app, use `ocd release
 <app> --image repository@sha256:digest`. It preserves stored configuration and

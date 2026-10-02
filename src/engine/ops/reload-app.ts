@@ -8,7 +8,6 @@ const reloadAppOp = makeAppLifecycleOp({
   actionLabel: "Recreate replicas",
   shouldSkip: (app) =>
     app.status === "paused" ||
-    app.status === "sleeping" ||
     app.status === "destroying" ||
     app.status === "cleanup_failed" ||
     app.status === "deploying",

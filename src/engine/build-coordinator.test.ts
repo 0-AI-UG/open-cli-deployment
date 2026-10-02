@@ -36,7 +36,6 @@ function worker(name: string) {
   const row = db.insertBuildWorker({
     serverId: server.id,
     name: `${name}-${suffix}`,
-    previousPool: "general",
   });
   db.updateBuildWorker(row.id, {
     status: "online",

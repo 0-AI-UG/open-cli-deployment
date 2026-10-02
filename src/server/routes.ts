@@ -38,7 +38,7 @@ import {
   handlePromoteApp,
   handleGetAppStaging,
 } from "./routes/apps.ts";
-import { handleDeleteServer, handleRefreshServers, handleSetServerPool } from "./routes/servers.ts";
+import { handleDeleteServer, handleRefreshServers } from "./routes/servers.ts";
 import { handleGetSettings, handleSaveSettings, handleGetServerTypes } from "./routes/settings.ts";
 import { handleGetResources, handleGetServerMetricsHistory, handleDeleteResource, handleCreateServer, handleGetVolumeDetail, handleListVolumeFiles, handleGetVolumeFile, handleGetServerDetail, handleGetVolumeDeletionAudit } from "./routes/resources.ts";
 import { handleCreateBucket, handleDeleteBucket, handleGetBucket, handleGetBucketObject, handleListBucketObjects, handleListBuckets } from "./routes/buckets.ts";
@@ -47,7 +47,7 @@ import {
   handlePanelReleaseWebhook,
   handleRotatePanelReleaseWebhook,
 } from "./routes/panel-release.ts";
-import { handleWakeApp, handleGetReplicas, handleGetScalingEvents, handleGetAppMetrics, handleGetAppMetricsHistory, handleMigrateReplica } from "./routes/scaling.ts";
+import { handleGetReplicas, handleGetScalingEvents, handleGetAppMetrics, handleGetAppMetricsHistory, handleMoveApp } from "./routes/scaling.ts";
 import { handleGetAvailability } from "./routes/availability.ts";
 import {
   handleGetPanel,
@@ -90,7 +90,6 @@ import {
 } from "./routes/operations.ts";
 import { handleTerminalExec } from "./routes/terminal-exec.ts";
 import { handleTerminalFile } from "./routes/terminal-file.ts";
-import { handleInternalWake } from "./routes/internal.ts";
 import {
   handleDeployStack,
   handleGetStacks,
@@ -111,7 +110,6 @@ import {
   handleRotateBuildSourceWebhook,
 } from "./routes/build-workers.ts";
 import { handleGitHubBuildWebhook } from "./routes/build-webhooks.ts";
-import { handleGetProvisioningDefaults } from "./lib/server-provisioning.ts";
 import {
   handleDeleteRegistryConnection,
   handleDeleteSourceConnection,
@@ -127,12 +125,6 @@ function appIdFrom(req: Request): number {
   return match ? parseInt(match[1], 10) : 0;
 }
 
-function replicaIdFrom(req: Request): number {
-  const url = new URL(req.url);
-  const match = url.pathname.match(/\/replicas\/(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
 function userIdFrom(req: Request): string {
   const url = new URL(req.url);
   const match = url.pathname.match(/\/api\/admin\/users\/([^/]+)/);
@@ -142,12 +134,6 @@ function userIdFrom(req: Request): string {
 function serverIdFrom(req: Request): number {
   const url = new URL(req.url);
   return parseInt(url.pathname.split("/").pop()!, 10);
-}
-
-function serverPathIdFrom(req: Request): number {
-  const url = new URL(req.url);
-  const match = url.pathname.match(/\/api\/servers\/(\d+)/);
-  return match ? parseInt(match[1], 10) : 0;
 }
 
 function runnerIdFrom(req: Request): number {
@@ -270,10 +256,8 @@ export const apiRoutes = {
   // --- Servers ---
   "/api/servers": { GET: (req: Request) => handleGetServers(req) },
   "/api/servers/refresh": { POST: (req: Request) => handleRefreshServers(req) },
-  "/api/servers/provisioning-defaults": { GET: (req: Request) => handleGetProvisioningDefaults(req) },
   "/api/readiness": { GET: (req: Request) => handleGetReadiness(req) },
   "/api/servers/:id": { DELETE: (req: Request) => handleDeleteServer(req, serverIdFrom(req)) },
-  "/api/servers/:id/pool": { PATCH: (req: Request) => handleSetServerPool(req, serverPathIdFrom(req)) },
   "/api/runners": {
     GET: (req: Request) => handleGetBuildWorkers(req),
     POST: (req: Request) => handleInstallBuildWorker(req),
@@ -308,26 +292,17 @@ export const apiRoutes = {
   "/api/apps/:appId/storage": { GET: (req: Request) => handleGetAppStorage(req, appIdFrom(req)) },
 
   // Scaling
-  "/api/apps/:appId/wake": { POST: (req: Request) => handleWakeApp(req, appIdFrom(req)) },
   "/api/apps/:appId/replicas": { GET: (req: Request) => handleGetReplicas(req, appIdFrom(req)) },
-  "/api/apps/:appId/replicas/:replicaId/migrate": { POST: (req: Request) => handleMigrateReplica(req, appIdFrom(req), replicaIdFrom(req)) },
+  "/api/apps/:appId/move": { POST: (req: Request) => handleMoveApp(req, appIdFrom(req)) },
   "/api/apps/:appId/scaling-events": { GET: (req: Request) => handleGetScalingEvents(req, appIdFrom(req)) },
   "/api/apps/:appId/metrics": { GET: (req: Request) => handleGetAppMetrics(req, appIdFrom(req)) },
   "/api/apps/:appId/metrics/history": { GET: (req: Request) => handleGetAppMetricsHistory(req, appIdFrom(req)) },
   "/api/apps/:appId/availability": { GET: (req: Request) => handleGetAvailability(req, appIdFrom(req)) },
 
-  // Fleet-internal: ocd-proxy wake endpoint (shared-secret auth, no user token)
-  "/api/internal/wake": { POST: (req: Request) => handleInternalWake(req) },
-
   // GitHub Actions panel release receiver (HMAC verified, no user token).
   "/webhooks/github/panel-release": {
     POST: (req: Request) => handlePanelReleaseWebhook(req),
   },
-
-  // (Wake is now transparent: sleeping apps' Traefik routers point at the
-  // in-process hold-and-forward waker — see src/engine/scale/waker.ts. There is
-  // no browser wake page or token dance. Explicit wake actions use the
-  // dedicated operational endpoint and never mutate desired app config.)
 
   "/api/admin/ntfy/app": { POST: handleCreateNtfyApp },
   "/api/admin/ntfy": { GET: handleAdminNtfy, PUT: handleAdminNtfy },

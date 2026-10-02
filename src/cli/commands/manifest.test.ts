@@ -23,12 +23,14 @@ describe("manifest validate", () => {
       build,
       container_port: 3000,
       volume: null,
+      placement: { "server-2": 1 },
     }));
     writeFileSync(join(dir, "worker.json"), JSON.stringify({
       name: "worker",
       build: { ...build, image_repository: "ghcr.io/ocd/worker" },
       container_port: 3000,
       volume: null,
+      placement: { "server-2": 1 },
       typo: true,
     }));
     const stack = join(dir, "ocd-stack.json");

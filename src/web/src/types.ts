@@ -33,7 +33,8 @@ export type AppData = {
   container_port: number;
   /** App id this app is a staging sibling of; set = it's a hidden sibling. */
   target_of?: number | null;
-  desired_replicas: number;
+  /** Declared placement: which servers run the app and how many replicas each. */
+  placement?: Array<{ server_id: number; server_name: string; replicas: number }>;
   volume_id?: string | number;
   volume_mount?: string;
   desired_volume_id?: string;
@@ -47,16 +48,6 @@ export type AppData = {
   environment_id?: number | null;
   environment_name?: string | null;
   environment_stale?: boolean | number;
-  autoscale_enabled?: boolean;
-  min_replicas?: number;
-  max_replicas?: number;
-  autoscale_cpu_threshold?: number;
-  autoscale_mem_threshold?: number;
-  autoscale_cooldown?: number;
-  autoscale_req_threshold?: number;
-  scale_to_zero_after?: number;
-  sleeping_server_id?: number | null;
-  sleeping_host_port?: number | null;
   public?: boolean | number;
   memory_mb?: number;
   cpu_limit?: number;

@@ -17,7 +17,7 @@ import { ssh } from "./commands/ssh.ts";
 import { cp } from "./commands/cp.ts";
 import { skill } from "./commands/skill.ts";
 import { app } from "./commands/app.ts";
-import { scale } from "./commands/scale.ts";
+import { move } from "./commands/move.ts";
 import { buckets, resources, volumes } from "./commands/resources.ts";
 import { storageReaders } from "./commands/storage-readers.ts";
 import { gc } from "./commands/gc.ts";
@@ -50,7 +50,7 @@ const commands: Record<string, (args: string[]) => Promise<void>> = {
   cp,
   skill,
   app,
-  scale,
+  move,
   resources,
   volumes,
   buckets,
@@ -88,7 +88,7 @@ ${BOLD}Commands:${RESET}
   promote                Promote an explicit staging app to production
   pause <app>            Pause an app
   unpause <app>          Unpause an app
-  scale <command>        Wake apps, inspect policy, or migrate replicas
+  move <app> --to <srv>  Move an app's replicas to another server
   stack <ls|status|logs>   Inspect multi-app stacks
   ops [--app X]          List deploy engine operations
   ops <id> | logs <id>   Inspect an operation or stream its logs

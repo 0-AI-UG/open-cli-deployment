@@ -6,12 +6,13 @@ const IMAGE_REF = `ghcr.io/acme/test@sha256:${"a".repeat(64)}`;
 
 /** Historical-fixture tests seed v0 source rows. Give those rows their manual
  * cutover artifact immediately before the clean-cut migration runs. */
-function runMigrationsWithImageCutover(db: Database): void {
+function runMigrationsWithImageCutover(db: Database, upTo = Infinity): void {
   db.run("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL DEFAULT 0)");
   if (!db.query("SELECT version FROM schema_version").get()) {
     db.run("INSERT INTO schema_version (version) VALUES (0)");
   }
   for (const migration of migrations) {
+    if (migration.version > upTo) break;
     if (migration.version === 105) {
       db.run("UPDATE apps SET image_ref = ?", [IMAGE_REF]);
     }
@@ -111,6 +112,83 @@ describe("runMigrations", () => {
       expect(columns("servers")).not.toContain(column);
     }
     expect(columns("panel_backups")).not.toContain("connection_id");
+  });
+
+  test("migration 123 removes scale-to-zero and autoscaling state", () => {
+    const db = freshDb();
+    runMigrationsWithImageCutover(db, 122);
+    db.run("INSERT INTO servers (id, name, provider_id, status) VALUES (1, 'srv', 'h-1', 'ready')");
+    db.run(`INSERT INTO apps (id, name, domain, image_ref, status, desired_replicas, autoscale_enabled, sleeping_server_id)
+      VALUES (1, 'asleep', '', ?, 'sleeping', 0, 1, 1), (2, 'awake', '', ?, 'running', 2, 0, NULL)`, [IMAGE_REF, IMAGE_REF]);
+    db.run(`INSERT INTO replicas (app_id, server_id, host_port, container_name, status)
+      VALUES (1, 1, 10001, 'asleep-r1', 'stopped'), (2, 1, 10002, 'awake-r1', 'running')`);
+    db.run(`INSERT INTO scaling_events (app_id, event_type, from_count, to_count, reason)
+      VALUES (1, 'autoscale_sleep', 1, 0, 'autoscaler'), (2, 'auto_restart', 1, 1, 'health')`);
+    db.run("INSERT INTO settings (key, value) VALUES ('proxy_wake_secret', 'x')");
+
+    migrations.find((m) => m.version === 123)!.up(db);
+
+    const columns = (db.query("PRAGMA table_info(apps)").all() as Array<{ name: string }>).map((c) => c.name);
+    for (const column of [
+      "autoscale_enabled", "autoscale_cpu_threshold", "autoscale_mem_threshold", "autoscale_cooldown",
+      "autoscale_req_threshold", "last_scale_at", "min_replicas", "max_replicas", "scale_to_zero_after",
+      "sleeping_server_id", "sleeping_host_port", "last_request_at", "requests_per_min",
+    ]) {
+      expect(columns).not.toContain(column);
+    }
+    expect(db.query("SELECT status, desired_replicas FROM apps ORDER BY id").all()).toEqual([
+      { status: "unhealthy", desired_replicas: 1 },
+      { status: "running", desired_replicas: 2 },
+    ]);
+    expect(db.query("SELECT status FROM replicas WHERE app_id = 1").get()).toEqual({ status: "unhealthy" });
+    expect(db.query("SELECT event_type FROM scaling_events").all()).toEqual([{ event_type: "auto_restart" }]);
+    expect(db.query("SELECT value FROM settings WHERE key = 'proxy_wake_secret'").get()).toBeNull();
+
+    // The recreated trigger still bumps the revision on declared-config edits.
+    const before = (db.query("SELECT config_revision FROM apps WHERE id = 2").get() as { config_revision: number }).config_revision;
+    db.run("UPDATE apps SET desired_replicas = 3 WHERE id = 2");
+    expect(db.query("SELECT config_revision FROM apps WHERE id = 2").get()).toEqual({ config_revision: before + 1 });
+  });
+
+  test("migration 124 backfills explicit placement from live replicas and drops automatic placement", () => {
+    const db = freshDb();
+    runMigrationsWithImageCutover(db, 123);
+    db.run(`INSERT INTO servers (id, name, provider_id, status, pool) VALUES
+      (1, 'panel', 'h-1', 'ready', 'general'), (5, 'server-5', 'h-5', 'ready', 'general'),
+      (13, 'builder', 'h-13', 'ready', 'build-workers'), (15, 'server-15', 'h-15', 'ready', 'general')`);
+    db.run("INSERT INTO build_workers (server_id, name, previous_pool, status) VALUES (13, 'builder', 'general', 'online')");
+    db.run(`INSERT INTO apps (id, name, domain, image_ref, status, desired_replicas, durability_class, max_per_host, min_locations, placement_pool)
+      VALUES (1, 'sight-scan', '', ?, 'running', 2, 'standard', 1, 1, 'general'),
+             (2, 'blog', '', ?, 'running', 1, 'none', 0, 1, 'general'),
+             (3, 'fresh', '', ?, 'deploying', 1, 'none', 0, 1, 'general')`, [IMAGE_REF, IMAGE_REF, IMAGE_REF]);
+    db.run(`INSERT INTO replicas (app_id, server_id, host_port, container_name, status) VALUES
+      (1, 5, 10001, 'sight-scan', 'running'), (1, 15, 10001, 'sight-scan-r2', 'unhealthy'),
+      (2, 1, 10002, 'blog', 'running'), (2, 1, 10003, 'blog-r2', 'starting')`);
+    db.run(`INSERT INTO availability_samples (app_id, meets_target, desired_count, running_count, distinct_hosts, distinct_locations)
+      VALUES (1, 1, 2, 2, 2, 1)`);
+    db.run("INSERT INTO settings (key, value) VALUES ('default_server_type', 'cx23'), ('default_location', 'nbg1')");
+
+    migrations.find((m) => m.version === 124)!.up(db);
+
+    expect(db.query("SELECT id, placement FROM apps ORDER BY id").all()).toEqual([
+      { id: 1, placement: JSON.stringify({ "5": 1, "15": 1 }) },
+      { id: 2, placement: JSON.stringify({ "1": 2 }) },
+      { id: 3, placement: null },
+    ]);
+    const columns = (table: string) => (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
+    for (const column of ["desired_replicas", "durability_class", "max_per_host", "min_locations", "placement_pool"]) {
+      expect(columns("apps")).not.toContain(column);
+    }
+    expect(columns("servers")).not.toContain("pool");
+    expect(columns("build_workers")).not.toContain("previous_pool");
+    expect(columns("availability_samples")).not.toContain("distinct_hosts");
+    expect(db.query("SELECT server_id FROM build_workers").get()).toEqual({ server_id: 13 });
+    expect(db.query("SELECT count(*) AS n FROM settings WHERE key IN ('default_server_type', 'default_location')").get()).toEqual({ n: 0 });
+
+    // A placement change is a declared-config change and bumps the revision.
+    const before = (db.query("SELECT config_revision FROM apps WHERE id = 1").get() as { config_revision: number }).config_revision;
+    db.run(`UPDATE apps SET placement = '{"5":2}' WHERE id = 1`);
+    expect(db.query("SELECT config_revision FROM apps WHERE id = 1").get()).toEqual({ config_revision: before + 1 });
   });
 
   test("migration 113 repairs committed manifest paths for webhook builds", () => {
@@ -227,7 +305,6 @@ describe("runMigrations", () => {
     const columns = (db.query("PRAGMA table_info(build_workers)").all() as any[]).map((column) => column.name);
     expect(columns).toContain("server_id");
     expect(columns).toContain("worker_version");
-    expect(columns).toContain("previous_pool");
     expect(columns).not.toContain("scope_url");
     expect(columns.some((column) => column.includes("token"))).toBe(false);
     expect(db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='github_runners'").get()).toBeNull();

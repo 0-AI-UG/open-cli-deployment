@@ -103,11 +103,6 @@ export async function runAutoDeploy(
   process.env.JWT_SECRET = jwtSecret;
 
   await secretStore.set(HETZNER_API_TOKEN, config.hetzner_api_token);
-  // Reuse bootstrap choices as lazy provisioning defaults. A first manifest
-  // deploy can now add runtime/build capacity without asking for these values
-  // again; credentials remain encrypted in secretStore.
-  db.saveSetting("default_server_type", config.server_type || "cx23");
-  db.saveSetting("default_location", config.server_location || "nbg1");
   if (config.default_domain_suffix) {
     db.saveSetting("default_domain_suffix", config.default_domain_suffix);
   }

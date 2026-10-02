@@ -1,13 +1,11 @@
 // UDP data path: one Bun.udpSocket per (app, udp listener) on the app's VIP.
 // Sessions are keyed by client addr:port, each with a connected upstream socket
 // to a random backend; replies flow back to the client's address. Idle sessions
-// are swept after 60s. Sleeping apps: trigger a wake and drop datagrams until
-// backends exist (UDP has no hold semantics) — buffering happens only across
-// the brief session-connect window when the app is awake.
+// are swept after 60s. An app with no backends drops datagrams (UDP has no hold
+// semantics) — buffering happens only across the brief session-connect window.
 
 import type { udp } from "bun";
 import type { ProxyApp, ProxyListener } from "./config.ts";
-import { sharedWake, type WakeFn } from "./wake.ts";
 
 const SESSION_IDLE_MS = 60_000;
 
@@ -31,9 +29,6 @@ type State = {
   app: ProxyApp;
   socket: udp.Socket<"buffer">;
   sessions: Map<string, Session>;
-  /** Upstreams from a completed wake, used until a config reload refreshes backends. */
-  wakeBackends: string[] | null;
-  waking: boolean;
 };
 
 function pickBackend(backends: string[]): string {
@@ -41,7 +36,7 @@ function pickBackend(backends: string[]): string {
 }
 
 async function connectSession(state: State, session: Session, key: string, addr: string, port: number): Promise<void> {
-  const backends = state.app.backends.length > 0 ? state.app.backends : (state.wakeBackends ?? []);
+  const backends = state.app.backends;
   if (backends.length === 0) {
     state.sessions.delete(key);
     return;
@@ -70,13 +65,11 @@ async function connectSession(state: State, session: Session, key: string, addr:
   }
 }
 
-export async function openUdpListener(app: ProxyApp, listener: ProxyListener, wake: WakeFn): Promise<UdpListenerHandle> {
+export async function openUdpListener(app: ProxyApp, listener: ProxyListener): Promise<UdpListenerHandle> {
   const state: State = {
     app,
     socket: null as never,
     sessions: new Map(),
-    wakeBackends: null,
-    waking: false,
   };
   state.socket = await Bun.udpSocket({
     hostname: app.vip,
@@ -91,23 +84,7 @@ export async function openUdpListener(app: ProxyApp, listener: ProxyListener, wa
           else existing.pending.push(Buffer.from(data));
           return;
         }
-        if (state.app.backends.length === 0 && state.wakeBackends === null) {
-          // Sleeping: wake once, drop datagrams until backends exist.
-          if (!state.waking) {
-            state.waking = true;
-            sharedWake(state.app, wake)
-              .then((ups) => {
-                state.wakeBackends = ups;
-              })
-              .catch((err) => {
-                console.error(`[proxy] wake failed for app ${state.app.appId} (${state.app.name}): ${err}`);
-              })
-              .finally(() => {
-                state.waking = false;
-              });
-          }
-          return;
-        }
+        if (state.app.backends.length === 0) return;
         const session: Session = { upstream: null, pending: [Buffer.from(data)], lastActive: Date.now() };
         state.sessions.set(key, session);
         void connectSession(state, session, key, addr, port);
@@ -129,8 +106,6 @@ export async function openUdpListener(app: ProxyApp, listener: ProxyListener, wa
     port: state.socket.port,
     update(next) {
       state.app = next;
-      // Fresh backends from the control plane supersede any wake result.
-      if (next.backends.length > 0) state.wakeBackends = null;
     },
     stop() {
       clearInterval(sweepTimer);

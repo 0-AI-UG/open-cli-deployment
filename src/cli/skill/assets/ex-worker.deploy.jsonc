@@ -16,6 +16,7 @@
     },
     "CONCURRENCY": "4"
   },
+  "placement": { "server-2": 1 },
   "volume": null,
   "public": false,
   "health_check": {

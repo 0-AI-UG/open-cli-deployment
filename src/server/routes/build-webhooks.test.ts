@@ -16,7 +16,7 @@ async function signature(body: string, secret: string): Promise<string> {
 async function fixture() {
   const suffix = randomSuffix();
   const server = db.insertServer({ name: `webhook-${suffix}`, provider_id: `webhook-${suffix}`, ipv4: "203.0.113.40", ipv6: "", type: "cx23", location: "nbg1", status: "ready" });
-  const worker = db.insertBuildWorker({ serverId: server.id, name: `worker-${suffix}`, previousPool: "general" });
+  const worker = db.insertBuildWorker({ serverId: server.id, name: `worker-${suffix}` });
   const source = db.upsertBuildSource({ repository: `https://github.com/acme/${suffix}.git`, branch: "main", workerId: worker.id });
   const secret = `secret-${suffix}-0123456789abcdef`;
   await secretStore.set(`build_source_webhook:${source.id}`, secret);

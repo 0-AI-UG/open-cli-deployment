@@ -64,8 +64,6 @@ describe("contract: periodic reconcile self-heal (P5)", () => {
       cfgPath,
       JSON.stringify({
         version: 1,
-        wakeUrl: null,
-        wakeSecret: "",
         listenPort: port,
         apps: [
           {
@@ -74,8 +72,7 @@ describe("contract: periodic reconcile self-heal (P5)", () => {
             vip: "127.0.0.1",
             frontPorts: [80],
             backends: [`127.0.0.1:${echo.port}`],
-            sleeping: false,
-          },
+                  },
         ],
       }),
     );

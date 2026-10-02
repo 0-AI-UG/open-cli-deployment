@@ -124,6 +124,7 @@ describe("stale app state reconciliation", () => {
       image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       container_port: 3000,
       env_vars: "{}",
+      placement: { [String(server.id)]: 1 },
     });
     const imageDigest = `sha256:${randomSuffix()}`;
     const envHash = `sha256:${randomSuffix()}`;

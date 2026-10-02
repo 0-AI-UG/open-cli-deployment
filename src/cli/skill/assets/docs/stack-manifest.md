@@ -25,7 +25,9 @@ App entries support:
 - `apps.<key>.manifest`: required child manifest path relative to the stack;
 - `apps.<key>.needs`: app keys that must become healthy first;
 - `apps.<key>.domain`: override the child domain;
-- `apps.<key>.public`: override child public routing.
+- `apps.<key>.public`: override child public routing;
+- `apps.<key>.placement`: replace the child manifest's `placement` (same shape:
+  server name or ID -> replica count).
 
 Unknown nested fields and unknown `needs` targets are rejected.
 
@@ -91,7 +93,8 @@ an intentional artifact-only rollout after configuration is synchronized.
     },
     "web": {
       "manifest": "services/web/.ocd-deploy.json",
-      "needs": ["api"]
+      "needs": ["api"],
+      "placement": { "server-2": 1, "sight-capacity-1": 1 }
     }
   }
 }

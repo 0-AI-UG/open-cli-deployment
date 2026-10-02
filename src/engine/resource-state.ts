@@ -1,8 +1,9 @@
+import { parsePlacement, placementTotal } from "../shared/placement.ts";
 import * as db from "../shared/db.ts";
 import dbConn from "../shared/db/connection.ts";
 import type { OperationRow, OperationStatus } from "../shared/db/operations.ts";
 
-const APP_READY = new Set(["running", "sleeping", "paused"]);
+const APP_READY = new Set(["running", "paused"]);
 const OP_TERMINAL = new Set<OperationStatus>([
   "done",
   "failed",
@@ -42,7 +43,7 @@ function memberInstanceIssues(
 ): string[] {
   const issues: string[] = [];
   for (const app of apps) {
-    if (app.status === "paused" || app.status === "sleeping") continue;
+    if (app.status === "paused") continue;
     for (const replica of db.getReplicas(app.id)) {
       if (db.getServer(replica.server_id)?.status !== "ready") continue;
       if (replica.status !== "running") {
@@ -229,7 +230,7 @@ export function reconcileStaleAppStates(): HealedAppState[] {
     if (appHasActiveOperation(app) || app.environment_stale) continue;
 
     const replicas = db.getReplicas(app.id);
-    const desiredReplicas = app.volume_id ? 1 : app.desired_replicas;
+    const desiredReplicas = placementTotal(parsePlacement(app.placement));
     if (desiredReplicas <= 0 || replicas.length !== desiredReplicas) continue;
 
     const deployed = db.getDeployments(app.id).find((deployment) => deployment.status === "deployed");

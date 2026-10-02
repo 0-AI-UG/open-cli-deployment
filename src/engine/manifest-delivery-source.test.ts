@@ -19,7 +19,7 @@ function seedBuildSource() {
     location: "nbg1",
     status: "ready",
   });
-  const worker = db.insertBuildWorker({ serverId: server.id, name: `worker-${suffix}`, previousPool: "general" });
+  const worker = db.insertBuildWorker({ serverId: server.id, name: `worker-${suffix}` });
   const source = db.upsertBuildSource({
     repository: `https://github.com/acme/${suffix}.git`,
     branch: "main",

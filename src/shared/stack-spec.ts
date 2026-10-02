@@ -38,14 +38,15 @@ export function buildStackAppSpec(
   manifestDir: string,
 ): StackAppSpec {
   // The referenced app manifest is the canonical, full-capability app spec.
-  // Stack entries add dependency/env wiring and the two useful deployment
-  // overrides (domain/public) rather than duplicating that entire schema.
+  // Stack entries add dependency/env wiring and the useful deployment
+  // overrides (domain/public/placement) rather than duplicating that schema.
   const healthCheck = manifest.health_check;
   const spec: StackAppSpec = {
     apply_mode: "manifest",
     key,
     app_name: key, // server derives <stack>-<key>; sent only to satisfy the type
     container_port: manifest.container_port ?? 3000,
+    placement: entry.placement ?? manifest.placement,
     env: manifest.env ?? {},
     outputs: manifest.outputs ?? {},
   };
@@ -63,17 +64,6 @@ export function buildStackAppSpec(
   const domain = entry.domain ?? manifest.domain;
   if (domain) spec.domain = domain;
 
-  const replicas = manifest.replicas;
-  if (replicas) spec.replicas = replicas;
-  if (manifest.autoscaling) {
-    spec.autoscale_enabled = manifest.autoscaling.enabled ?? false;
-    spec.min_replicas = manifest.autoscaling.min_replicas ?? 1;
-    spec.max_replicas = manifest.autoscaling.max_replicas ?? 1;
-    spec.autoscale_cpu_threshold = manifest.autoscaling.cpu_threshold ?? 80;
-    spec.autoscale_mem_threshold = manifest.autoscaling.memory_threshold ?? 85;
-    spec.autoscale_req_threshold = manifest.autoscaling.requests_per_minute ?? 0;
-    spec.autoscale_cooldown = manifest.autoscaling.cooldown_seconds ?? 300;
-  }
   const isPublic = entry.public ?? manifest.public;
   if (isPublic !== undefined) spec.public = isPublic;
   const memoryMb = manifest.memory_mb;
@@ -106,12 +96,6 @@ export function buildStackAppSpec(
   if (publicPort !== undefined) spec.public_port = publicPort;
   const publicProtocol = manifest.public_protocol;
   if (publicProtocol) spec.public_protocol = publicProtocol;
-  const durability = manifest.durability_class;
-  if (durability) spec.durability_class = durability;
-  const placementPool = manifest.placement_pool;
-  if (placementPool) spec.placement_pool = placementPool;
-  const scaleToZeroAfter = manifest.scale_to_zero_after;
-  if (scaleToZeroAfter !== undefined) spec.scale_to_zero_after = scaleToZeroAfter;
 
   spec.volume_id = manifest.volume?.id ?? "";
   spec.volume_driver = manifest.volume?.driver;

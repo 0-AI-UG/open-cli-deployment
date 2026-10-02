@@ -17,8 +17,6 @@ function writeConfig(content: string): string {
 function validConfig(): ProxyConfig {
   return {
     version: 1,
-    wakeUrl: "http://10.0.0.1:8896/wake",
-    wakeSecret: "s3cret",
     apps: [
       {
         appId: 5,
@@ -26,8 +24,7 @@ function validConfig(): ProxyConfig {
         vip: "10.96.0.5",
         frontPorts: [80, 20005],
         backends: ["10.0.0.3:10004"],
-        sleeping: false,
-      },
+          },
     ],
   };
 }
@@ -74,10 +71,6 @@ describe("loadConfig", () => {
     const badPort = validConfig();
     badPort.apps[0].frontPorts = [80, 70000];
     expect(loadConfig(writeConfig(JSON.stringify(badPort)))).rejects.toThrow(/frontPorts/);
-
-    const badSecret = validConfig();
-    (badSecret as Record<string, unknown>).wakeSecret = null;
-    expect(loadConfig(writeConfig(JSON.stringify(badSecret)))).rejects.toThrow(/wakeSecret/);
   });
 });
 
@@ -139,11 +132,11 @@ describe("watchConfig", () => {
       expect(seen).toHaveLength(0);
 
       const next = validConfig();
-      next.apps[0].sleeping = true;
+      next.apps[0].backends = ["10.0.0.4:10004"];
       writeFileSync(path, JSON.stringify(next));
       await Bun.sleep(300);
       expect(seen).toHaveLength(1);
-      expect(seen[0].apps[0].sleeping).toBe(true);
+      expect(seen[0].apps[0].backends).toEqual(["10.0.0.4:10004"]);
     } finally {
       stop();
     }
@@ -185,7 +178,7 @@ describe("contract: watch baseline seeded from the initially loaded text (P6)", 
     // exactly the window where a baseline seeded by re-reading the file
     // absorbs the change and silently never fires onChange.
     const next = validConfig();
-    next.apps[0].sleeping = true;
+    next.apps[0].backends = ["10.0.0.4:10004"];
     writeFileSync(path, JSON.stringify(next));
     const seen: ProxyConfig[] = [];
     // Contract seam: optional 4th arg `initialText` seeds the change-detection
@@ -201,7 +194,7 @@ describe("contract: watch baseline seeded from the initially loaded text (P6)", 
     try {
       await Bun.sleep(400);
       expect(seen.length).toBeGreaterThanOrEqual(1);
-      expect(seen[0].apps[0].sleeping).toBe(true);
+      expect(seen[0].apps[0].backends).toEqual(["10.0.0.4:10004"]);
     } finally {
       stop();
     }

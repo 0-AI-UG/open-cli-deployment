@@ -23,11 +23,20 @@ Unknown fields are rejected by default.
   "env": { "DATABASE_URL": { "from": "environment.DATABASE_URL" } },
   "domain": "api.example.com",
   "public": true,
-  "replicas": 2,
+  "placement": { "server-2": 1, "sight-capacity-1": 1 },
   "health_check": { "mode": "http", "path": "/health", "expected_statuses": [200] },
   "volume": null
 }
 ```
+
+## Placement
+
+`placement` is required. It maps server names (as shown by `ocd servers`, or a
+numeric server ID) to the number of replicas that server runs, for example
+`{"server-2": 1}` or `{"server-2": 1, "sight-capacity-1": 1}`. OCD runs exactly
+this; it never picks servers or replica counts. Apps with a `volume` must be
+placed on exactly one server with one replica. See
+[Placement](scaling-storage-and-placement.md#placement).
 
 ## Image source
 
@@ -68,11 +77,10 @@ lifecycle as every other manifest.
 `$schema`, `$llm`, `name`, `description`, `icon`, `build`, `image`,
 `container_port`, `env`, `outputs`, `storage`, `command`, `cap_add`, `post_start`,
 `environment`, required `volume` (`null` for none),
-`suggested_app_name`, `domain`, `auth`, `replicas`,
-`autoscaling`, `public`, `extra_volumes`, `memory_mb`, `cpu_limit`,
+`suggested_app_name`, `domain`, `auth`, `placement`,
+`public`, `extra_volumes`, `memory_mb`, `cpu_limit`,
 `health_check`, `internal_protocol`, `sticky`, `rate_limit_rps`,
-`ip_allowlist`, `compress`, `public_port`, `public_protocol`,
-`durability_class`, `placement_pool`, and `scale_to_zero_after` retain their
+`ip_allowlist`, `compress`, `public_port`, and `public_protocol` retain their
 normal complete-desired-state semantics.
 
 The `env` object maps variable names to literal strings or `{ "from":

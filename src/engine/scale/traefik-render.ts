@@ -13,11 +13,7 @@
 // All emitted "YAML" is JSON (JSON is valid YAML) — no serializer dependency.
 
 import * as db from "../../shared/db.ts";
-import {
-  BASIC_AUTH_USER,
-  WAKER_HTTP_PORT,
-  WAKER_HTTP_SERVICE,
-} from "./traefik-constants.ts";
+import { BASIC_AUTH_USER } from "./traefik-constants.ts";
 
 /** Return an object with keys inserted in sorted order — JSON.stringify then
  *  emits them deterministically, which the content-hash sync cache relies on. */
@@ -30,8 +26,8 @@ function sortKeys<T>(obj: Record<string, T>): Record<string, T> {
 // --- Desired state -----------------------------------------------------------
 
 export type DesiredApp = {
-  /** apps.id — carried for the VIP proxy's wake contract (Traefik rendering
-   *  keys everything on name and ignores this). */
+  /** apps.id — carried for the VIP proxy config (Traefik rendering keys
+   *  everything on name and ignores this). */
   appId: number;
   name: string;
   /** Public domain; "" for private apps. */
@@ -50,10 +46,6 @@ export type DesiredApp = {
    *  (loadBalancer.healthCheck), NOT the routing protocol. */
   httpProbe: boolean;
   isPublic: boolean;
-  /** sleeping/waking — the app's public HTTP router points at the panel waker
-   *  instead of a replica pool, so a public connection transparently wakes it
-   *  and is held-and-forwarded. (Internal wake is the VIP proxy's job.) */
-  asleep: boolean;
   /** htpasswd bcrypt hash for the basicAuth middleware; "" when the app has
    *  no password. Persisted at set-time (apps.auth_password_hash) so renders
    *  are deterministic — hashing per render would salt differently every
@@ -79,15 +71,6 @@ export type DesiredApp = {
 
 export type DesiredState = {
   apps: DesiredApp[];
-  /** The panel container's host port on the panel server's loopback. Null when
-   *  no panel. No longer consumed by the renderer (sleeping apps route to the
-   *  waker, not the panel) — retained in the snapshot for callers/tests. */
-  panelHostPort: number | null;
-  /** The panel server's private IPv4 — where every server's Traefik reaches the
-   *  waker (`<ip>:<waker-port>`) to route sleeping apps. Null until the network
-   *  reconciler has attached the panel; sleeping apps then render no waker
-   *  route (they fall back to rendering nothing, as before). */
-  panelPrivateIpv4: string | null;
   /** The panel server's PUBLIC IPv4 — the DNAT `daddr` the VIP proxy keys the
    *  public raw path on, so the fleet-wide-identical proxy config only
    *  intercepts 30000-30099 on the panel. Null until a panel server exists.
@@ -99,7 +82,7 @@ export type DesiredState = {
  * Upstream pool for an app. Includes only replicas the DB currently considers
  * servable: `running` and `unhealthy`. Explicitly excluded:
  *
- *   - `stopped`    — scale-to-zero anchor, container is off.
+ *   - `stopped`    — container is off.
  *   - `paused`     — `docker pause` froze the container; it accepts TCP
  *                    but won't serve.
  *   - `draining`   — scale-down has signalled the replica to quiesce.
@@ -141,7 +124,6 @@ export function collectDesiredState(): DesiredState {
       internalProtocol: app.internal_protocol === "tcp" ? "tcp" as const : "http" as const,
       httpProbe: !!app.health_check,
       isPublic: !!app.public,
-      asleep: app.status === "sleeping" || app.status === "waking",
       authHash: app.auth_password_hash || "",
       sticky: !!app.sticky,
       rateLimitRps: app.rate_limit_rps || 0,
@@ -158,8 +140,6 @@ export function collectDesiredState(): DesiredState {
   const panelServer = panel ? db.getServer(panel.server_id) : null;
   return {
     apps,
-    panelHostPort: panel?.host_port ?? null,
-    panelPrivateIpv4: panelServer?.routing_address || null,
     panelPublicIpv4: panelServer?.ipv4 || null,
   };
 }
@@ -215,12 +195,6 @@ function httpLoadBalancer(app: DesiredApp): Record<string, unknown> {
  * app domains and the global web→websecure redirect.
  * Workers get an empty config.
  *
- * A SLEEPING public app does not disappear — its domain router is pointed at
- * the panel WAKER instead of a replica pool, so any HTTP connection
- * transparently wakes the app and is held-and-forwarded (see waker.ts). The
- * reconciler re-renders back to real replicas once it wakes; before the panel
- * has a private IP there is nowhere to route, so it renders nothing.
- *
  * Output key order is deterministic so the manager's content-hash cache can
  * skip no-op writes.
  */
@@ -234,35 +208,23 @@ export function renderDynamicConfig(
 
   let needRetry = false;
   let needSecHeaders = false;
-  // Whether any router pointed at the shared waker HTTP service this render, so
-  // the one load balancer to `<panel-private-ip>:WAKER_HTTP_PORT` is emitted.
-  let needWakerHttp = false;
-  const wakerIp = state.panelPrivateIpv4;
 
   for (const app of state.apps) {
     const svcName = `app-${app.name}`;
     const hasUpstreams = app.upstreams.length > 0;
-    // A sleeping app's public domain routes to the waker instead of a replica
-    // pool — but only once the panel has a private IP to reach it at. Without
-    // one there is nowhere to route, so it renders nothing.
-    const routeToWaker = app.asleep && wakerIp != null;
 
     // NOTE: public raw TCP/UDP exposure (apps.public_port, the 30000-30099
     // pool) no longer routes through Traefik — the per-host VIP proxy owns it
     // now (a dedicated auth-free public listener plus panel-scoped nftables
-    // DNAT; see src/proxy/ and proxy-render.ts). That path also gains working
-    // wake-on-connect, which Traefik's L4-passthrough entrypoints never had.
+    // DNAT; see src/proxy/ and proxy-render.ts).
 
-    // Public route: panel only, public apps with a domain, awake with a
-    // servable pool or asleep with a reachable waker.
-    if (!opts.isPanel || !app.isPublic || !app.domain || !(hasUpstreams || routeToWaker)) continue;
+    // Public route: panel only, public apps with a domain and a servable pool.
+    if (!opts.isPanel || !app.isPublic || !app.domain || !hasUpstreams) continue;
 
     // Public middleware chain, cheapest rejection first: the IP allowlist
     // and rate limit turn unwanted traffic away before basicAuth spends bcrypt
     // CPU verifying it (an unauthenticated flood must not become a hashing
     // DoS); compress and sec-headers only shape responses that made it through.
-    // Built identically whether the router points at the replicas (awake) or
-    // the waker (asleep) — the allowlist and password must gate the wake too.
     const pubMiddlewares: string[] = [];
     if (app.ipAllowlist.length > 0) {
       httpMiddlewares[`allowlist-${app.name}`] = {
@@ -287,19 +249,14 @@ export function renderDynamicConfig(
       pubMiddlewares.push(`compress-${app.name}`);
     }
 
-    if (routeToWaker) {
-      // Sleeping: the domain resolves to the waker, which wakes+holds+forwards.
-      needWakerHttp = true;
-    } else {
-      // Awake: the public router proxies HTTP to the replicas even for
-      // internal_protocol='tcp' apps (same as the old public vhost).
-      httpServices[svcName] = { loadBalancer: httpLoadBalancer(app) };
-    }
+    // The public router proxies HTTP to the replicas even for
+    // internal_protocol='tcp' apps (same as the old public vhost).
+    httpServices[svcName] = { loadBalancer: httpLoadBalancer(app) };
     httpRouters[`pub-${app.name}`] = {
       entryPoints: ["websecure"],
       rule: `Host(\`${app.domain}\`)`,
       middlewares: [...pubMiddlewares, "sec-headers", "retry"],
-      service: routeToWaker ? WAKER_HTTP_SERVICE : svcName,
+      service: svcName,
       tls: publicTls(app.domain),
     };
     needRetry = true;
@@ -321,15 +278,6 @@ export function renderDynamicConfig(
     };
   }
 
-  if (needWakerHttp && wakerIp) {
-    // One shared load balancer for every sleeping app's HTTP router, pointing
-    // at the panel waker's HTTP listener over the private network. passHostHeader
-    // defaults on, so the waker sees the original `<app>.ocd.internal` / public
-    // domain Host and resolves the app from it.
-    httpServices[WAKER_HTTP_SERVICE] = {
-      loadBalancer: { servers: [{ url: `http://${wakerIp}:${WAKER_HTTP_PORT}` }] },
-    };
-  }
   if (needRetry) {
     // Traefik has no passive health checks for HTTP upstreams (Caddy's
     // fail_duration model) — retry approximates the per-request failover;
@@ -363,7 +311,7 @@ export function renderDynamicConfig(
  * bootstrap/redeploy and never rewritten by the ocd.yml renderer, so panel
  * WebSocket/terminal sessions are never disturbed by app syncs. All names in
  * here (`panel`, `panel-web`, `panel-redirect-https`) are disjoint from the
- * ocd.yml namespace (`app-*`, `svc-*`, `ocd-waker-http`, …) — the file provider
+ * ocd.yml namespace (`app-*`, `svc-*`, …) — the file provider
  * rejects duplicate definitions across files.
  */
 export function renderPanelConfig(

@@ -10,7 +10,7 @@ import { getContainerLogs, sshExec } from "../../shared/remote/index.ts";
 import { deriveStackResourceState } from "../../engine/resource-state.ts";
 import { findLatestRelatedStackOperation, stackLockKeys } from "../lib/stack-operations.ts";
 import { validatePublicEndpoint } from "../../engine/dns-reconciler.ts";
-import { approveAutomaticServerProvisioning } from "../lib/server-provisioning.ts";
+import { assertPlacementChangeAllowed, assertPlacementUsable, resolveRequestPlacement } from "../../shared/app-config.ts";
 import { enrichAppForResponse } from "./apps.ts";
 import { resolveOciImage } from "../../engine/oci-image.ts";
 import { validateBuildDeployRequest, validateDeployRequest } from "../../shared/validate.ts";
@@ -73,7 +73,6 @@ export async function handleDeployStack(request: Request): Promise<Response> {
       );
     }
     for (const app of req.apps ?? []) app.delivery_source = app.build ? "build" : "image";
-    req.server_provisioning_approved = false;
     // Single-flight: only one deploy_stack per stack may run at a time. If one is
     // already in flight (pending/running/compensating), attach to it — follow the
     // existing run — instead of enqueuing a duplicate.
@@ -132,11 +131,17 @@ export async function handleDeployStack(request: Request): Promise<Response> {
         return Response.json({ ok: false, error: `App "${app.key}": ${validation.error}` }, { status: 400, headers: corsHeaders });
       }
     }
-    const newApps = selectedApps.filter((app) => !db.getAppByName(`${req.name}-${app.key}`));
-    if (newApps.length > 0) {
-      const pools = newApps.map((app) => app.placement_pool || "general");
-      await approveAutomaticServerProvisioning(request, payload, `deploying stack ${req.name}`, pools);
-      req.server_provisioning_approved = true;
+    for (const app of selectedApps) {
+      // Placement is explicit: every named server must exist and be usable,
+      // and a volume member never changes servers outside `ocd move`.
+      try {
+        const placement = resolveRequestPlacement(app);
+        const existingApp = db.getAppByName(`${req.name}-${app.key}`);
+        if (existingApp) assertPlacementChangeAllowed(existingApp, app.volume_size ?? 0, placement);
+        else assertPlacementUsable(placement);
+      } catch (error) {
+        return Response.json({ ok: false, error: `App "${app.key}": ${(error as Error).message}` }, { status: 400, headers: corsHeaders });
+      }
     }
     const selectedBuildApps = selectedApps.filter((app) => !!app.build && !app.image_ref);
     if (!req.config_only && selectedBuildApps.length > 0) {

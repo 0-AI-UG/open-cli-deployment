@@ -123,7 +123,6 @@ describe("renderProxyConfig", () => {
     expect(entry.appId).toBe(app.id);
     expect(entry.name).toBe(app.name);
     expect(entry.vip).toBe(app.virtual_ip);
-    expect(entry.sleeping).toBe(false);
     expect(entry.backends).toEqual(["10.0.7.10:10201"]);
     expect(entry.frontPorts).toEqual([80, 3000, app.internal_port]);
   });
@@ -135,14 +134,6 @@ describe("renderProxyConfig", () => {
     expect(cfg.apps[0]!.frontPorts).toEqual([5432, app.internal_port]);
   });
 
-  test("sleeping app: sleeping=true with empty backends (stopped anchor is not servable)", () => {
-    const server = makeServer("10.0.7.12");
-    const app = makeApp({ server, replicaStatus: "stopped", status: "sleeping", hostPort: 10203 });
-    const cfg = renderProxyConfig(stateFor(app.name));
-    expect(cfg.apps[0]!.sleeping).toBe(true);
-    expect(cfg.apps[0]!.backends).toEqual([]);
-  });
-
   test("apps without a virtual_ip are skipped (nothing to bind)", () => {
     const server = makeServer("10.0.7.13");
     const app = makeApp({ server, hostPort: 10204 });
@@ -150,30 +141,6 @@ describe("renderProxyConfig", () => {
     state.apps = state.apps.map((a) => ({ ...a, virtualIp: "" }));
     const cfg = renderProxyConfig(state);
     expect(cfg.apps).toEqual([]);
-  });
-
-  test("wakeUrl targets the waker port on the panel's private IP; null without one", () => {
-    const server = makeServer("10.0.7.14");
-    const app = makeApp({ server, hostPort: 10205 });
-    const state = stateFor(app.name);
-
-    // :8896 (the waker listener) is the only panel port published on the
-    // private IP — the API port binds 127.0.0.1 only.
-    const withPanel = renderProxyConfig({ ...state, panelPrivateIpv4: "10.0.7.99" });
-    expect(withPanel.wakeUrl).toBe("http://10.0.7.99:8896/api/internal/wake");
-
-    const noPanel = renderProxyConfig({ ...state, panelPrivateIpv4: null });
-    expect(noPanel.wakeUrl).toBeNull();
-  });
-
-  test("wakeSecret: created once (32 bytes hex), persisted, stable across renders", () => {
-    const server = makeServer("10.0.7.15");
-    const app = makeApp({ server, hostPort: 10206 });
-    const state = stateFor(app.name);
-    const first = renderProxyConfig(state);
-    expect(first.wakeSecret).toMatch(/^[0-9a-f]{64}$/);
-    expect(db.getSettings()["proxy_wake_secret"]).toBe(first.wakeSecret);
-    expect(renderProxyConfig(state).wakeSecret).toBe(first.wakeSecret);
   });
 
   test("authProtected: true for apps with a password hash, absent otherwise", () => {
@@ -275,8 +242,5 @@ describe("proxy provisioning", () => {
     expect(script).toContain("systemctl enable ocd-proxy");
     expect(script).toContain("systemctl restart ocd-proxy");
     expect(script).toContain("systemctl is-active ocd-proxy");
-    // The config (and its wake secret) is never written by the install script
-    // — it ships separately with mode 600.
-    expect(script).not.toContain("wakeSecret");
   });
 });

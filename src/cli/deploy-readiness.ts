@@ -1,13 +1,11 @@
 import { get, post } from "./api.ts";
-import { withWebConfirmation } from "./confirm.ts";
 import { followOp } from "./ops.ts";
 import { promptLine } from "./prompt.ts";
-import { BOLD, DIM, GREEN, RESET, YELLOW } from "./format.ts";
+import { BOLD, DIM, RESET, YELLOW } from "./format.ts";
 
 export type DeployReadiness = {
   ready: boolean;
   hetzner: { status: string; configured: boolean };
-  defaults: { status: string; server_type: string; location: string };
   worker: { status: string; online: number; total: number; candidate_server: { id: number; name: string } | null };
   registry: { status: string; configured: boolean; scope: string; username: string; covers_target: boolean | null };
   source: { status: string; configured: boolean; host: string; covers_repository: boolean | null };
@@ -34,7 +32,7 @@ async function installWorker(server: Server): Promise<void> {
  * deliberately CLI orchestration: the backend still performs every mutation
  * through the same durable operations and browser confirmation paths. */
 export async function ensureBuildReadiness(repository = "", image = ""): Promise<void> {
-  let readiness = await getDeployReadiness(repository, image);
+  const readiness = await getDeployReadiness(repository, image);
   if (!readiness.registry.configured) {
     throw new Error(`A registry connection is required to publish ${image}. Run: ocd registry login`);
   }
@@ -63,33 +61,8 @@ export async function ensureBuildReadiness(repository = "", image = ""): Promise
     return;
   }
 
-  if (!readiness.hetzner.configured || !readiness.defaults.server_type || !readiness.defaults.location) {
-    throw new Error(
-      "No build worker or empty server is available. Configure the Hetzner token and server defaults in the panel, " +
-      "connect an empty server, or run `ocd doctor` for exact next actions.",
-    );
-  }
-
-  const name = `ocd-builder-${Date.now().toString(36)}`;
-  console.log(`${YELLOW}No build worker is online.${RESET} A dedicated ${readiness.defaults.server_type} server in ${readiness.defaults.location} is required.`);
-  const provisioned = await withWebConfirmation((headers) => post<{ op_id: number }>(
-    "/api/resources/servers",
-    {
-      server_type: readiness.defaults.server_type,
-      location: readiness.defaults.location,
-      name,
-      pool: "build-workers",
-      reason: "dedicated OCD BuildKit worker for manifest deploys",
-    },
-    headers,
-  ));
-  const provisionResult = await followOp(provisioned.op_id);
-  if (!provisionResult.ok) throw new Error(provisionResult.error || "Build-worker server provisioning failed");
-  const servers = await get<Server[]>("/api/servers");
-  const server = servers.find((candidate) => candidate.name === name);
-  if (!server) throw new Error(`Provisioned build-worker server ${name} was not returned by the panel`);
-  await installWorker(server);
-  readiness = await getDeployReadiness(repository, image);
-  if (!readiness.worker.online) throw new Error("Build worker installation completed but the worker is not online");
-  console.log(`${GREEN}Build capacity is ready; continuing deployment.${RESET}`);
+  throw new Error(
+    "No build worker is online and no empty server is available. Create a dedicated server with " +
+    "`ocd servers create --type=<type> --location=<location>`, then run `ocd runners install --server=<id>`.",
+  );
 }

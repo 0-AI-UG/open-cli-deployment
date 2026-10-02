@@ -16,7 +16,7 @@ describe("web CLI command catalog", () => {
     for (const name of [
       "login", "apps", "status", "logs", "deploy", "delete", "restart",
       "rollback", "promote", "pause", "unpause", "envs", "stack",
-      "ops", "servers", "ssh", "skill", "app", "scale", "resources", "volumes", "buckets",
+      "ops", "servers", "ssh", "skill", "app", "move", "resources", "volumes", "buckets",
       "release", "manifest", "gc", "runners", "doctor", "registry", "source",
     ]) {
       expect(represented.has(name)).toBe(true);

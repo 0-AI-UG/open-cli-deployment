@@ -130,9 +130,6 @@ export type StartAppReplicaOpts = {
   extraHosts?: Array<{ hostname: string; address: string }>;
   volumeMount?: string;
   extraVolumes?: string[];
-  /** Extra, already-formatted `-p ...` publish flags beyond the primary port
-   *  (e.g. the panel's waker port). Passed through to buildDockerRunArgs. */
-  extraPublish?: string[];
   memoryMb?: number;
   /** Per-container CPU ceiling in cores. Omit / 0 → platform default. */
   cpus?: number;
@@ -143,9 +140,6 @@ export type StartAppReplicaOpts = {
   envFilePath?: string;
   /** App dir base for the env file (default /home/deploy/apps). */
   baseDir?: string;
-  /** `docker rm -f` any same-named container first. Default true; wake's slow
-   *  path passes false (the container provably does not exist). */
-  removeExisting?: boolean;
   configRevision?: number;
   envHash?: string;
   command?: string[];
@@ -212,26 +206,24 @@ export async function startAppReplicaWithSsh(
     [REVISION_LABELS.hostPort]: String(opts.hostPort),
   };
 
-  if (opts.removeExisting !== false) {
-    // Crash-resume adoption: keep an already-running exact revision. A stale
-    // or mismatched namesake is removed so retry is deterministic.
-    const existing = await exec(
-      ip,
-      asUser(`docker inspect --format '{{json .Config.Labels}}|{{.State.Running}}|{{.Id}}' ${opts.containerName} 2>/dev/null || true`),
-      hostKey,
-    );
-    const [rawLabels, running, existingId] = existing.stdout.trim().split("|");
-    let same = false;
-    try {
-      const current = JSON.parse(rawLabels || "{}");
-      same = running === "true" && Object.entries(labels).every(([key, value]) => current?.[key] === value);
-    } catch { /* remove malformed/legacy container */ }
-    if (same) {
-      log("run", `Adopted existing attested container ${opts.containerName}`);
-      return { containerId: existingId || opts.containerName };
-    }
-    await exec(ip, asUser(`docker rm -f ${opts.containerName} 2>/dev/null || true`), hostKey);
+  // Crash-resume adoption: keep an already-running exact revision. A stale
+  // or mismatched namesake is removed so retry is deterministic.
+  const existing = await exec(
+    ip,
+    asUser(`docker inspect --format '{{json .Config.Labels}}|{{.State.Running}}|{{.Id}}' ${opts.containerName} 2>/dev/null || true`),
+    hostKey,
+  );
+  const [rawLabels, running, existingId] = existing.stdout.trim().split("|");
+  let same = false;
+  try {
+    const current = JSON.parse(rawLabels || "{}");
+    same = running === "true" && Object.entries(labels).every(([key, value]) => current?.[key] === value);
+  } catch { /* remove malformed/legacy container */ }
+  if (same) {
+    log("run", `Adopted existing attested container ${opts.containerName}`);
+    return { containerId: existingId || opts.containerName };
   }
+  await exec(ip, asUser(`docker rm -f ${opts.containerName} 2>/dev/null || true`), hostKey);
 
   // A fresh block volume is root-owned; make its root writable by the image's
   // runtime user before we start the hardened (cap-dropped) container, which
@@ -256,7 +248,6 @@ export async function startAppReplicaWithSsh(
     network: opts.network,
     extraHosts,
     publish: { bindAddr: opts.bindAddr, hostPort: opts.hostPort, containerPort: opts.containerPort },
-    extraPublish: opts.extraPublish,
     envFilePath,
     volumeMount: opts.volumeMount,
     extraVolumes: opts.extraVolumes,

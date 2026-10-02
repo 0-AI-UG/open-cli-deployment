@@ -13,7 +13,6 @@ export function colorStatus(status: string): string {
     case "running":
       return `${GREEN}${status}${RESET}`;
     case "deploying":
-    case "sleeping":
       return `${YELLOW}${status}${RESET}`;
     case "unhealthy":
     case "error":

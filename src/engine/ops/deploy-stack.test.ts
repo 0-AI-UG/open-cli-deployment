@@ -45,7 +45,7 @@ const validatePlanStep = deployStackOp.steps.find((s) => s.name === "validate_pl
 const reconcileRemovalsStep = deployStackOp.steps.find((s) => s.name === "reconcile_removals")!;
 
 function app(key: string, needs?: string[], outputs?: Record<string, { template: string; secret?: boolean }>) {
-  return { key, needs, outputs, app_name: key, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000 };
+  return { key, needs, outputs, app_name: key, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000, placement: { "1": 1 } };
 }
 
 function req(name: string, apps: ReturnType<typeof app>[]): StackDeployRequest {
@@ -113,6 +113,7 @@ describe("stack member convergence checkpoints", () => {
       image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       container_port: 3000,
       env_vars: JSON.stringify({ env: {}, outputs: {} }),
+      placement: { [String(server.id)]: 1 },
     });
     db.updateAppStatus(insertedApp.id, "running");
     db.updateAppArtifactAndHealth(insertedApp.id, {

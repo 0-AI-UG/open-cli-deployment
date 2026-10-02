@@ -44,7 +44,6 @@ function seedWorker(label: string) {
   const worker = db.insertBuildWorker({
     serverId: server.id,
     name: `${label}-${suffix}`,
-    previousPool: "general",
   });
   return { server, worker };
 }
@@ -52,6 +51,10 @@ function seedWorker(label: string) {
 function fixture() {
   const suffix = randomSuffix();
   const assigned = seedWorker("webhook-assigned");
+  const runtime = db.insertServer({
+    name: `webhook-runtime-${suffix}`, provider_id: `webhook-runtime-${suffix}`, ipv4: "198.51.100.30",
+    ipv6: "", type: "cx23", location: "nbg1", status: "ready",
+  });
   const source = db.upsertBuildSource({
     repository: `https://github.com/acme/webhook-${suffix}.git`,
     branch: "main",
@@ -73,7 +76,7 @@ function fixture() {
     imageRepository: `registry.example.com/acme/${app.name}`,
   });
   database.query("UPDATE apps SET manifest_path = ? WHERE id = ?").run(MANIFEST_PATH, app.id);
-  return { assigned, source, app };
+  return { assigned, runtime, source, app };
 }
 
 function manifest(
@@ -92,6 +95,7 @@ function manifest(
       ...build,
     },
     container_port: 3000,
+    placement: { [seeded.runtime.name]: 1 },
     volume: null,
   };
 }
@@ -363,6 +367,7 @@ describe("webhook build source transport boundary", () => {
       name: `${stack.name}-database`,
       image: "postgres:17-alpine",
       container_port: 5432,
+      placement: { [seeded.runtime.name]: 1 },
       volume: null,
     });
     const resolvedPrebuilt = `docker.io/library/postgres@sha256:${"d".repeat(64)}`;

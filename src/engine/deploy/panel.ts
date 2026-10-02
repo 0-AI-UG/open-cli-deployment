@@ -22,7 +22,6 @@ import {
   pullImmutableImageAndRun, healthCheck, getContainerLogs,
 } from "../../shared/remote/index.ts";
 import { deployTraefikPanelSite, installTraefikOn } from "../scale/traefik-manager.ts";
-import { wakerPublishFlags } from "../scale/traefik-constants.ts";
 import { ensureNetwork as ensureSharedNetwork } from "../network.ts";
 import { handoffDbToVolume } from "./self-deploy.ts";
 import { dockerLoginRegistry } from "../../shared/remote/index.ts";
@@ -290,10 +289,6 @@ export async function bootstrapPanel(
         hostPort,
         envVars: opts.envVars,
         volumeMount,
-        // Publish the in-process waker's HTTP port so sleeping apps' Traefik
-        // routers (which dial `<panel-private-ip>:8896`) can reach it. Empty
-        // until the private network is attached; the first redeploy backfills.
-        extraPublish: wakerPublishFlags(providerServer.routingAddress || ""),
       },
       (line) => onProgress("artifact", line),
     );
@@ -419,9 +414,6 @@ export function buildPanelReleaseScript(opts: {
   image: string;
   hostPort: number;
   containerPort: number;
-  /** Panel server's routing IPv4 — where the waker HTTP port is published so
-   *  Traefik can reach the in-process waker for sleeping apps. "" → skip. */
-  routingAddress: string;
   envFilePath: string;
   /** "-v src:dst" or "". */
   volumeFlag: string;
@@ -438,16 +430,10 @@ export function buildPanelReleaseScript(opts: {
   healthRetries?: number;
 }): string {
   const {
-    containerName, image, hostPort, containerPort, routingAddress, envFilePath,
+    containerName, image, hostPort, containerPort, envFilePath,
     volumeFlag, registryEnvPrefix, registryConfigDir, pullRetries, pullSleepSeconds,
   } = opts;
   const healthRetries = opts.healthRetries ?? 30;
-  // Publish the waker HTTP port (bound to the private IP) alongside the panel's
-  // own loopback port, so sleeping apps' Traefik routers can reach the in-process
-  // waker. Without this every sleeping-app hit 502s and nothing wakes.
-  const wakerFlags = wakerPublishFlags(routingAddress)
-    .map((f) => ` ${f}`)
-    .join("");
   const cleanup = registryConfigDir
     ? `su - deploy -c "rm -rf ${registryConfigDir}" 2>/dev/null || true`
     : `true`;
@@ -502,7 +488,7 @@ export function buildPanelReleaseScript(opts: {
     ...snapshotLines,
     // Swap on the SAME loopback port that Traefik's panel.yml already targets.
     `docker rm -f ${containerName} 2>/dev/null || true`,
-    `su - deploy -c "docker run -d --name ${containerName} --restart unless-stopped ${logFlags} -p 127.0.0.1:${hostPort}:${containerPort}${wakerFlags} --env-file ${envFilePath} ${volumeFlag} ${image}"`,
+    `su - deploy -c "docker run -d --name ${containerName} --restart unless-stopped ${logFlags} -p 127.0.0.1:${hostPort}:${containerPort} --env-file ${envFilePath} ${volumeFlag} ${image}"`,
     // Health gate. A container that exits immediately never answers /api/health,
     // so this catches both a crash-loop and a process that starts but is unwell.
     `healthy=0`,
@@ -542,7 +528,7 @@ export function buildPanelReleaseScript(opts: {
     `  sync`,
     `  rm -rf -- "$DB_SNAPSHOT"`,
     `fi`,
-    `su - deploy -c "docker run -d --name ${containerName} --restart unless-stopped ${logFlags} -p 127.0.0.1:${hostPort}:${containerPort}${wakerFlags} --env-file ${envFilePath} ${volumeFlag} $PREV_IMAGE"`,
+    `su - deploy -c "docker run -d --name ${containerName} --restart unless-stopped ${logFlags} -p 127.0.0.1:${hostPort}:${containerPort} --env-file ${envFilePath} ${volumeFlag} $PREV_IMAGE"`,
     `${cleanup}`,
     `exit 1`,
   ].join("\n");
@@ -635,7 +621,6 @@ export async function redeployPanel(
       image,
       hostPort: panel.host_port,
       containerPort: panel.container_port,
-      routingAddress: server.routing_address || "",
       envFilePath,
       volumeFlag,
       volumeHostPath,

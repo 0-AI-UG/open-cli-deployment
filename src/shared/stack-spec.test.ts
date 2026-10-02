@@ -20,7 +20,7 @@ describe("buildStackAppSpec", () => {
       container_port: 8080,
       env: { DATABASE_URL: { from: "environment.DATABASE_URL" } },
       environment: "production",
-      replicas: 3,
+      placement: { "server-2": 1, "sight-capacity-1": 1 },
       public: true,
       memory_mb: 1024,
       cpu_limit: 1.5,
@@ -32,19 +32,7 @@ describe("buildStackAppSpec", () => {
       compress: true,
       public_port: null,
       public_protocol: "tcp",
-      durability_class: "high",
-      placement_pool: "production",
-      scale_to_zero_after: 0,
-      autoscaling: {
-        enabled: true,
-        min_replicas: 2,
-        max_replicas: 6,
-        cpu_threshold: 75,
-        memory_threshold: 80,
-        requests_per_minute: 120,
-        cooldown_seconds: 180,
-      },
-      volume: { size: 20, path: "/var/lib/app" },
+      volume: null,
       extra_volumes: [{ host_path: "/srv/shared", container_path: "/shared" }],
     };
     const entry: StackManifest["apps"][string] = {
@@ -71,7 +59,7 @@ describe("buildStackAppSpec", () => {
       container_port: 8080,
       env: { DATABASE_URL: { from: "environment.DATABASE_URL" } },
       environment: "production",
-      replicas: 3,
+      placement: { "server-2": 1, "sight-capacity-1": 1 },
       public: false,
       memory_mb: 1024,
       cpu_limit: 1.5,
@@ -83,19 +71,9 @@ describe("buildStackAppSpec", () => {
       compress: true,
       public_port: null,
       public_protocol: "tcp",
-      durability_class: "high",
-      placement_pool: "production",
-      scale_to_zero_after: 0,
-      autoscale_enabled: true,
-      min_replicas: 2,
-      max_replicas: 6,
-      autoscale_cpu_threshold: 75,
-      autoscale_mem_threshold: 80,
-      autoscale_req_threshold: 120,
-      autoscale_cooldown: 180,
       volume_id: "",
-      volume_size: 20,
-      volume_path: "/var/lib/app",
+      volume_size: 0,
+      volume_path: "/data",
       extra_volumes: [{ host_path: "/srv/shared", container_path: "/shared" }],
     });
   });
@@ -110,19 +88,30 @@ describe("buildStackAppSpec", () => {
         volume: null,
         domain: "web.example.com",
         env: {},
-        durability_class: "standard",
+        placement: { "server-2": 1 },
       },
       "https://github.com/acme/web",
       "",
     );
     expect(spec.domain).toBe("web.example.com");
     expect(spec.env).toEqual({});
-    expect(spec.durability_class).toBe("standard");
+    expect(spec.placement).toEqual({ "server-2": 1 });
+  });
+
+  test("a stack entry placement replaces the child manifest placement", () => {
+    const spec = buildStackAppSpec(
+      "web",
+      { manifest: ".ocd-deploy.json", placement: { "sight-capacity-1": 2 } },
+      { name: "Web", image: "nginx", volume: null, placement: { "server-2": 1 } },
+      "",
+      "",
+    );
+    expect(spec.placement).toEqual({ "sight-capacity-1": 2 });
   });
 
   test("infers dependencies from explicit output references", () => {
     const spec = buildStackAppSpec("web", { manifest: "web.json", needs: ["cache"] }, {
-      name: "web", image: "nginx", volume: null,
+      name: "web", image: "nginx", volume: null, placement: { "server-2": 1 },
       env: { URL: { from: "apps.database.outputs.URL" }, MODE: "production" },
     }, "", "");
     expect(spec.needs).toEqual(["cache", "database"]);
@@ -132,7 +121,7 @@ describe("buildStackAppSpec", () => {
 
 describe("stack reference validation", () => {
   const app = (key: string, env = {}, outputs = {}) => buildStackAppSpec(key, { manifest: `${key}.json` }, {
-    name: key, image: "nginx", volume: null, env, outputs,
+    name: key, image: "nginx", volume: null, placement: { "server-2": 1 }, env, outputs,
   }, "", "");
   test("checks output existence", () => {
     const web = app("web", { URL: { from: "apps.database.outputs.URL" } });

@@ -13,6 +13,21 @@ import {
 import { serializeEnvVars } from "./env-crypto.ts";
 
 const IMAGE_REF = `ghcr.io/acme/app@sha256:${"a".repeat(64)}`;
+// The preload wipes every table before each test, so servers are seeded per test.
+let SERVER: db.ServerRow;
+let SECOND_SERVER: db.ServerRow;
+function seedServers() {
+  SERVER = db.insertServer({
+    name: `placed-${randomSuffix()}`, provider_id: "", ipv4: "198.51.100.5", ipv6: "",
+    type: "cx23", location: "nbg1", status: "ready",
+  });
+  SECOND_SERVER = db.insertServer({
+    name: `placed-b-${randomSuffix()}`, provider_id: "", ipv4: "198.51.100.6", ipv6: "",
+    type: "cx23", location: "nbg1", status: "ready",
+  });
+}
+/** Every request places the app on SERVER by name; storage resolves it to the id. */
+const placement = () => ({ [SERVER.name]: 1 });
 
 test("manifest reconciliation retains or explicitly selects the storage driver", () => {
   const app = { name: "storage-app", container_port: 5432, desired_volume_driver: "hetzner-block" } as db.AppRow;
@@ -43,6 +58,7 @@ describe("classifyAppConfigChanges", () => {
 });
 
 function seedApp() {
+  seedServers();
   const suffix = randomSuffix();
   const env = db.insertEnvironment(`env-${suffix}`, serializeEnvVars([]));
   const app = db.insertApp({
@@ -52,6 +68,7 @@ function seedApp() {
     container_port: 3000,
     env_vars: "{}",
     environment_id: env.id,
+    placement: { [String(SERVER.id)]: 1 },
   });
   return { app, env };
 }
@@ -71,20 +88,10 @@ describe("desired app configuration", () => {
       cpu_limit: 1.5,
       health_check: false,
       internal_protocol: "tcp" as const,
-      replicas: 2,
-      durability_class: "standard" as const,
-      placement_pool: "workers",
-      scale_to_zero_after: 300,
+      placement: { [SERVER.name]: 1, [String(SECOND_SERVER.id)]: 2 },
       manifest_path: ".ocd-deploy.json",
       manifest_hash: "abc123",
       apply_mode: "manifest" as const,
-      autoscale_enabled: true,
-      min_replicas: 2,
-      max_replicas: 5,
-      autoscale_cpu_threshold: 70,
-      autoscale_mem_threshold: 75,
-      autoscale_req_threshold: 100,
-      autoscale_cooldown: 180,
       command: ["postgres"],
       cap_add: ["CHOWN", "SETUID"],
       post_start_command: "pg_isready",
@@ -100,16 +107,7 @@ describe("desired app configuration", () => {
     expect(updated.memory_mb).toBe(1024);
     expect(updated.cpu_limit).toBe(1.5);
     expect(updated.internal_protocol).toBe("tcp");
-    expect(updated.desired_replicas).toBe(2);
-    expect(updated.durability_class).toBe("standard");
-    expect(updated.placement_pool).toBe("workers");
-    expect(updated.autoscale_enabled).toBe(1);
-    expect(updated.min_replicas).toBe(2);
-    expect(updated.max_replicas).toBe(5);
-    expect(updated.autoscale_cpu_threshold).toBe(70);
-    expect(updated.autoscale_mem_threshold).toBe(75);
-    expect(updated.autoscale_req_threshold).toBe(100);
-    expect(updated.autoscale_cooldown).toBe(180);
+    expect(JSON.parse(updated.placement!)).toEqual({ [String(SERVER.id)]: 1, [String(SECOND_SERVER.id)]: 2 });
     expect(db.parseAppCommand(updated)).toEqual(["postgres"]);
     expect(db.parseAppCapabilities(updated)).toEqual(["CHOWN", "SETUID"]);
     expect(updated.post_start_command).toBe("pg_isready");
@@ -122,7 +120,7 @@ describe("desired app configuration", () => {
 
   test("an explicit identical candidate rollout commits the revision used by its replicas", async () => {
     const { app } = seedApp();
-    const request = { app_name: app.name, image_ref: app.image_ref, container_port: 3000, env: {} };
+    const request = { app_name: app.name, placement: placement(), image_ref: app.image_ref, container_port: 3000, env: {} };
     await applyAppConfig(app.id, request);
     const before = db.getApp(app.id)!;
     expect(diffAppConfig(before, request)).toEqual([]);
@@ -134,7 +132,7 @@ describe("desired app configuration", () => {
 
   test("runtime config remains app-local and literal values are redacted from diffs", async () => {
     const {app,env} = seedApp();
-    const request = {app_name:app.name,image_ref:app.image_ref,container_port:3000,environment_id:env.id,env:{TOKEN:"private-literal"}};
+    const request = {app_name:app.name, placement: placement(),image_ref:app.image_ref,container_port:3000,environment_id:env.id,env:{TOKEN:"private-literal"}};
     const beforeEnvironment = db.getEnvironment(env.id)!.env_vars;
     const beforeRevision = app.config_revision;
     const changes = await applyAppConfig(app.id, request);
@@ -146,7 +144,7 @@ describe("desired app configuration", () => {
 
   test("reordering runtime map keys neither changes configuration nor requests a rollout", async () => {
     const { app } = seedApp();
-    const request = { app_name: app.name, image_ref: app.image_ref, container_port: 3000,
+    const request = { app_name: app.name, placement: placement(), image_ref: app.image_ref, container_port: 3000,
       env: { B: "two", A: "one" }, outputs: { URL: { template: "http://{app.host}" }, PORT: { template: "{app.port}" } } };
     await applyAppConfig(app.id, request);
     const before = db.getApp(app.id)!;
@@ -159,7 +157,7 @@ describe("desired app configuration", () => {
   test("missing runtime references fail before desired config or environment linkage changes", async () => {
     const {app,env} = seedApp();
     const before = db.getApp(app.id)!;
-    await expect(applyAppConfig(app.id, {app_name:app.name,image_ref:app.image_ref,container_port:4000,env:{TOKEN:{from:"environment.MISSING"}}})).rejects.toThrow("none is selected");
+    await expect(applyAppConfig(app.id, {app_name:app.name, placement: placement(),image_ref:app.image_ref,container_port:4000,env:{TOKEN:{from:"environment.MISSING"}}})).rejects.toThrow("none is selected");
     expect(db.getApp(app.id)).toEqual(before);
     expect(db.getEnvironment(env.id)).not.toBeNull();
   });
@@ -167,7 +165,7 @@ describe("desired app configuration", () => {
   test("omitting environment_id detaches without deleting the environment", async () => {
     const { app, env } = seedApp();
     await applyAppConfig(app.id, {
-      app_name: app.name,
+      app_name: app.name, placement: placement(),
       image_ref: app.image_ref,
       container_port: 3000,
     });
@@ -177,17 +175,11 @@ describe("desired app configuration", () => {
 
   test("manifest mode resets omitted fields and supports explicit detach", async () => {
     const { app } = seedApp();
-    db.updateAppScaling(app.id, {
-      desired_replicas: 3,
-      min_replicas: 2,
-      max_replicas: 8,
-      autoscale_enabled: true,
-      autoscale_cpu_threshold: 60,
-    });
+    db.updateAppPlacement(app.id, { [String(SECOND_SERVER.id)]: 3 });
     db.updateAppExtraVolumes(app.id, ["/srv/data:/data"]);
     await applyAppConfig(app.id, {
       apply_mode: "manifest",
-      app_name: app.name,
+      app_name: app.name, placement: placement(),
       image_ref: app.image_ref,
       container_port: 3000,
       environment_id: null,
@@ -197,14 +189,7 @@ describe("desired app configuration", () => {
     expect(updated.environment_id).toBeNull();
     expect(updated.health_check).toBe(0);
     expect(updated.health_check_mode).toBe("container");
-    expect(updated.desired_replicas).toBe(1);
-    expect(updated.min_replicas).toBe(1);
-    expect(updated.max_replicas).toBe(1);
-    expect(updated.autoscale_enabled).toBe(0);
-    expect(updated.autoscale_cpu_threshold).toBe(80);
-    expect(updated.autoscale_mem_threshold).toBe(85);
-    expect(updated.autoscale_req_threshold).toBe(0);
-    expect(updated.autoscale_cooldown).toBe(300);
+    expect(JSON.parse(updated.placement!)).toEqual({ [String(SERVER.id)]: 1 });
     expect(db.parseExtraVolumes(updated.extra_volumes)).toEqual([]);
   });
 
@@ -215,7 +200,7 @@ describe("desired app configuration", () => {
 
     const req = {
       apply_mode: "manifest" as const,
-      app_name: app.name,
+      app_name: app.name, placement: placement(),
       image_ref: app.image_ref,
       container_port: 3000,
       volume_id: "vol-new",
@@ -243,7 +228,7 @@ describe("desired app configuration", () => {
       mountPath: "/data",
     });
     const req = {
-      app_name: app.name,
+      app_name: app.name, placement: placement(),
       image_ref: `ghcr.io/acme/app@sha256:${"c".repeat(64)}`,
       container_port: 3000,
       volume_id: "legacy-volume-42",
@@ -277,5 +262,52 @@ describe("desired app configuration", () => {
     );
 
     expect(db.getApp(app.id)!.config_revision).toBe(before + 1);
+  });
+});
+
+describe("placement changes", () => {
+  const volumeRequest = (app: db.AppRow, target: string) => ({
+    apply_mode: "manifest" as const,
+    app_name: app.name,
+    image_ref: app.image_ref,
+    container_port: 3000,
+    volume_size: 10,
+    volume_path: "/data",
+    placement: { [target]: 1 },
+  });
+
+  test("a volume app cannot change servers through a deploy", async () => {
+    const { app } = seedApp();
+    db.updateAppVolume(app.id, "vol-1", "/mnt/vol-1:/data", true);
+    db.updateAppDesiredVolume(app.id, { volumeId: "", sizeGb: 10, mountPath: "/data" });
+    const current = db.getApp(app.id)!;
+    expect(() => diffAppConfig(current, volumeRequest(current, SERVER.name))).not.toThrow();
+    expect(() => diffAppConfig(current, volumeRequest(current, SECOND_SERVER.name)))
+      .toThrow(`ocd move ${app.name} --to ${SECOND_SERVER.name}`);
+    await expect(applyAppConfig(app.id, volumeRequest(current, SECOND_SERVER.name))).rejects.toThrow("ocd move");
+    expect(JSON.parse(db.getApp(app.id)!.placement!)).toEqual({ [String(SERVER.id)]: 1 });
+  });
+
+  test("a stateless app may change placement to any ready app server", async () => {
+    const { app } = seedApp();
+    await applyAppConfig(app.id, {
+      app_name: app.name, image_ref: app.image_ref, container_port: 3000,
+      placement: { [SERVER.name]: 1, [SECOND_SERVER.name]: 2 },
+    });
+    expect(JSON.parse(db.getApp(app.id)!.placement!)).toEqual({ [String(SERVER.id)]: 1, [String(SECOND_SERVER.id)]: 2 });
+  });
+
+  test("a new placement server must be ready and not a build worker", async () => {
+    const { app } = seedApp();
+    const request = (target: string) => ({
+      app_name: app.name, image_ref: app.image_ref, container_port: 3000, placement: { [target]: 1 },
+    });
+    db.updateServerStatus(SECOND_SERVER.id, "provisioning");
+    await expect(applyAppConfig(app.id, request(SECOND_SERVER.name))).rejects.toThrow("not ready");
+    db.updateServerStatus(SECOND_SERVER.id, "ready");
+    db.insertBuildWorker({ serverId: SECOND_SERVER.id, name: `builder-${randomSuffix()}` });
+    await expect(applyAppConfig(app.id, request(SECOND_SERVER.name))).rejects.toThrow("build worker");
+    await expect(applyAppConfig(app.id, request("missing-server"))).rejects.toThrow("does not exist");
+    expect(JSON.parse(db.getApp(app.id)!.placement!)).toEqual({ [String(SERVER.id)]: 1 });
   });
 });

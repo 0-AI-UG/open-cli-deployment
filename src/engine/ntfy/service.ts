@@ -1,3 +1,4 @@
+import { parsePlacement, placementTotal } from "../../shared/placement.ts";
 import * as db from "../../shared/db.ts";
 import { processIncomingEnvVars, resolveEnvVarsForDeploy, parseEnvVars } from "../../shared/env-crypto.ts";
 import { parseRuntimeConfig } from "../../shared/runtime-env.ts";
@@ -41,7 +42,7 @@ export function validateNtfyApp(app: NonNullable<ReturnType<typeof db.getApp>>):
   if (!app.domain) throw new Error("The ntfy app needs an HTTPS domain");
   if (!app.environment_id || !db.getEnvironment(app.environment_id)) throw new Error("The ntfy app needs its own environment");
   if (db.getApps().some(a => a.id !== app.id && a.environment_id === app.environment_id)) throw new Error("Use a dedicated environment for the ntfy app's credentials");
-  if (app.desired_replicas !== 1 || !app.volume_mount.endsWith(":/var/lib/ntfy")) throw new Error("ntfy needs one replica and persistent storage at /var/lib/ntfy");
+  if (placementTotal(parsePlacement(app.placement)) !== 1 || !app.volume_mount.endsWith(":/var/lib/ntfy")) throw new Error("ntfy needs one replica and persistent storage at /var/lib/ntfy");
   const env = parseRuntimeConfig(app.env_vars).env;
   if (env.NTFY_AUTH_DEFAULT_ACCESS !== "deny-all" || env.NTFY_ENABLE_SIGNUP !== "false") throw new Error("The ntfy app must deny anonymous access and disable signup; use services/ntfy/.ocd-deploy.json");
 }
@@ -100,9 +101,9 @@ async function synchronizeApp(appId: number, settings: NtfySettings, ctx?: OpCon
   }
   const updated = db.getApp(app.id)!;
   const replicas = db.getReplicas(app.id).filter(r => r.status === "running");
-  if (replicas.length === updated.desired_replicas && replicas.every(r => r.attested_at && r.config_revision === updated.config_revision)) return null;
+  if (replicas.length === placementTotal(parsePlacement(updated.placement)) && replicas.every(r => r.attested_at && r.config_revision === updated.config_revision)) return null;
   // Respect ordinary lifecycle intent: integration must never restart a paused,
-  // sleeping, deleting, or currently deploying app behind the operator's back.
+  // deleting, or currently deploying app behind the operator's back.
   if (!["running", "unhealthy"].includes(updated.status)) return null;
   const active = findActiveOperationByResourceKey("reload_app", `app:${app.id}`);
   if (active) return active.id;

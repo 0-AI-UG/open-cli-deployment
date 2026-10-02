@@ -1,7 +1,6 @@
-// Tests for reconciler-adjacent logic: metrics DB operations, autoscale
-// thresholds, unhealthy ticks. The reconciler itself uses SSH; we test the
-// DB primitives and the evaluateAutoScale function (which reads DB state)
-// directly.
+// Tests for reconciler-adjacent logic: metrics DB operations, health checks,
+// unhealthy ticks. The reconciler itself uses SSH; we test the DB primitives
+// and health logic (which reads DB state) directly.
 //
 // Single-tenant: this branch has no orgs, so all rows are inserted without
 // org_id and apps/servers use simpler DB schemas than saas.
@@ -49,12 +48,6 @@ mock.module("./scale/network-reconciler.ts", () => ({
   reconcileNetwork: mock(async () => {}),
 }));
 
-// Stub enqueue so autoscale doesn't need the IPC server.
-const enqueueMock = mock((_args: unknown) => ({ opId: 999 }));
-mock.module("../server/ipc/enqueue.ts", () => ({
-  enqueue: enqueueMock,
-}));
-
 import * as db from "../shared/db.ts";
 import {
   insertMetricSample,
@@ -69,7 +62,6 @@ import {
 } from "../shared/db/replicas.ts";
 import { insertApp } from "../shared/db/apps.ts";
 import { insertServer } from "../shared/db/servers.ts";
-import { evaluateAutoScale } from "./scale/index.ts";
 import { checkReplicaHealth } from "./health.ts";
 import { parseDockerStats, parseContainerLimits, parseDockerSizeToMb } from "./metrics-parse.ts";
 
@@ -291,157 +283,6 @@ describe("reconciler: health checks respect paused state", () => {
     await checkReplicaHealth(replica, app, server);
 
     expect(restartContainerMock).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ---- autoscale thresholds ----------------------------------------------------
-
-describe("reconciler: autoscale thresholds (evaluateAutoScale)", () => {
-  async function setupAutoscaleApp(cpuPercent: number, memPercent: number, opts: {
-    min_replicas?: number;
-    max_replicas?: number;
-    autoscale_cpu_threshold?: number;
-    autoscale_mem_threshold?: number;
-    autoscale_cooldown?: number;
-  } = {}) {
-    enqueueMock.mockClear();
-
-    const server = makeServer();
-    const { default: conn } = require("../shared/db/connection.ts");
-    const app = makeApp();
-
-    // Enable autoscale via direct SQL since insertApp doesn't expose those fields.
-    conn.run(
-      `UPDATE apps SET autoscale_enabled = 1,
-        autoscale_cpu_threshold = ?,
-        autoscale_mem_threshold = ?,
-        min_replicas = ?,
-        max_replicas = ?,
-        autoscale_cooldown = ?,
-        status = 'running'
-       WHERE id = ?`,
-      [
-        opts.autoscale_cpu_threshold ?? 70,
-        opts.autoscale_mem_threshold ?? 80,
-        opts.min_replicas ?? 1,
-        opts.max_replicas ?? 4,
-        opts.autoscale_cooldown ?? 0,
-        app.id,
-      ],
-    );
-
-    const replica = insertReplica({
-      app_id: app.id,
-      server_id: server.id,
-      host_port: 4000 + Math.floor(Math.random() * 1000),
-      container_name: `c-as-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-      status: "running",
-    });
-    updateReplicaMetrics(replica.id, cpuPercent, memPercent);
-
-    return app;
-  }
-
-  test("CPU above threshold raises desired_replicas", async () => {
-    const app = await setupAutoscaleApp(90, 30);
-
-    await evaluateAutoScale(app.id);
-
-    // ratio = 90/70 ≈ 1.29 → desired 1 → 2.
-    expect(db.getApp(app.id)!.desired_replicas).toBe(2);
-  });
-
-  test("mem above threshold raises desired_replicas", async () => {
-    const app = await setupAutoscaleApp(20, 95);
-
-    await evaluateAutoScale(app.id);
-
-    // ratio = 95/80 ≈ 1.19 → desired 1 → 2.
-    expect(db.getApp(app.id)!.desired_replicas).toBe(2);
-  });
-
-  test("below threshold with multiple replicas lowers desired_replicas", async () => {
-    const server = makeServer();
-    const { default: conn } = require("../shared/db/connection.ts");
-    const app = makeApp();
-    conn.run(
-      `UPDATE apps SET autoscale_enabled = 1,
-        autoscale_cpu_threshold = 70, autoscale_mem_threshold = 80,
-        min_replicas = 1, max_replicas = 4, autoscale_cooldown = 0, status = 'running',
-        desired_replicas = 2
-       WHERE id = ?`,
-      [app.id],
-    );
-    for (let i = 0; i < 2; i++) {
-      const r = insertReplica({
-        app_id: app.id,
-        server_id: server.id,
-        host_port: 5000 + i + Math.floor(Math.random() * 1000),
-        container_name: `c-down-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 5)}`,
-        status: "running",
-      });
-      updateReplicaMetrics(r.id, 5, 5);
-    }
-
-    await evaluateAutoScale(app.id);
-
-    // Idle at 2 replicas, floor is min_replicas=1 → desired 2 → 1.
-    expect(db.getApp(app.id)!.desired_replicas).toBe(1);
-  });
-
-  test("autoscale cooldown prevents scaling when recently scaled", async () => {
-    const app = await setupAutoscaleApp(90, 30, { autoscale_cooldown: 3600 });
-    const { default: conn } = require("../shared/db/connection.ts");
-    conn.run("UPDATE apps SET last_scale_at = datetime('now') WHERE id = ?", [app.id]);
-
-    await evaluateAutoScale(app.id);
-
-    expect(db.getApp(app.id)!.desired_replicas).toBe(1);
-  });
-
-  test("no autoscale action when app.autoscale_enabled is false", async () => {
-    enqueueMock.mockClear();
-    const server = makeServer();
-    const app = makeApp();
-    const replica = insertReplica({
-      app_id: app.id,
-      server_id: server.id,
-      host_port: 6001 + Math.floor(Math.random() * 1000),
-      container_name: `c-noautoscale-${Date.now()}`,
-      status: "running",
-    });
-    updateReplicaMetrics(replica.id, 99, 99);
-
-    await evaluateAutoScale(app.id);
-
-    expect(enqueueMock).not.toHaveBeenCalled();
-  });
-
-  test("volume-capped app does not scale up beyond 1 replica", async () => {
-    enqueueMock.mockClear();
-    const server = makeServer();
-    const { default: conn } = require("../shared/db/connection.ts");
-    const app = makeApp();
-    conn.run(
-      `UPDATE apps SET autoscale_enabled = 1,
-        autoscale_cpu_threshold = 70, autoscale_mem_threshold = 80,
-        min_replicas = 1, max_replicas = 4, autoscale_cooldown = 0,
-        volume_id = 'v-someVolume', status = 'running'
-       WHERE id = ?`,
-      [app.id],
-    );
-    const replica = insertReplica({
-      app_id: app.id,
-      server_id: server.id,
-      host_port: 6002 + Math.floor(Math.random() * 1000),
-      container_name: `c-volcap-${Date.now()}`,
-      status: "running",
-    });
-    updateReplicaMetrics(replica.id, 99, 99);
-
-    await evaluateAutoScale(app.id);
-
-    expect(enqueueMock).not.toHaveBeenCalled();
   });
 });
 

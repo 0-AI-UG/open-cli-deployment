@@ -54,7 +54,7 @@ function fmtMem(mb: number): string {
 }
 
 // Statuses in which a container is actually running and reporting live docker
-// stats. Anything else (stopped/sleeping, paused, deploying) has no live usage
+// stats. Anything else (stopped, paused, deploying) has no live usage
 // — its stored numbers are stale, so we show nothing rather than mislead.
 const LIVE_STATUSES = new Set(["running", "unhealthy"]);
 const isLive = (status?: string) => status == null || LIVE_STATUSES.has(status);

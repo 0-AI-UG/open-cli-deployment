@@ -51,13 +51,13 @@ async function recreateReplica(
 
 /**
  * Statuses that mean a container is intentionally not serving traffic. A
- * pause/stop/sleep op can land while a health check is already in flight
+ * pause/stop op can land while a health check is already in flight
  * (ticks snapshot replicas before ops mutate them), so check results must be
  * re-validated against the live row before any status write or restart —
  * otherwise the reconciler clobbers the paused status and auto-restarts a
  * deliberately paused container.
  */
-export const HEALTH_EXEMPT_STATUSES = new Set(["paused", "stopped", "sleeping", "waking"]);
+export const HEALTH_EXEMPT_STATUSES = new Set(["paused", "stopped"]);
 
 export async function checkReplicaHealth(
   replica: ReplicaRow,
@@ -90,7 +90,7 @@ export async function checkReplicaHealth(
 
     if (check.healthy) {
       // Revision attestation is a deployment transaction gate: deploy,
-      // redeploy, scale, migrate, wake, and reload verify before routing or
+      // redeploy, scale, migrate, and reload verify before routing or
       // success. This periodic loop owns liveness only and must not reinterpret
       // unrelated healthy containers outside an operation.
       // In particular, a healthy process may still be serving the wrong image

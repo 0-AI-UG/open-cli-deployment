@@ -4,53 +4,43 @@ import {
   sshExec, pullImmutableImage,
   probeAppHealth, startAppReplica,
 } from "../../shared/remote/index.ts";
-import { type ProgressFn, log, type App, type Replica, replicaBindHost, appReplicaRunOpts } from "./types.ts";
-import { pickTargetServer } from "./server-picker.ts";
+import { type ProgressFn, log, type App, type Replica, type Server, replicaBindHost, appReplicaRunOpts } from "./types.ts";
 import { syncAppIngress } from "./traefik-manager.ts";
 import { attestReplica, hashEnvironment, latestDesiredImage } from "../revision.ts";
 
-export async function scaleUp(
+/**
+ * Start `count` new replicas of an app on one explicitly placed server. The
+ * caller decides the server from the app's declared placement; this never
+ * chooses a server or provisions capacity.
+ */
+export async function addReplicas(
   app: App,
-  currentReplicas: Replica[],
-  currentCount: number,
-  targetCount: number,
+  targetServer: Server,
+  count: number,
   emit: ProgressFn,
-  targetServerId?: number,
   preReservedPort?: { id: number; server_id: number; bind_address: string; host_port: number },
-  allowServerProvisioning = false,
-  provisioningKey?: string,
 ) {
-  const settings = db.getSettings();
-  const firstReplica = currentReplicas[0];
-  const primaryHostPort = firstReplica?.host_port;
-
-  for (let i = currentCount; i < targetCount; i++) {
-    let replicaNum = i + 1;
-    const existingNames = new Set(db.getReplicas(app.id).map((replica) => replica.container_name));
+  if (targetServer.status !== "ready") {
+    throw new Error(`Server ${targetServer.name} is not ready (status: ${targetServer.status})`);
+  }
+  for (let i = 0; i < count; i++) {
+    const existing = db.getReplicas(app.id);
+    let replicaNum = existing.length + 1;
+    const existingNames = new Set(existing.map((replica) => replica.container_name));
     while (existingNames.has(`${app.name}-r${replicaNum}`)) replicaNum++;
-    emit("scale", `Provisioning replica ${replicaNum}/${targetCount}...`);
+    emit("scale", `Starting replica ${replicaNum} on ${targetServer.name} (${i + 1}/${count})...`);
 
-    // Pick target server: user-specified, least-loaded existing, or newly
-    // provisioned. No in-pass placement map is threaded here: each replica is
-    // persisted via insertReplica (below) before the next iteration's pick, so
-    // the picker's DB read already reflects prior placements decided this pass
-    // (anti-affinity / min_locations spread stay correct without double-counting).
-    let targetServer = await pickTargetServer(
-      app,
-      settings,
-      emit,
-      targetServerId,
-      undefined,
-      allowServerProvisioning,
-      provisioningKey ? `${provisioningKey}-r${replicaNum}` : undefined,
-    );
     const targetHostKey = targetServer.ssh_host_key || undefined;
 
-    // Every replica listens on the same host port — the ingress upstream
-    // list derives upstream ports from the replica row, and using a
-    // stable hostPort keeps the cross-server container layout easy to
-    // reason about.
-    const hostPort = primaryHostPort ?? db.nextReplicaHostPort(targetServer.id);
+    // Prefer the app's existing host port so the cross-server layout stays
+    // easy to reason about; a second replica on the same server (or a port
+    // already held there) gets the server's next free port. The ingress
+    // upstream list reads each replica row's own port.
+    const primaryHostPort = preReservedPort?.host_port ?? existing[0]?.host_port;
+    const portTaken = (port: number) => db.getReplicasByServer(targetServer.id).some((replica) => replica.host_port === port);
+    const hostPort = primaryHostPort !== undefined && !portTaken(primaryHostPort)
+      ? primaryHostPort
+      : db.nextReplicaHostPort(targetServer.id);
 
     // Bind the replica on the target server's private IPv4. Traffic from
     // the ingress layer uses the private network, so the public NIC is
@@ -62,8 +52,9 @@ export async function scaleUp(
     // Claim and verify the complete bind tuple before pulling the image. The DB
     // reservation serializes OCD operations; the Docker probe catches an
     // orphan or out-of-band workload unknown to the DB.
-    const ownsReservation = !preReservedPort;
-    const reservation = preReservedPort ?? db.reserveHostPort({
+    const usePreReserved = !!preReservedPort && i === 0 && preReservedPort.host_port === hostPort;
+    const ownsReservation = !usePreReserved;
+    const reservation = usePreReserved ? preReservedPort! : db.reserveHostPort({
         serverId: targetServer.id,
         bindAddress: replicaBindAddr,
         hostPort,

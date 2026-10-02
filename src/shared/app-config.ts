@@ -4,7 +4,7 @@ import * as db from "./db.ts";
 import type { AppRow } from "./db/apps.ts";
 import type { DeployRequest } from "./rpc.ts";
 import { parseRuntimeConfig, serializeRuntimeConfig, preflightRuntimeEnv, runtimeAppFromRequest } from "./runtime-env.ts";
-import { resolveDurability } from "./durability.ts";
+import { describePlacement, parsePlacement, resolvePlacement, type Placement } from "./placement.ts";
 import { validateDeployRequest } from "./validate.ts";
 
 export type AppConfigChange = {
@@ -27,7 +27,7 @@ const RUNTIME_CONFIG_FIELDS = new Set([
 
 /** Classify the least disruptive convergence action for a desired-config diff.
  * Artifact identity and runtime execution settings require container
- * recreation; placement and autoscaling policy are control-plane only. */
+ * recreation; placement and replica count are control-plane only. */
 export function classifyAppConfigChanges(changes: AppConfigChange[]): AppReconcileMode {
   if (changes.some((change) => ARTIFACT_CONFIG_FIELDS.has(change.field))) return "artifact";
   if (changes.some((change) => RUNTIME_CONFIG_FIELDS.has(change.field))) return "runtime";
@@ -45,31 +45,6 @@ export function classifyConfigOnlyChanges(
     changes.some((change) => RUNTIME_CONFIG_FIELDS.has(change.field));
   return { rollout: runtime ? "runtime" : "control", pendingRollout };
 }
-
-export const AUTOSCALE_DEFAULTS = {
-  enabled: false,
-  minReplicas: 1,
-  maxReplicas: 1,
-  cpuThreshold: 80,
-  memoryThreshold: 85,
-  requestsPerMinute: 0,
-  cooldownSeconds: 300,
-} as const;
-
-export type AppScalingSpec = {
-  desired_replicas: number;
-  min_replicas: number;
-  max_replicas: number;
-  autoscale_enabled: boolean;
-  autoscale_cpu_threshold: number;
-  autoscale_mem_threshold: number;
-  autoscale_req_threshold: number;
-  autoscale_cooldown: number;
-  scale_to_zero_after: number;
-  durability_class: "none" | "standard" | "high";
-  max_per_host: number;
-  min_locations: number;
-};
 
 function environmentIdByName(name: string): number {
   const normalized = name.trim().toLowerCase();
@@ -91,44 +66,51 @@ export function resolveDeployRequestEnvironmentIds(req: DeployRequest): DeployRe
   return resolved;
 }
 
-/** Resolve durability floors and autoscaling into the concrete stored policy. */
-export function normalizeAppScaling(req: DeployRequest): AppScalingSpec {
-  const durability = resolveDurability(req.durability_class, req.replicas);
-  const durabilityFloor = durability.durabilityClass === "none"
-    ? 0
-    : durability.minReplicas;
-  const minReplicas = Math.max(
-    req.min_replicas ?? AUTOSCALE_DEFAULTS.minReplicas,
-    durabilityFloor,
+/** Resolve a request's placement (server names or ids) to stored server ids.
+ * Unknown or ambiguous servers fail; OCD never substitutes another server. */
+export function resolveRequestPlacement(req: Pick<DeployRequest, "placement">): Placement {
+  return resolvePlacement(req.placement, db.getServers());
+}
+
+/** Every server an app is placed on must exist, be ready, and not be a
+ * dedicated build worker. Placing on the panel server is allowed. */
+export function assertPlacementUsable(placement: Placement): void {
+  for (const id of Object.keys(placement).map(Number)) {
+    const server = db.getServer(id);
+    if (!server) throw new Error(`Placement server #${id} does not exist`);
+    if (db.getBuildWorkerByServerId(id)) {
+      throw new Error(`Placement server ${server.name} is a dedicated build worker and cannot run apps`);
+    }
+    if (server.status !== "ready") {
+      throw new Error(`Placement server ${server.name} is not ready (status: ${server.status})`);
+    }
+  }
+}
+
+/** Gate a placement change for an existing app: a volume app may not change
+ * servers (that is `ocd move`), and every newly declared server must be usable.
+ * An unchanged placement is always accepted. */
+export function assertPlacementChangeAllowed(app: AppRow, volumeSize: number, next: Placement): void {
+  if (sameValue(parsePlacement(app.placement), next)) return;
+  assertVolumePlacementUnchanged(app, volumeSize, next);
+  assertPlacementUsable(next);
+}
+
+/** A volume app's data lives on its one placed server; changing that server is
+ * a data move, which only `ocd move` performs. */
+function assertVolumePlacementUnchanged(app: AppRow, volumeSize: number, next: Placement): void {
+  if (!volumeSize && !app.volume_id) return;
+  const current = parsePlacement(app.placement);
+  const currentIds = Object.keys(current);
+  if (currentIds.length === 0) return;
+  const nextIds = Object.keys(next);
+  if (currentIds.length === nextIds.length && currentIds.every((id) => nextIds.includes(id))) return;
+  const servers = db.getServers();
+  const target = servers.find((server) => String(server.id) === nextIds[0])?.name ?? nextIds[0];
+  throw new Error(
+    `App ${app.name} has a volume on ${describePlacement(current, servers)}; changing its placement moves its data. ` +
+    `Run \`ocd move ${app.name} --to ${target}\` instead.`,
   );
-  const desiredReplicas = Math.max(
-    req.replicas ?? 1,
-    durabilityFloor,
-    minReplicas,
-  );
-  const maxReplicas = Math.max(
-    req.max_replicas ?? Math.max(AUTOSCALE_DEFAULTS.maxReplicas, desiredReplicas),
-    minReplicas,
-    desiredReplicas,
-  );
-  return {
-    desired_replicas: desiredReplicas,
-    min_replicas: minReplicas,
-    max_replicas: maxReplicas,
-    autoscale_enabled: req.autoscale_enabled ?? AUTOSCALE_DEFAULTS.enabled,
-    autoscale_cpu_threshold:
-      req.autoscale_cpu_threshold ?? AUTOSCALE_DEFAULTS.cpuThreshold,
-    autoscale_mem_threshold:
-      req.autoscale_mem_threshold ?? AUTOSCALE_DEFAULTS.memoryThreshold,
-    autoscale_req_threshold:
-      req.autoscale_req_threshold ?? AUTOSCALE_DEFAULTS.requestsPerMinute,
-    autoscale_cooldown:
-      req.autoscale_cooldown ?? AUTOSCALE_DEFAULTS.cooldownSeconds,
-    scale_to_zero_after: req.scale_to_zero_after ?? 0,
-    durability_class: durability.durabilityClass,
-    max_per_host: durability.maxPerHost,
-    min_locations: durability.minLocations,
-  };
 }
 
 /** Normalize a complete manifest application for an existing app.
@@ -144,6 +126,7 @@ export function mergeDeployRequestWithExistingApp(
     ...manifest,
     app_name: manifest.app_name ?? app.name,
     container_port: manifest.container_port ?? app.container_port,
+    placement: manifest.placement ?? parsePlacement(app.placement),
   });
   const publicApp = supplied.public !== undefined
     ? supplied.public
@@ -183,17 +166,7 @@ export function mergeDeployRequestWithExistingApp(
       ? supplied.public_port
       : null,
     public_protocol: supplied.public_protocol ?? "tcp",
-    placement_pool: supplied.placement_pool ?? "general",
-    durability_class: supplied.durability_class ?? "none",
-    replicas: supplied.replicas ?? 1,
-    min_replicas: supplied.min_replicas ?? 1,
-    max_replicas: supplied.max_replicas ?? 1,
-    autoscale_enabled: supplied.autoscale_enabled ?? AUTOSCALE_DEFAULTS.enabled,
-    autoscale_cpu_threshold: supplied.autoscale_cpu_threshold ?? AUTOSCALE_DEFAULTS.cpuThreshold,
-    autoscale_mem_threshold: supplied.autoscale_mem_threshold ?? AUTOSCALE_DEFAULTS.memoryThreshold,
-    autoscale_req_threshold: supplied.autoscale_req_threshold ?? AUTOSCALE_DEFAULTS.requestsPerMinute,
-    autoscale_cooldown: supplied.autoscale_cooldown ?? AUTOSCALE_DEFAULTS.cooldownSeconds,
-    scale_to_zero_after: supplied.scale_to_zero_after ?? 0,
+    placement: supplied.placement,
     extra_volumes: supplied.extra_volumes ?? [],
     target: supplied.target ?? app.target,
     target_of: supplied.target_of ?? app.target_of ?? undefined,
@@ -211,7 +184,6 @@ export function mergeDeployRequestWithExistingApp(
 }
 
 function normalizedSpec(req: DeployRequest) {
-  const scaling = normalizeAppScaling(req);
   return {
     domain: req.domain ?? "",
     image_ref: req.image_ref ?? "",
@@ -238,19 +210,7 @@ function normalizedSpec(req: DeployRequest) {
     compress: req.compress ?? false,
     public_port: req.public_port ?? null,
     public_protocol: req.public_protocol ?? "tcp",
-    desired_replicas: scaling.desired_replicas,
-    min_replicas: scaling.min_replicas,
-    max_replicas: scaling.max_replicas,
-    autoscale_enabled: scaling.autoscale_enabled,
-    autoscale_cpu_threshold: scaling.autoscale_cpu_threshold,
-    autoscale_mem_threshold: scaling.autoscale_mem_threshold,
-    autoscale_req_threshold: scaling.autoscale_req_threshold,
-    autoscale_cooldown: scaling.autoscale_cooldown,
-    durability_class: scaling.durability_class,
-    max_per_host: scaling.max_per_host,
-    min_locations: scaling.min_locations,
-    placement_pool: req.placement_pool ?? "general",
-    scale_to_zero_after: scaling.scale_to_zero_after,
+    placement: resolveRequestPlacement(req),
     extra_volumes: (req.extra_volumes ?? []).map((v) => `${v.host_path}:${v.container_path}`),
     desired_volume_id: req.volume_id ?? "",
     desired_volume_size: req.volume_size ?? 0,
@@ -293,19 +253,7 @@ function comparableApp(app: AppRow) {
     compress: !!app.compress,
     public_port: app.public_port,
     public_protocol: app.public_protocol || "tcp",
-    desired_replicas: app.desired_replicas,
-    min_replicas: app.min_replicas,
-    max_replicas: app.max_replicas,
-    autoscale_enabled: !!app.autoscale_enabled,
-    autoscale_cpu_threshold: app.autoscale_cpu_threshold,
-    autoscale_mem_threshold: app.autoscale_mem_threshold,
-    autoscale_req_threshold: app.autoscale_req_threshold,
-    autoscale_cooldown: app.autoscale_cooldown,
-    durability_class: app.durability_class || "none",
-    max_per_host: app.max_per_host,
-    min_locations: app.min_locations,
-    placement_pool: app.placement_pool || "general",
-    scale_to_zero_after: app.scale_to_zero_after ?? 0,
+    placement: parsePlacement(app.placement),
     extra_volumes: db.parseExtraVolumes(app.extra_volumes),
     desired_volume_id: app.desired_volume_id || "",
     desired_volume_size: app.desired_volume_size ?? 0,
@@ -349,17 +297,7 @@ export function deployRequestFromApp(app: AppRow): DeployRequest {
     compress: current.compress,
     public_port: current.public_port,
     public_protocol: current.public_protocol as DeployRequest["public_protocol"],
-    replicas: app.desired_replicas,
-    min_replicas: app.min_replicas,
-    max_replicas: app.max_replicas,
-    autoscale_enabled: !!app.autoscale_enabled,
-    autoscale_cpu_threshold: app.autoscale_cpu_threshold,
-    autoscale_mem_threshold: app.autoscale_mem_threshold,
-    autoscale_req_threshold: app.autoscale_req_threshold,
-    autoscale_cooldown: app.autoscale_cooldown,
-    durability_class: app.durability_class as DeployRequest["durability_class"],
-    placement_pool: app.placement_pool,
-    scale_to_zero_after: app.scale_to_zero_after,
+    placement: current.placement,
     extra_volumes: db.parseExtraVolumes(app.extra_volumes).map((entry) => {
       const separator = entry.indexOf(":");
       return { host_path: entry.slice(0, separator), container_path: entry.slice(separator + 1) };
@@ -390,7 +328,9 @@ function sameValue(a: unknown, b: unknown): boolean {
 export function diffAppConfig(app: AppRow, req: DeployRequest): AppConfigChange[] {
   const effective = mergeDeployRequestWithExistingApp(app, req);
   const before = comparableApp(app) as Record<string, unknown>;
-  const after = normalizedSpec(effective) as Record<string, unknown>;
+  const spec = normalizedSpec(effective);
+  assertPlacementChangeAllowed(app, effective.volume_size ?? 0, spec.placement);
+  const after = spec as Record<string, unknown>;
   const changes: AppConfigChange[] = [];
   for (const [field, value] of Object.entries(after)) {
     if (!sameValue(before[field], value)) {
@@ -514,31 +454,7 @@ export async function applyAppConfig(
       driverId: desired.desired_volume_driver,
     });
   }
-  if (["durability_class", "max_per_host", "min_locations"].some((f) => changed.has(f))) {
-    db.updateAppDurability(app.id, {
-      durability_class: desired.durability_class,
-      max_per_host: desired.max_per_host,
-      min_locations: desired.min_locations,
-    });
-  }
-  if (changed.has("placement_pool")) db.updateAppPlacementPool(app.id, desired.placement_pool);
-  if ([
-    "desired_replicas", "min_replicas", "max_replicas",
-    "autoscale_enabled", "autoscale_cpu_threshold", "autoscale_mem_threshold",
-    "autoscale_req_threshold", "autoscale_cooldown", "scale_to_zero_after",
-  ].some((f) => changed.has(f))) {
-    db.updateAppScaling(app.id, {
-      desired_replicas: desired.desired_replicas,
-      min_replicas: desired.min_replicas,
-      max_replicas: desired.max_replicas,
-      autoscale_enabled: desired.autoscale_enabled,
-      autoscale_cpu_threshold: desired.autoscale_cpu_threshold,
-      autoscale_mem_threshold: desired.autoscale_mem_threshold,
-      autoscale_req_threshold: desired.autoscale_req_threshold,
-      autoscale_cooldown: desired.autoscale_cooldown,
-      scale_to_zero_after: desired.scale_to_zero_after,
-    });
-  }
+  if (changed.has("placement")) db.updateAppPlacement(app.id, desired.placement);
   if (opts.userId) db.updateAppDeployedBy(app.id, opts.userId);
   db.normalizeAppConfigRevision(app.id, app.config_revision, opts.forceRevision);
   if (effective.manifest_path && effective.manifest_hash) {

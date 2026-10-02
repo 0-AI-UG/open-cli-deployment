@@ -1,50 +1,53 @@
 # Scaling, Storage, and Placement
 
-## Desired scaling
+## Placement
 
-Declare replicas and autoscaling in `.ocd-deploy.json`:
+Every manifest declares `placement`: which servers run the app and how many
+replicas each server runs. Keys are server names as shown by `ocd servers`
+(a numeric server ID also works); values are replica counts of at least 1.
 
 ```json
 {
-  "replicas": 2,
-  "autoscaling": {
-    "enabled": true,
-    "min_replicas": 1,
-    "max_replicas": 6,
-    "cpu_threshold": 70,
-    "memory_threshold": 80,
-    "requests_per_minute": 0,
-    "cooldown_seconds": 300
-  },
-  "scale_to_zero_after": 900
+  "placement": { "server-2": 1 }
 }
 ```
 
-Apply with `ocd deploy`. Inspect the stored policy with:
+Run two replicas on two servers:
 
-```bash
-ocd scale policy show my-app
+```json
+{
+  "placement": { "server-2": 1, "sight-capacity-1": 1 }
+}
 ```
 
-## Wake
+Apply with `ocd deploy`. OCD never chooses servers or replica counts on its
+own and never creates servers: it runs exactly the declared replicas on exactly
+the declared servers. Every named server must exist, be `ready`, and not be a
+dedicated build worker, otherwise the deploy fails. The panel server is a
+valid placement. Create capacity explicitly with `ocd servers create`.
 
-Waking is an operational action:
+Convergence is per server. Missing replicas start on their declared server and
+surplus ones are removed. When a placement drops a server, its replicas are
+removed only after the replicas on the declared servers are healthy. If a
+declared server becomes unavailable, OCD does not reschedule its replicas
+anywhere else: the app reports unhealthy until the server returns or you change
+the placement. Use `ocd pause` / `ocd unpause` to stop and start an app
+manually.
+
+## Moving an app
+
+Move every replica an app runs on one server to another server:
 
 ```bash
-ocd scale wake my-app
+ocd move my-app --to sight-capacity-1
+ocd move my-app --from server-2 --to sight-capacity-1   # app placed on several servers
 ```
 
-It starts a sleeping app without replacing the desired scaling policy.
-
-## Placement
-
-Persistent scheduling intent belongs in `placement_pool` and
-`durability_class`. `ocd deploy --server=ID` is a one-deploy operational
-override. Move an existing replica explicitly with:
-
-```bash
-ocd scale migrate my-app 42 --to=7
-```
+Stateless apps start their replicas on the target before the source replicas
+are removed. Apps with a primary volume stop, move their portable volume to the
+target, and restart there. `ocd move` records the new placement; update
+`placement` in the manifest to match so the next deploy keeps it. Deploying a
+volume app with a different placement server fails and asks for `ocd move`.
 
 ## Storage
 
@@ -65,8 +68,8 @@ instead of inferring it from the server's location or a manifest size.
 Server-local directories live under `/var/lib/ocd/volumes`; they survive
 container replacement but share the host disk, have no separate storage charge,
 and have no reserved capacity or enforced quota. Changing their configured size
-does not allocate disk. They and explicit host mounts cannot be migrated to
-another server through replica migration.
+does not allocate disk. They and explicit host mounts cannot be moved to another
+server with `ocd move`.
 
 ### Inventory and disk usage
 
@@ -91,7 +94,7 @@ an independently detachable Hetzner volume. Preserve the requested storage type
 when migrating; choosing a separate Hetzner volume requires the `hetzner-block`
 driver and confirmation of the actual volume attachment.
 
-OCD caps apps with a primary volume at one replica. Raising `replicas` does not
-configure PostgreSQL replication. Database replication needs separate data
+An app with a primary volume must be placed on exactly one server with one
+replica. Placement does not configure PostgreSQL replication. Database replication needs separate data
 stores and database-aware orchestration; introduce it when availability or read
 load requirements justify the additional operations.

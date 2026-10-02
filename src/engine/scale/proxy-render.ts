@@ -1,16 +1,14 @@
 // ocd-proxy config render — the desired-state half of the VIP ingress stack.
 // Consumes the same DB snapshot as the Traefik renderer (collectDesiredState)
-// and renders every server's /etc/ocd-proxy/config.json from it. Pure apart
-// from the persisted wake secret; proxy-provision.ts owns the unit/install
-// script and proxy-manager.ts owns delivery.
+// and renders every server's /etc/ocd-proxy/config.json from it. Pure;
+// proxy-provision.ts owns the unit/install script and proxy-manager.ts owns
+// delivery.
 //
 // Types come from src/proxy/config.ts (type-only import — the compiled proxy
 // binary never links against engine code).
 
-import * as db from "../../shared/db.ts";
 import type { ProxyApp, ProxyConfig } from "../../proxy/config.ts";
 import type { DesiredState } from "./traefik-render.ts";
-import { WAKER_HTTP_PORT } from "./traefik-constants.ts";
 
 /**
  * VIP front-port policy (the user-visible ports the proxy DNATs to its single
@@ -55,7 +53,6 @@ export function renderProxyConfig(state: DesiredState): ProxyConfig {
       vip: app.virtualIp,
       frontPorts: frontPorts(app),
       backends: app.upstreams,
-      sleeping: app.asleep,
       // Password-protected apps: an L4 proxy cannot check HTTP basic-auth
       // credentials, so the proxy fail-closes these connections (destroys
       // them on accept) — otherwise the VIP would be an unauthenticated
@@ -72,15 +69,6 @@ export function renderProxyConfig(state: DesiredState): ProxyConfig {
 
   return {
     version: 1,
-    // Wake calls go to the waker's :8896 listener — the only panel port
-    // published on the private IP (the API port binds 127.0.0.1 only), and
-    // the same port every server's Traefik already dials for sleeping apps.
-    // Until the panel is on the private network there is nowhere to wake from
-    // — the proxy then fails wake attempts loudly instead of hanging.
-    wakeUrl: state.panelPrivateIpv4
-      ? `http://${state.panelPrivateIpv4}:${WAKER_HTTP_PORT}/api/internal/wake`
-      : null,
-    wakeSecret: db.ensureProxyWakeSecret(),
     // The panel's public IPv4: DNAT `daddr` for the public raw path. The proxy
     // config is byte-identical fleet-wide, so keying the public rules on this
     // single value makes them fire only on the panel — preserving today's

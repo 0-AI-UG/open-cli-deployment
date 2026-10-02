@@ -35,8 +35,8 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
   const internalUrl = app.internal_protocol === "tcp"
     ? `tcp://${app.name}.ocd.internal:${app.container_port}`
     : `http://${app.name}.ocd.internal`;
-  const [migratingId, setMigratingId] = useState<number | null>(null);
-  const [availability, setAvailability] = useState<{ uptimePct: number | null; mttrSeconds: number | null; sampleCount: number; current: { running: number; desired: number; distinctHosts: number; distinctLocations: number; meetsTarget: boolean } } | null>(null);
+  const [movingFrom, setMovingFrom] = useState<number | null>(null);
+  const [availability, setAvailability] = useState<{ uptimePct: number | null; mttrSeconds: number | null; sampleCount: number; current: { running: number; desired: number; meetsTarget: boolean } } | null>(null);
   useEffect(() => {
     get(`/api/apps/${appId}/availability?window=86400`)
       .then(setAvailability)
@@ -47,20 +47,20 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
     ? `${(value / 1024 / 1024).toFixed(1)} MiB`
     : "—";
 
-  const handleMigrate = async (replicaId: number, targetId: string) => {
+  const handleMove = async (sourceId: number, targetId: string) => {
     if (!targetId) { showToast("Select a target server", "error"); return; }
-    setMigratingId(replicaId);
+    setMovingFrom(sourceId);
     try {
-      await runCliAction("scale.migrate", {
+      await runCliAction("app.move", {
         app: String(appId),
-        replica: String(replicaId),
+        source: String(sourceId),
         target: targetId,
       });
       setReplicas(await get(`/api/apps/${appId}/metrics`));
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
-      setMigratingId(null);
+      setMovingFrom(null);
     }
   };
 
@@ -86,9 +86,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
           label="Placement now"
           value={availability ? `${availability.current.running}/${availability.current.desired}` : "—"}
           tone={availability && !meetsTarget ? "danger" : undefined}
-          hint={availability
-            ? `replicas · ${availability.current.distinctHosts} hosts · ${availability.current.distinctLocations} locations`
-            : undefined}
+          hint={availability ? "running / declared replicas" : undefined}
         />
         <Stat
           className="bg-surface px-4 py-3.5"
@@ -114,6 +112,11 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
               </DataRow>
             )}
             <DataRow label="Container port" mono>{app.container_port}</DataRow>
+            <DataRow label="Placement">
+              {(app.placement ?? []).length > 0
+                ? <span className="flex flex-wrap justify-end gap-1">{app.placement!.map((entry) => <Badge key={entry.server_id}>{entry.server_name} × {entry.replicas}</Badge>)}</span>
+                : <span className="text-muted">not declared</span>}
+            </DataRow>
             <DataRow label="Readiness">
               <span className="truncate" title={app.health_check_command || app.health_check_file}>
                 {app.health_check_mode || (app.health_check ? "http" : "container")}
@@ -216,13 +219,13 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
                           <MoveMenu
                             targets={allServers.filter((s) => s.id !== r.server_id)}
                             loading={
-                              migratingId === r.id ||
+                              movingFrom === r.server_id ||
                               ops.active.some(
-                                (o) => o.kind === "migrate" && (o.input as { replicaId?: number })?.replicaId === r.id,
+                                (o) => o.kind === "move" && (o.input as { fromServerId?: number })?.fromServerId === r.server_id,
                               )
                             }
                             disabled={ops.isBusy}
-                            onPick={(targetId) => handleMigrate(r.id, targetId)}
+                            onPick={(targetId) => handleMove(r.server_id, targetId)}
                           />
                         </PermissionGate>
                       )}
@@ -345,7 +348,7 @@ function MoveMenu({ targets, loading, disabled, onPick }: {
         variant="ghost"
         loading={loading}
         disabled={disabled}
-        title="Migrate replica to another server"
+        title="Move every replica on this server to another server and update the placement"
         onClick={() => setOpen((o) => !o)}
       >
         <ArrowRightLeft size={12} /> Move

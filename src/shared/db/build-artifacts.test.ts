@@ -33,7 +33,6 @@ function worker(name: string) {
   return db.insertBuildWorker({
     serverId: server.id,
     name: `${name}-${suffix}`,
-    previousPool: "general",
   });
 }
 

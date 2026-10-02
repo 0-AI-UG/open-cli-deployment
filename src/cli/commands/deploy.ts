@@ -9,7 +9,7 @@ import {
   localGitCommit,
 } from "../manifest.ts";
 import { withWebConfirmation } from "../confirm.ts";
-import { parseCliArgs, positiveIntegerFlag } from "../args.ts";
+import { parseCliArgs } from "../args.ts";
 import { ensureBuildReadiness } from "../deploy-readiness.ts";
 
 interface Environment {
@@ -32,7 +32,6 @@ async function resolveEnvironment(name: string): Promise<Environment> {
 async function parseFlags(args: string[]): Promise<{
   manifestPath: string;
   authPasswordEnv?: string;
-  serverId?: number;
   appName?: string;
   help: boolean;
   dryRun: boolean;
@@ -42,7 +41,6 @@ async function parseFlags(args: string[]): Promise<{
 }> {
   const parsed = parseCliArgs(args, {
     "auth-password-env": { type: "string" },
-    server: { type: "string" },
     app: { type: "string" },
     help: { type: "boolean", aliases: ["h"] },
     "dry-run": { type: "boolean" },
@@ -52,14 +50,13 @@ async function parseFlags(args: string[]): Promise<{
   }, { maxPositionals: 1 });
   const manifestPath = parsed.positionals[0] || ".ocd-deploy.json";
   const authPasswordEnv = parsed.flags["auth-password-env"] as string | undefined;
-  const serverId = positiveIntegerFlag(parsed.flags.server, "server");
   const appName = parsed.flags.app as string | undefined;
   const commit = parsed.flags.commit as string | undefined;
   if (commit !== undefined && !/^[a-f0-9]{7,64}$/i.test(commit)) {
     throw new Error("--commit must contain 7-64 hexadecimal characters");
   }
   return {
-    manifestPath, authPasswordEnv, serverId, appName, commit,
+    manifestPath, authPasswordEnv, appName, commit,
     help: parsed.flags.help === true,
     dryRun: parsed.flags["dry-run"] === true,
     configOnly: parsed.flags["config-only"] === true,
@@ -74,7 +71,7 @@ export async function deploy(args: string[]): Promise<void> {
     return;
   }
 
-  const { manifestPath, authPasswordEnv, serverId, appName, help, dryRun, configOnly, allowUnknown, commit } = await parseFlags(args);
+  const { manifestPath, authPasswordEnv, appName, help, dryRun, configOnly, allowUnknown, commit } = await parseFlags(args);
 
   if (help) {
     console.error(`${BOLD}Usage:${RESET} ocd deploy [manifest] [options]
@@ -87,6 +84,10 @@ The manifest env map defines exactly which runtime variables are injected.
 References read existing values; manage those separately with ocd envs set.
 Omitting environment detaches the app's environment.
 
+The manifest's placement declares exactly which servers run the app and how
+many replicas each runs; OCD never picks servers. Move an existing app with
+ocd move <app> --to <server>.
+
 ${BOLD}Arguments:${RESET}
   [manifest]                 Path to manifest (default: .ocd-deploy.json)
 
@@ -97,9 +98,6 @@ ${BOLD}Subcommands:${RESET}
 ${BOLD}Options:${RESET}
   --auth-password-env=<key>  Read the basic-auth password from a local
                              environment variable (never stored in the manifest)
-  --server=<id>              Pin this one deploy to a server ID. This is an
-                             operational override; use placement_pool in a
-                             committed manifest for portable scheduling intent.
   --app=<name>               Apply to an explicit existing app.
   --commit=<sha>             Record the source revision as deployment provenance
   --dry-run                  Show the desired-configuration diff without applying or deploying
@@ -126,10 +124,6 @@ ${BOLD}Options:${RESET}
     : null;
   if (environment) console.log(`${DIM}Env:${RESET}      ${environment.name}`);
 
-  const desiredReplicas = manifest.replicas ?? 1;
-  const autoscaling = manifest.autoscaling;
-  const minReplicas = autoscaling?.min_replicas ?? 1;
-  const maxReplicas = autoscaling?.max_replicas ?? Math.max(desiredReplicas, minReplicas);
   const healthMode = manifest.health_check?.mode ??
     (manifest.health_check?.enabled === false ? "container" : "http");
 
@@ -168,25 +162,14 @@ ${BOLD}Options:${RESET}
     compress: manifest.compress ?? false,
     public_port: manifest.public_port ?? null,
     public_protocol: manifest.public_protocol ?? "tcp",
-    replicas: desiredReplicas,
-    durability_class: manifest.durability_class ?? "none",
-    placement_pool: manifest.placement_pool ?? "general",
-    scale_to_zero_after: manifest.scale_to_zero_after ?? 0,
+    placement: manifest.placement,
     volume_id: manifest.volume?.id ?? "",
     volume_driver: manifest.volume?.driver,
     volume_size: manifest.volume?.size ?? 0,
     volume_path: manifest.volume?.path ?? "/data",
     extra_volumes: manifest.extra_volumes ?? [],
-    autoscale_enabled: autoscaling?.enabled ?? false,
-    min_replicas: minReplicas,
-    max_replicas: maxReplicas,
-    autoscale_cpu_threshold: autoscaling?.cpu_threshold ?? 80,
-    autoscale_mem_threshold: autoscaling?.memory_threshold ?? 85,
-    autoscale_req_threshold: autoscaling?.requests_per_minute ?? 0,
-    autoscale_cooldown: autoscaling?.cooldown_seconds ?? 300,
     manifest_path: location.path,
     manifest_hash: manifestHash(location.fullPath),
-    ...(serverId !== undefined ? { server_id: serverId } : {}),
   };
 
   const existingApps = await get<Array<{ id: number; name: string; environment_id?: number | null; config_revision?: number }>>("/api/apps");

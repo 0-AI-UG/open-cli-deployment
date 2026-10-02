@@ -15,7 +15,6 @@ function publicWorker(worker: db.BuildWorkerRow) {
       name: server.name,
       ipv4: server.ipv4,
       status: server.status,
-      pool: server.pool,
     } : null,
   };
 }
@@ -80,11 +79,9 @@ export async function handleInstallBuildWorker(request: Request): Promise<Respon
       if (db.getBuildWorkers().some((candidate) => candidate.name === name)) {
         return Response.json({ error: `Build worker name ${name} is already in use` }, { status: 409, headers: corsHeaders });
       }
-      const previousPool = server.pool || "general";
-      worker = db.insertBuildWorker({ serverId: server.id, name, previousPool });
+      worker = db.insertBuildWorker({ serverId: server.id, name });
       insertedId = worker.id;
     }
-    db.updateServerPool(server.id, "build-workers");
     const { opId } = enqueue({
       kind: "install_build_worker",
       resourceKeys: [`builder:${worker.id}`, `server:${server.id}`],

@@ -10,14 +10,6 @@ type AppDetail = App & {
   memory_mb?: number;
   cpu_limit?: number;
   internal_protocol?: string;
-  autoscale_enabled?: boolean | number;
-  min_replicas?: number;
-  max_replicas?: number;
-  autoscale_cpu_threshold?: number;
-  autoscale_mem_threshold?: number;
-  autoscale_cooldown?: number;
-  autoscale_req_threshold?: number;
-  scale_to_zero_after?: number;
   config_revision?: number;
   image_ref?: string;
   health_check_mode?: string;
@@ -107,7 +99,7 @@ async function showApp(args: string[]): Promise<void> {
     ["Container port", String(app.container_port ?? "-")],
     ["Internal protocol", app.internal_protocol || "http"],
     ["Environment", app.environment_name || (app.environment_id ? `#${app.environment_id}` : "-")],
-    ["Desired replicas", String(app.desired_replicas ?? "-")],
+    ["Placement", app.placement?.length ? app.placement.map((entry) => `${entry.server_name}×${entry.replicas}`).join(", ") : "-"],
     ["Memory MB", String(app.memory_mb ?? "-")],
     ["CPU cores", String(app.cpu_limit ?? "-")],
     ["Config revision", String(app.config_revision ?? "-")],
@@ -343,7 +335,7 @@ function usage(): void {
   replicas <app>               List replicas and current resource use
   metrics <app> [--since=SEC]   Current metrics or sampled history
   availability <app>           Show trailing availability and placement
-  scaling-events <app>         List recent manual/autoscale events
+  scaling-events <app>         List recent scaling events
   staging <app>                Inspect the staging sibling
   reload-env <app> --force     Recreate only this app from its immutable image
   redeploy <app>               Recreate using the stored immutable image and configuration${RESET}`);

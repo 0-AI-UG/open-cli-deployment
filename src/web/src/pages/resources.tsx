@@ -84,7 +84,6 @@ export function ResourcesPage() {
       const planId = serverProvisioningResourceId({
         serverType: createType,
         location: createLocation,
-        pools: ["general"],
         reason: createName ? `server ${createName}` : "an explicitly requested server",
       });
       await runConfirmedCliAction(

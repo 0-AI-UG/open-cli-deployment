@@ -118,23 +118,6 @@ export function clearReplicaAttestation(id: number): void {
   ).run(id);
 }
 
-export function markReplicaStopped(id: number): void {
-  // Zero the metrics: a stopped container reports no docker stats, so the
-  // reconciler would otherwise leave the last-seen values frozen and stale.
-  db.query(
-    `UPDATE replicas SET status = 'stopped', stopped_at = datetime('now'),
-       cpu_percent = 0, memory_percent = 0,
-       cpu_limit_cores = 0, memory_used_mb = 0, memory_limit_mb = 0
-     WHERE id = ?`
-  ).run(id);
-}
-
-export function markReplicaRunning(id: number): void {
-  db.query(
-    "UPDATE replicas SET status = 'running', stopped_at = NULL WHERE id = ?"
-  ).run(id);
-}
-
 /** Absolute resource figures collected alongside the percentages. Optional so
  *  older callers/tests that only care about the percentages stay valid. */
 export type ResourceUsage = {

@@ -1,26 +1,9 @@
-// Local status endpoint + per-app last-activity tracking. The panel's
-// reconciler scrapes GET /status over the host to gate readiness (nat applied,
-// all listeners bound) and to feed scale-to-zero idle detection (lastActivity).
+// Local status endpoint. The panel's reconciler scrapes GET /status over the
+// host to gate readiness (nat applied, all listeners bound).
 // Loopback only — nothing here is reachable off-host.
 
 /** Default bind port for the status server (PROXY_LISTEN_PORT + 1). */
 export const STATUS_PORT = 18791;
-
-// appId → epoch ms of the most recently accepted front connection. Module-level
-// so the hot path in tcp.ts is a single Map.set — no allocation, no I/O.
-const lastActivity = new Map<number, number>();
-
-/** Record an accepted front connection for `appId`. O(1) — called on the hot path. */
-export function recordActivity(appId: number): void {
-  lastActivity.set(appId, Date.now());
-}
-
-/** Snapshot of last-activity timestamps, keyed by appId as a string (JSON-shaped). */
-export function getLastActivity(): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [appId, ts] of lastActivity) out[String(appId)] = ts;
-  return out;
-}
 
 export type StatusInputs = {
   natApplied(): boolean;
@@ -48,7 +31,6 @@ export function startStatusServer(inputs: StatusInputs, port: number = STATUS_PO
         natApplied,
         listenersBound,
         listenersTotal,
-        lastActivity: getLastActivity(),
       });
     },
   });

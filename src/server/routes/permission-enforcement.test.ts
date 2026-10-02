@@ -137,11 +137,10 @@ import {
   handleGetEnvironmentApps,
 } from "./environments.ts";
 import {
-  handleWakeApp,
-  handleMigrateReplica,
+  handleMoveApp,
   handleGetReplicas,
 } from "./scaling.ts";
-import { handleDeleteServer, handleSetServerPool, handleGetServers } from "./servers.ts";
+import { handleDeleteServer, handleGetServers } from "./servers.ts";
 import {
   handleDeployBuildSource,
   handleGetBuildWorkers,
@@ -601,22 +600,12 @@ const CASES: Case[] = [
   },
   // --- scaling --------------------------------------------------------------
   {
-    name: "scaling: handleWakeApp",
-    permission: "apps.restart",
-    call: (c) =>
-      handleWakeApp(
-        req(`/api/apps/${appA}/wake`, { body: {}, token: c.token }),
-        appA,
-      ),
-  },
-  {
-    name: "scaling: handleMigrateReplica",
+    name: "scaling: handleMoveApp",
     permission: "scaling.migrate",
     call: (c) =>
-      handleMigrateReplica(
-        req(`/api/apps/${appA}/replicas/${replicaR}/migrate`, { body: {}, token: c.token }),
+      handleMoveApp(
+        req(`/api/apps/${appA}/move`, { body: {}, token: c.token }),
         appA,
-        replicaR,
       ),
   },
   {
@@ -661,19 +650,6 @@ const CASES: Case[] = [
         srv,
       );
     },
-  },
-  {
-    name: "servers: handleSetServerPool",
-    permission: "servers.manage",
-    call: (c) =>
-      handleSetServerPool(
-        req(`/api/servers/${serverS}/pool`, {
-          method: "PATCH",
-          body: { pool: "general" },
-          token: c.token,
-        }),
-        serverS,
-      ),
   },
   {
     name: "runners: handleGetBuildWorkers",
@@ -722,7 +698,6 @@ const CASES: Case[] = [
       const planId = serverProvisioningResourceId({
         serverType: "cx22",
         location: "fsn1",
-        pools: ["general"],
         reason: "an explicitly requested server",
       });
       return handleCreateServer(
@@ -1115,19 +1090,6 @@ describe("permission splits are enforced (the old coarse grant is not enough)", 
       appA,
     );
     expect(deployLog.status).toBe(403);
-  });
-
-  test("servers.delete does NOT allow pool assignment (needs servers.manage)", async () => {
-    const ctx = await userWith(["servers.delete"]);
-    const res = await handleSetServerPool(
-      req(`/api/servers/${serverS}/pool`, {
-        method: "PATCH",
-        body: { pool: "general" },
-        token: ctx.token,
-      }),
-      serverS,
-    );
-    expect(res.status).toBe(403);
   });
 
   test("apps.redeploy does NOT allow redeploying the control plane (admin only)", async () => {

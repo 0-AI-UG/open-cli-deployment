@@ -5,7 +5,6 @@ export type BuildWorkerRow = {
   server_id: number;
   name: string;
   architecture: string;
-  previous_pool: string;
   status: string;
   last_error: string;
   last_checked_at: string | null;
@@ -42,11 +41,11 @@ export function getBuildWorkerByServerId(serverId: number): BuildWorkerRow | nul
   return db.query("SELECT * FROM build_workers WHERE server_id = ?").get(serverId) as BuildWorkerRow | null;
 }
 
-export function insertBuildWorker(input: { serverId: number; name: string; previousPool: string }): BuildWorkerRow {
+export function insertBuildWorker(input: { serverId: number; name: string }): BuildWorkerRow {
   return db.query(
-    `INSERT INTO build_workers (server_id, name, previous_pool, status)
-     VALUES (?, ?, ?, 'installing') RETURNING *`,
-  ).get(input.serverId, input.name, input.previousPool) as BuildWorkerRow;
+    `INSERT INTO build_workers (server_id, name, status)
+     VALUES (?, ?, 'installing') RETURNING *`,
+  ).get(input.serverId, input.name) as BuildWorkerRow;
 }
 
 export function updateBuildWorker(

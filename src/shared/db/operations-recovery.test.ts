@@ -66,7 +66,7 @@ describe("operation recovery persistence", () => {
       location: "nbg1",
       status: "ready",
     });
-    const worker = db.insertBuildWorker({ serverId: server.id, name: `worker-${suffix}`, previousPool: "general" });
+    const worker = db.insertBuildWorker({ serverId: server.id, name: `worker-${suffix}` });
     const source = db.upsertBuildSource({
       repository: `https://example.com/${suffix}.git`,
       branch: "main",

@@ -78,49 +78,6 @@ export async function unpauseContainer(
   }
 }
 
-/**
- * `docker stop <name>` — stops the container but preserves its filesystem,
- * volume mounts, and config. Used for scale-to-zero so that a subsequent
- * `docker start` can bring it back up in ~1s without re-running `docker run`.
- * Returns true if the container was stopped (or already stopped), false if it
- * didn't exist.
- */
-export async function stopContainer(
-  ip: string,
-  containerName: string,
-  hostKey?: string
-): Promise<boolean> {
-  const result = await sshExec(
-    ip,
-    asUser(`docker stop ${containerName} 2>&1`),
-    hostKey
-  );
-  if (result.exitCode === 0) return true;
-  // `docker stop` on a nonexistent container prints "No such container"
-  if (/No such container/i.test(result.stdout + result.stderr)) return false;
-  throw new Error(`Failed to stop container ${containerName}: ${result.stderr || result.stdout}`);
-}
-
-/**
- * `docker start <name>` — starts a previously stopped container. Returns true
- * if started, false if the container doesn't exist (caller should fall back
- * to the full `docker run` path).
- */
-export async function startContainer(
-  ip: string,
-  containerName: string,
-  hostKey?: string
-): Promise<boolean> {
-  const result = await sshExec(
-    ip,
-    asUser(`docker start ${containerName} 2>&1`),
-    hostKey
-  );
-  if (result.exitCode === 0) return true;
-  if (/No such container/i.test(result.stdout + result.stderr)) return false;
-  throw new Error(`Failed to start container ${containerName}: ${result.stderr || result.stdout}`);
-}
-
 /** Returns true iff a container with this name exists on the host (running or stopped). */
 export async function containerExists(
   ip: string,

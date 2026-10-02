@@ -75,7 +75,7 @@ function renderIssue(issue: Issue, root: unknown): string {
   } else if (path.length === 0) {
     // The whole manifest was the wrong type (not an object).
     return `expected a JSON object, got ${got(value)}`;
-  } else if (path.length === 1 && path[0] === "name" && value === undefined) {
+  } else if (path.length === 1 && (path[0] === "name" || path[0] === "placement") && value === undefined) {
     msg = `${issue.message} (required)`;
   } else {
     msg = `${issue.message}, got ${got(value)}`;

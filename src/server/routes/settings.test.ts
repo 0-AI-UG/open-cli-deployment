@@ -116,19 +116,15 @@ describe("handleSaveSettings: plain db settings", () => {
     expect(r.status).toBe(400);
   });
 
-  test("saves the default domain suffix and server defaults", async () => {
-    const r = await handleSaveSettings(
-      req({
-        default_domain_suffix: "apps.example.org",
-        default_server_type: "cx22",
-        default_location: "fsn1",
-      }),
-    );
+  test("saves the default domain suffix", async () => {
+    const r = await handleSaveSettings(req({ default_domain_suffix: "apps.example.org" }));
     expect(r.status).toBe(200);
-    const s = db.getSettings();
-    expect(s.default_domain_suffix).toBe("apps.example.org");
-    expect(s.default_server_type).toBe("cx22");
-    expect(s.default_location).toBe("fsn1");
+    expect(db.getSettings().default_domain_suffix).toBe("apps.example.org");
+  });
+
+  test("rejects the removed automatic-provisioning server defaults", async () => {
+    const r = await handleSaveSettings(req({ default_server_type: "cx22" }));
+    expect(r.status).toBe(400);
   });
 
   test("rejects invalid default domain suffixes", async () => {

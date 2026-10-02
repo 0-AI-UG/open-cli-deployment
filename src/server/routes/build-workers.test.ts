@@ -15,11 +15,10 @@ function request(body: unknown): Request {
 describe("OCD build worker route", () => {
   test("isolates an empty server without GitHub credentials", async () => {
     const suffix = randomSuffix();
-    const server = db.insertServer({ name: `worker-${suffix}`, provider_id: `provider-${suffix}`, ipv4: "203.0.113.20", ipv6: "", type: "cx23", location: "nbg1", status: "ready", pool: "general" });
+    const server = db.insertServer({ name: `worker-${suffix}`, provider_id: `provider-${suffix}`, ipv4: "203.0.113.20", ipv6: "", type: "cx23", location: "nbg1", status: "ready" });
     const response = await handleInstallBuildWorker(request({ server_id: server.id, name: `ocd-${suffix}` }));
     expect(response.status).toBe(202);
     const body = await response.json() as any;
-    expect(db.getServer(server.id)?.pool).toBe("build-workers");
     const worker = db.getBuildWorkerByServerId(server.id)!;
     expect(worker.status).toBe("installing");
     expect(getOperation(body.op_id)?.input_json).not.toContain("token");
@@ -36,8 +35,8 @@ describe("OCD build worker route", () => {
 
   test("queues removal while retaining the server", async () => {
     const suffix = randomSuffix();
-    const server = db.insertServer({ name: `remove-${suffix}`, provider_id: `remove-provider-${suffix}`, ipv4: "203.0.113.22", ipv6: "", type: "cx23", location: "nbg1", status: "ready", pool: "build-workers" });
-    const worker = db.insertBuildWorker({ serverId: server.id, name: `ocd-remove-${suffix}`, previousPool: "general" });
+    const server = db.insertServer({ name: `remove-${suffix}`, provider_id: `remove-provider-${suffix}`, ipv4: "203.0.113.22", ipv6: "", type: "cx23", location: "nbg1", status: "ready" });
+    const worker = db.insertBuildWorker({ serverId: server.id, name: `ocd-remove-${suffix}` });
     const response = await handleRemoveBuildWorker(new Request(`http://localhost/api/runners/${worker.id}`, { method: "DELETE" }), worker.id);
     expect(response.status).toBe(202);
     expect(getOperation((await response.json() as any).op_id)?.kind).toBe("remove_build_worker");
@@ -48,7 +47,7 @@ describe("OCD build worker route", () => {
 test("repository release validates commits, joins the same delivery, and rejects overlaps", async () => {
   const suffix = randomSuffix();
   const server = db.insertServer({ name: `release-${suffix}`, provider_id: `release-${suffix}`, ipv4: "203.0.113.23", ipv6: "", type: "cx23", location: "nbg1", status: "ready" });
-  const worker = db.insertBuildWorker({ serverId: server.id, name: `release-${suffix}`, previousPool: "general" });
+  const worker = db.insertBuildWorker({ serverId: server.id, name: `release-${suffix}` });
   const source = db.upsertBuildSource({ repository: `https://github.com/test/${suffix}.git`, branch: "main", workerId: worker.id });
   expect((await handleDeployBuildSource(request({ commit: "main" }), source.id)).status).toBe(400);
   expect((await handleDeployBuildSource(request({ commit: "0".repeat(40) }), source.id)).status).toBe(400);

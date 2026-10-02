@@ -341,7 +341,7 @@ export interface App {
   status: string;
   domain: string;
   image_ref?: string;
-  desired_replicas: number;
+  placement?: Array<{ server_id: number; server_name: string; replicas: number }>;
   servers: number[];
   created_at: string;
   public?: boolean | number;

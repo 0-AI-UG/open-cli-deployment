@@ -20,7 +20,6 @@ function source() {
   const worker = db.insertBuildWorker({
     serverId: server.id,
     name: `delivery-${suffix}`,
-    previousPool: "general",
   });
   return db.upsertBuildSource({
     repository: `https://example.com/${suffix}.git`,

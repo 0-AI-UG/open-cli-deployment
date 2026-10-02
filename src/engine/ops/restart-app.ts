@@ -5,11 +5,10 @@ const restartAppOp = makeAppLifecycleOp({
   label: "Restart app",
   actionName: "restart_replicas",
   actionLabel: "Restart replicas",
-  // Restart only makes sense for live apps. Paused/sleeping/destroying apps
-  // are explicitly NOT restarted — caller should unpause/wake first.
+  // Restart only makes sense for live apps. Paused/destroying apps are
+  // explicitly NOT restarted — caller should unpause first.
   shouldSkip: (app) =>
     app.status === "paused" ||
-    app.status === "sleeping" ||
     app.status === "destroying" ||
     app.status === "cleanup_failed" ||
     app.status === "deploying",

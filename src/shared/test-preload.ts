@@ -21,7 +21,7 @@ process.env.OCD_DATA_DIR = mkdtempSync(path.join(tmpdir(), "ocd-test-"));
 // it fails nondeterministically — passing locally, failing on CI. The failures
 // were exactly this: renderDynamicConfig reads every row so leaked state
 // dropped a fixture from collectDesiredState, and a stale child row tripped a
-// FOREIGN KEY sweep in pick_or_provision_server.
+// FOREIGN KEY sweep in the deploy op.
 //
 // Wiping every table before each test makes each test independent of whatever
 // ran before it. Safe because no unit-test file seeds DB rows at import time

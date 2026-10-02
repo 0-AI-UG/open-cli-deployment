@@ -4,14 +4,13 @@
 
 import { sshExec } from "../shared/remote/index.ts";
 import type { ServerRow } from "../shared/db.ts";
-import { TRAEFIK_METRICS_PORT } from "./scale/traefik-constants.ts";
 
 function log(context: string, ...args: unknown[]) {
   console.log(`[${new Date().toISOString()}] [reconciler:${context}]`, ...args);
 }
 
 /** One container's sampled resource use. `cpu`/`mem` are the raw docker-stats
- *  percentages (kept for the autoscaler); the absolute figures give the UI the
+ *  percentages; the absolute figures give the UI the
  *  "used of allowed" context that a bare percentage can't. `cpu` is percent of
  *  one core, so `cpu/100` is cores used; memory is in MiB. */
 export type ContainerStat = {
@@ -121,24 +120,14 @@ export function parseServerMetrics(stdout: string): { cpu: number; mem: number; 
 }
 
 /**
- * Single SSH call per server: collect docker stats for all containers, server
- * CPU/RAM, and — on the panel only — Traefik's Prometheus request counters in
- * one shot. Traefik runs on the panel alone, so `scrapeTraefik` is set only for
- * the panel; on workers the curl is omitted (it would just fail every tick) and
- * `traefikMetrics` comes back null.
+ * Single SSH call per server: collect docker stats for all containers and
+ * server CPU/RAM/disk in one shot.
  */
-export async function collectServerMetrics(
-  server: ServerRow,
-  opts: { scrapeTraefik?: boolean } = {},
-): Promise<{
+export async function collectServerMetrics(server: ServerRow): Promise<{
   containerStats: Map<string, ContainerStat>;
   serverMetrics: { cpu: number; mem: number; diskUsedGb: number; diskTotalGb: number } | null;
-  /** Raw Prometheus text from the panel's Traefik; null when the scrape failed
-   *  or the server is not the panel (workers run no Traefik). */
-  traefikMetrics: string | null;
 }> {
   const hostKey = server.ssh_host_key || undefined;
-  const scrapeTraefik = opts.scrapeTraefik ?? false;
   const cmd = [
     `su - deploy -c "docker stats --no-stream --format '{{json .}}' 2>/dev/null"`,
     `echo '---LIMITS---'`,
@@ -150,22 +139,14 @@ export async function collectServerMetrics(
     `top -bn1 | grep '%Cpu' | head -1`,
     `grep -E '^(MemTotal|MemAvailable):' /proc/meminfo`,
     `df -Pk / | awk 'NR==2 {print "DISK", $3, $2}'`,
-    `echo '---TRAEFIK-METRICS---'`,
-    // Panel-only Traefik scrape. Subshell so a down/mid-upgrade Traefik doesn't
-    // fail the whole batch; an empty metrics section is a failed scrape (never
-    // treated as zero traffic). On workers we emit nothing (no Traefik there).
-    scrapeTraefik
-      ? `(curl -sf --max-time 5 http://127.0.0.1:${TRAEFIK_METRICS_PORT}/metrics || true)`
-      : `true`,
   ].join(" && ");
 
   try {
     const result = await sshExec(server.ipv4, cmd, hostKey);
-    if (result.exitCode !== 0) return { containerStats: new Map(), serverMetrics: null, traefikMetrics: null };
+    if (result.exitCode !== 0) return { containerStats: new Map(), serverMetrics: null };
 
     const [dockerPart, afterDocker] = result.stdout.split("---LIMITS---");
-    const [limitsPart, rest] = (afterDocker || "").split("---SEPARATOR---");
-    const [metricsPart, traefikPart] = (rest || "").split("---TRAEFIK-METRICS---");
+    const [limitsPart, metricsPart] = (afterDocker || "").split("---SEPARATOR---");
     const containerStats = parseDockerStats(dockerPart || "");
     const cpuLimits = parseContainerLimits(limitsPart || "");
     for (const [name, cores] of cpuLimits) {
@@ -173,10 +154,9 @@ export async function collectServerMetrics(
       if (stat) stat.cpuLimitCores = cores;
     }
     const serverMetrics = parseServerMetrics(metricsPart || "");
-    const traefikMetrics = scrapeTraefik && traefikPart?.trim() ? traefikPart : null;
-    return { containerStats, serverMetrics, traefikMetrics };
+    return { containerStats, serverMetrics };
   } catch (err) {
     log("metrics", `server ${server.ipv4}: ${err}`);
-    return { containerStats: new Map(), serverMetrics: null, traefikMetrics: null };
+    return { containerStats: new Map(), serverMetrics: null };
   }
 }

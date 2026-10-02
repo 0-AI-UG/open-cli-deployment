@@ -159,8 +159,6 @@ function initLegacySchema(instance: Database) {
   const defaults: Record<string, string> = {
     ssh_public_key: "",
     default_domain_suffix: "",
-    default_server_type: "",
-    default_location: "",
     require_2fa: "1",
     network_id: "",
   };

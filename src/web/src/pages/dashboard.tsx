@@ -12,7 +12,7 @@ import { ContextActionItem, ContextActionMenu } from "../components/context-acti
 type AppData = {
   id: number; name: string; domain: string; image_ref?: string; status: string;
   container_port: number;
-  desired_replicas: number; volume_id: string;
+  placement?: Array<{ server_id: number; server_name: string; replicas: number }>; volume_id: string;
   public: number; health_check: number;
   internal_protocol?: string;
   stack_id?: number | null;
@@ -227,7 +227,7 @@ export function DashboardPage() {
             <div className="flex min-w-0 items-center gap-2">
               <a href={`#/apps/${app.id}`} className="truncate text-sm font-medium text-fg hover:underline">{app.name}</a>
               {address.private && <Badge>Private</Badge>}
-              {app.desired_replicas > 1 && <Badge>{app.desired_replicas} replicas</Badge>}
+              {(app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0) > 1 && <Badge>{(app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0)} replicas</Badge>}
             </div>
             <div className="mt-0.5 flex min-w-0 items-center gap-1 text-muted">
               {address.href ? (

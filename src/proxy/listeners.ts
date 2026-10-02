@@ -8,7 +8,7 @@
 // listen ports (after DNAT the original port is gone).
 //
 // Diff by `vip#role` — close removed listeners, open added ones, and swap each
-// surviving listener's app snapshot in place (backends/sleeping changes apply
+// surviving listener's app snapshot in place (backend changes apply
 // to new connections only). Bind failures are logged, never fatal; the key
 // stays absent so the next reconcile retries it.
 
@@ -20,7 +20,6 @@ import {
 } from "./config.ts";
 import { openTcpListener } from "./tcp.ts";
 import { openUdpListener } from "./udp.ts";
-import type { WakeFn } from "./wake.ts";
 
 /** Common shape of a TCP or UDP listener handle — all reconcile needs. */
 type ListenerHandle = {
@@ -50,18 +49,18 @@ function desiredForApp(app: ProxyApp): Array<{ key: string; role: Role }> {
   return out;
 }
 
-export function createListenerSet(wake: WakeFn): ListenerSet {
+export function createListenerSet(): ListenerSet {
   const handles = new Map<string, ListenerHandle>();
   let desiredCount = 0;
 
   async function open(role: Role, app: ProxyApp, internalPort: number, publicPort: number): Promise<ListenerHandle> {
     switch (role) {
       case "internal-tcp":
-        return openTcpListener(app, { port: internalPort, protocol: "tcp" }, wake);
+        return openTcpListener(app, { port: internalPort, protocol: "tcp" });
       case "public-tcp":
-        return openTcpListener(app, { port: publicPort, protocol: "tcp" }, wake, { enforceAuth: false });
+        return openTcpListener(app, { port: publicPort, protocol: "tcp" }, { enforceAuth: false });
       case "public-udp":
-        return openUdpListener(app, { port: publicPort, protocol: "udp" }, wake);
+        return openUdpListener(app, { port: publicPort, protocol: "udp" });
     }
   }
 

@@ -3,6 +3,7 @@ import db from "./connection.ts";
 import type { ServerRow } from "./servers.ts";
 import type { ReplicaRow } from "./replicas.ts";
 import { validatePublicPort } from "../validate.ts";
+import { serializePlacement, type Placement } from "../placement.ts";
 
 const IMMUTABLE_IMAGE = /^[a-z0-9.-]+(?::[0-9]+)?\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/i;
 
@@ -48,19 +49,10 @@ export type AppRow = {
    *  time would make every rendered ingress config unique and defeat the
    *  content-hash sync cache). "" = auth disabled. */
   auth_password_hash: string;
-  desired_replicas: number;
-  min_replicas: number;
-  max_replicas: number;
-  autoscale_enabled: number;
-  autoscale_cpu_threshold: number;
-  autoscale_mem_threshold: number;
-  autoscale_cooldown: number;
-  autoscale_req_threshold: number; // target req/min per replica for HTTP request-based scaling; 0 = off
-  last_scale_at: string | null;
+  /** Declared placement JSON: server id (string) -> replica count. NULL until
+   *  the app's first deploy records it. */
+  placement: string | null;
   deployed_by: string;
-  sleeping_server_id: number | null;
-  sleeping_host_port: number | null;
-  scale_to_zero_after: number;
   environment_id: number | null;
   /** 1 when the linked environment changed since the running containers were
    * created. A plain pause/unpause does not clear it; deploy/redeploy/reload do. */
@@ -94,12 +86,6 @@ export type AppRow = {
   internal_protocol: string; // 'http' | 'tcp'
   internal_port: number; // fleet-unique internal ingress port (20000-20199), owned for the app's lifetime
   virtual_ip: string; // fleet-unique per-app VIP in 10.96.0.0/16, owned for the app's lifetime
-  /** ISO timestamp of the last request observed in Traefik's per-service
-   *  counters (public + internal traffic alike). NULL until the engine has
-   *  seen the app once — the idle monitor seeds it on first evaluation so
-   *  the sleep window never counts from the epoch. */
-  last_request_at: string | null;
-  requests_per_min: number; // rolling req/min from the engine's Traefik scrape; 0 when unobserved
   sticky: number; // 1 = sticky sessions (cookie-based) on the app's Traefik service
   rate_limit_rps: number; // public-router rate limit in req/s; 0 = unlimited
   ip_allowlist: string; // comma-separated IPs/CIDRs gating the public router; "" = open
@@ -107,10 +93,6 @@ export type AppRow = {
   compress: number; // 1 = gzip/brotli compression on the public router
   public_port: number | null; // fleet-unique public raw TCP/UDP port on the panel IP; NULL = not exposed
   public_protocol: string; // 'tcp' | 'udp' — which pool public_port came from
-  durability_class: string; // intent label: 'none' | 'standard' | 'high'; 'none' = no availability target
-  max_per_host: number; // hard cap of this app's replicas per host; 0 = unlimited (soft affinity)
-  min_locations: number; // minimum distinct provider locations replicas must span; 1 = no spread requirement
-  placement_pool: string; // which servers.pool this app's replicas may be placed on; 'general' = default pool
   target: string; // deploy target tag: '' | 'production' | 'staging' | 'dev'
   target_of: number | null; // app id this is a staging/dev target of; NULL = standalone
   /** Monotonic desired-configuration revision. It changes independently of
@@ -342,10 +324,8 @@ type InsertAppFields = {
    *  specific port, omit/null = not exposed. */
   public_port?: number | "auto" | null;
   public_protocol?: PublicProtocol;
-  durability_class?: string;
-  max_per_host?: number;
-  min_locations?: number;
-  placement_pool?: string;
+  /** Resolved placement (server id -> replica count). */
+  placement?: Placement;
   target?: string;
   target_of?: number | null;
   desired_volume_id?: string;
@@ -388,7 +368,7 @@ function insertAppRow(app: InsertAppFields): AppRow {
   const internalProtocol: InternalProtocol = app.internal_protocol ?? "http";
   return db
     .query(
-      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, auth_password_hash, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, sticky, rate_limit_rps, ip_allowlist, health_check_path, compress, public_port, public_protocol, durability_class, max_per_host, min_locations, placement_pool, target, target_of, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json, post_start_command) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, auth_password_hash, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, sticky, rate_limit_rps, ip_allowlist, health_check_path, compress, public_port, public_protocol, placement, target, target_of, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json, post_start_command) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     )
     .get(
       app.name,
@@ -415,10 +395,7 @@ function insertAppRow(app: InsertAppFields): AppRow {
       app.compress ? 1 : 0,
       resolvePublicPort(app),
       app.public_protocol ?? "tcp",
-      app.durability_class ?? "none",
-      app.max_per_host ?? 0,
-      app.min_locations ?? 1,
-      app.placement_pool ?? "general",
+      app.placement ? serializePlacement(app.placement) : null,
       app.target ?? "",
       app.target_of ?? null,
       app.desired_volume_id ?? "",
@@ -509,22 +486,6 @@ export function updateAppPublicEndpointStatus(id: number, status: string, error 
   db.query(
     "UPDATE apps SET public_endpoint_status = ?, public_endpoint_error = ?, public_endpoint_checked_at = datetime('now') WHERE id = ?",
   ).run(status, error, id);
-}
-
-export function updateAppSleepingState(id: number, serverId: number, hostPort: number): void {
-  db.query("UPDATE apps SET sleeping_server_id = ?, sleeping_host_port = ? WHERE id = ?").run(serverId, hostPort, id);
-}
-
-export function clearAppSleepingState(id: number): void {
-  db.query("UPDATE apps SET sleeping_server_id = NULL, sleeping_host_port = NULL WHERE id = ?").run(id);
-}
-
-export function touchAppLastRequest(id: number, atMs: number = Date.now()): void {
-  db.query("UPDATE apps SET last_request_at = ? WHERE id = ?").run(new Date(atMs).toISOString(), id);
-}
-
-export function updateAppRequestRate(id: number, requestsPerMin: number): void {
-  db.query("UPDATE apps SET requests_per_min = ? WHERE id = ?").run(requestsPerMin, id);
 }
 
 export function updateAppDeployedBy(id: number, userId: string): void {
@@ -761,66 +722,9 @@ export function updateAppInternalProtocol(id: number, protocol: InternalProtocol
   db.query("UPDATE apps SET internal_protocol = ? WHERE id = ?").run(protocol, id);
 }
 
-export type AppScalingUpdate = {
-  desired_replicas?: number;
-  min_replicas?: number;
-  max_replicas?: number;
-  autoscale_enabled?: boolean;
-  autoscale_cpu_threshold?: number;
-  autoscale_mem_threshold?: number;
-  autoscale_cooldown?: number;
-  autoscale_req_threshold?: number;
-  scale_to_zero_after?: number;
-  last_scale_at?: string;
-};
-
-export function updateAppScaling(id: number, fields: AppScalingUpdate): void {
-  const sets: string[] = [];
-  const values: (string | number)[] = [];
-  if (fields.desired_replicas !== undefined) { sets.push("desired_replicas = ?"); values.push(fields.desired_replicas); }
-  if (fields.min_replicas !== undefined) { sets.push("min_replicas = ?"); values.push(fields.min_replicas); }
-  if (fields.max_replicas !== undefined) { sets.push("max_replicas = ?"); values.push(fields.max_replicas); }
-  if (fields.autoscale_enabled !== undefined) { sets.push("autoscale_enabled = ?"); values.push(fields.autoscale_enabled ? 1 : 0); }
-  if (fields.autoscale_cpu_threshold !== undefined) { sets.push("autoscale_cpu_threshold = ?"); values.push(fields.autoscale_cpu_threshold); }
-  if (fields.autoscale_mem_threshold !== undefined) { sets.push("autoscale_mem_threshold = ?"); values.push(fields.autoscale_mem_threshold); }
-  if (fields.autoscale_cooldown !== undefined) { sets.push("autoscale_cooldown = ?"); values.push(fields.autoscale_cooldown); }
-  if (fields.autoscale_req_threshold !== undefined) { sets.push("autoscale_req_threshold = ?"); values.push(fields.autoscale_req_threshold); }
-  if (fields.scale_to_zero_after !== undefined) { sets.push("scale_to_zero_after = ?"); values.push(fields.scale_to_zero_after); }
-  if (fields.last_scale_at !== undefined) { sets.push("last_scale_at = ?"); values.push(fields.last_scale_at); }
-  if (sets.length === 0) return;
-  values.push(id);
-  db.query(`UPDATE apps SET ${sets.join(", ")} WHERE id = ?`).run(...values);
-}
-
-/** Partial update of the app's durability/placement-spread intent. Mirrors
- *  updateAppScaling: only the provided fields are written. durability_class is
- *  the intent label ('none' | 'standard' | 'high'); max_per_host is the hard
- *  per-host replica cap (0 = unlimited); min_locations is the minimum distinct
- *  provider locations replicas must span. */
-export function updateAppDurability(id: number, fields: {
-  durability_class?: string;
-  max_per_host?: number;
-  min_locations?: number;
-}): void {
-  const sets: string[] = [];
-  const values: (string | number)[] = [];
-  if (fields.durability_class !== undefined) { sets.push("durability_class = ?"); values.push(fields.durability_class); }
-  if (fields.max_per_host !== undefined) { sets.push("max_per_host = ?"); values.push(fields.max_per_host); }
-  if (fields.min_locations !== undefined) { sets.push("min_locations = ?"); values.push(fields.min_locations); }
-  if (sets.length === 0) return;
-  values.push(id);
-  db.query(`UPDATE apps SET ${sets.join(", ")} WHERE id = ?`).run(...values);
-}
-
-/** Set which servers.pool this app's replicas may be placed on. */
-export function updateAppPlacementPool(id: number, pool: string): void {
-  db.query("UPDATE apps SET placement_pool = ? WHERE id = ?").run(pool, id);
-}
-
-/** Distinct, non-empty placement pools any app is currently targeting. */
-export function getDistinctPlacementPools(): string[] {
-  return (db.query("SELECT DISTINCT placement_pool FROM apps WHERE placement_pool <> ''").all() as { placement_pool: string }[])
-    .map((r) => r.placement_pool);
+/** Persist the user-declared placement. Convergence makes reality match. */
+export function updateAppPlacement(id: number, placement: Placement): void {
+  db.query("UPDATE apps SET placement = ? WHERE id = ?").run(serializePlacement(placement), id);
 }
 
 /** Mark an app as a staging/dev target of another app (or clear it with

@@ -10,7 +10,8 @@ import { enqueueNtfyIncident, deliverNtfy } from "../engine/ntfy/alerts.ts";
 function enable() {
   const env = db.insertEnvironment("ntfy", '{"version":2,"entries":[]}');
   const app = db.insertApp({ name: "ntfy", domain: "notify.example.com", image_ref: `docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`, container_port: 80, environment_id: env.id, env_vars: JSON.stringify({ env: template.env, outputs: {} }) });
-  db.default.query("UPDATE apps SET status='running', desired_replicas=1, volume_mount='/data:/var/lib/ntfy' WHERE id=?").run(app.id);
+  const server = db.getServers()[0] ?? db.insertServer({ name: "ntfy-host", provider_id: "", ipv4: "198.51.100.9", ipv6: "", type: "cx23", location: "nbg1", status: "ready" });
+  db.default.query("UPDATE apps SET status='running', placement=?, volume_mount='/data:/var/lib/ntfy' WHERE id=?").run(JSON.stringify({ [String(server.id)]: 1 }), app.id);
   db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, app_id: app.id, alerts: true, apps: true })));
   return db.getApp(app.id)!;
 }
@@ -27,7 +28,7 @@ test("normal service manifest has private auth, persistent storage and bounded r
   expect(template.env.NTFY_AUTH_DEFAULT_ACCESS).toBe("deny-all");
   expect(template.env.NTFY_ENABLE_SIGNUP).toBe("false");
   const request = ntfyDeployRequest({ name: "ntfy", domain: "notify.example.com", server_id: 1 }, 2, `docker.io/binwiederhier/ntfy@sha256:${"a".repeat(64)}`);
-  expect(request).toMatchObject({ volume_driver: "local-directory", volume_size: 1, volume_path: "/var/lib/ntfy", memory_mb: 128, cpu_limit: 0.5, environment_id: 2, replicas: 1, container_port: 80 });
+  expect(request).toMatchObject({ volume_driver: "local-directory", volume_size: 1, volume_path: "/var/lib/ntfy", memory_mb: 128, cpu_limit: 0.5, environment_id: 2, placement: { "1": 1 }, container_port: 80 });
 });
 test("integration uses encrypted normal app environment and reload operations, respects paused apps", async () => {
   const app = enable();

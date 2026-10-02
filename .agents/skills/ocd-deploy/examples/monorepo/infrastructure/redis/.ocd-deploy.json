@@ -24,6 +24,7 @@
     "mode": "exec",
     "command": "redis-cli -a \"$REDIS_PASSWORD\" ping"
   },
+  "placement": { "server-2": 1 },
   "volume": {
     "size": 10,
     "path": "/data"

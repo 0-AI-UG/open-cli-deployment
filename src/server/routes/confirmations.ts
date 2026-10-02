@@ -118,8 +118,7 @@ export async function handleCreateConfirmation(request: Request): Promise<Respon
       const plan = parseServerProvisioningResourceId(resourceId);
       if (!plan) return Response.json({ error: "Invalid server provisioning plan" }, { status: 400, headers: corsHeaders });
       summary =
-        `Allow creation of one or more billable Hetzner servers as required for ${plan.reason}: ` +
-        `${plan.serverType} in ${plan.location}, pool${plan.pools.length === 1 ? "" : "s"} ${plan.pools.join(", ")}.`;
+        `Create one billable Hetzner server for ${plan.reason}: ${plan.serverType} in ${plan.location}.`;
     } else if (action === "create_bucket") {
       const region = (await getS3Credentials())?.region || "Hetzner Object Storage";
       summary = `Create private bucket "${resourceId}" in Hetzner Object Storage (${region}). Hetzner billing may apply.`;

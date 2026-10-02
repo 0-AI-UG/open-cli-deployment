@@ -27,17 +27,7 @@ const _deploy: DeployManifest = {
   domain: "web.example.com",
   environment: "production",
   auth: { enabled: true, password_env: "OCD_BASIC_AUTH_PASSWORD" },
-  placement_pool: "production",
-  scale_to_zero_after: 0,
-  autoscaling: {
-    enabled: true,
-    min_replicas: 1,
-    max_replicas: 4,
-    cpu_threshold: 80,
-    memory_threshold: 85,
-    requests_per_minute: 0,
-    cooldown_seconds: 300,
-  },
+  placement: { "server-2": 1 },
 };
 const _enabled: boolean | undefined = _deploy.health_check?.enabled;
 const _port: number | undefined = _deploy.container_port;
@@ -51,7 +41,7 @@ void _stack;
 
 const validApp = {
   name: "web",
-  volume: null,
+  volume: null, placement: { "server-2": 1 },
   build: BUILD,
   container_port: 3000,
   env: { PORT: "3000" },
@@ -66,6 +56,7 @@ describe("validateDeployManifest", () => {
       image: "postgres:17-alpine",
       container_port: 5432,
       volume: { size: 10, path: "/var/lib/postgresql/data" },
+      placement: { "server-2": 1 },
       env: { POSTGRES_PASSWORD: { from: "environment.POSTGRES_PASSWORD" } },
       outputs: {
         URL: { template: "postgresql://postgres:{env.POSTGRES_PASSWORD}@{app.host}:{app.port}/postgres", secret: true },
@@ -76,7 +67,7 @@ describe("validateDeployManifest", () => {
     expect(() => validateDeployManifest({
       name: "database",
       image: { ref: "postgres:17-alpine" },
-      volume: null,
+      volume: null, placement: { "server-2": 1 },
     }, ".ocd-deploy.json")).toThrow("expected an OCI image reference");
     expect(() => validateDeployManifest({ ...validApp, image: "nginx:alpine" }, ".ocd-deploy.json"))
       .toThrow("exactly one of build or image");
@@ -105,13 +96,13 @@ describe("validateDeployManifest", () => {
   test("accepts safe OCD build contracts and rejects tagged push repositories", () => {
     expect(() =>
       validateDeployManifest(
-        { name: "worker", volume: null, build: { ...BUILD, image_repository: "ghcr.io/acme/worker" } },
+        { name: "worker", volume: null, placement: { "server-2": 1 }, build: { ...BUILD, image_repository: "ghcr.io/acme/worker" } },
         ".ocd-deploy.json",
       ),
     ).not.toThrow();
     expect(() =>
       validateDeployManifest(
-        { name: "worker", volume: null, build: { ...BUILD, image_repository: "ghcr.io/acme/worker:latest" } },
+        { name: "worker", volume: null, placement: { "server-2": 1 }, build: { ...BUILD, image_repository: "ghcr.io/acme/worker:latest" } },
         ".ocd-deploy.json",
       ),
     ).toThrow();
@@ -120,12 +111,12 @@ describe("validateDeployManifest", () => {
   test("pins the supported build platform and allows an explicit cache opt-out", () => {
     expect(() => validateDeployManifest({
       name: "worker",
-      volume: null,
+      volume: null, placement: { "server-2": 1 },
       build: { ...BUILD, platform: "linux/amd64", cache: false },
     }, ".ocd-deploy.json")).not.toThrow();
     expect(() => validateDeployManifest({
       name: "worker",
-      volume: null,
+      volume: null, placement: { "server-2": 1 },
       build: { ...BUILD, platform: "linux/arm64" },
     }, ".ocd-deploy.json")).toThrow("linux/amd64");
   });
@@ -133,13 +124,13 @@ describe("validateDeployManifest", () => {
   test("validates truthful worker and job health contracts", () => {
     expect(() =>
       validateDeployManifest(
-        { name: "worker", volume: null, build: BUILD, health_check: { mode: "exec", command: "test -f /tmp/ready" } },
+        { name: "worker", volume: null, placement: { "server-2": 1 }, build: BUILD, health_check: { mode: "exec", command: "test -f /tmp/ready" } },
         ".ocd-deploy.json",
       ),
     ).not.toThrow();
     expect(() =>
       validateDeployManifest(
-        { name: "worker", volume: null, health_check: { mode: "exec" } },
+        { name: "worker", volume: null, placement: { "server-2": 1 }, health_check: { mode: "exec" } },
         ".ocd-deploy.json",
       ),
     ).toThrow();
@@ -147,7 +138,7 @@ describe("validateDeployManifest", () => {
       validateDeployManifest(
         {
           name: "cron",
-          volume: null,
+          volume: null, placement: { "server-2": 1 },
           build: BUILD,
           health_check: {
             mode: "periodic_job",
@@ -160,7 +151,7 @@ describe("validateDeployManifest", () => {
     ).not.toThrow();
     expect(() =>
       validateDeployManifest(
-        { name: "cron", volume: null, health_check: { mode: "periodic_job", file: "/run/last-success" } },
+        { name: "cron", volume: null, placement: { "server-2": 1 }, health_check: { mode: "periodic_job", file: "/run/last-success" } },
         ".ocd-deploy.json",
       ),
     ).toThrow();
@@ -172,7 +163,7 @@ describe("validateDeployManifest", () => {
   test("health_check boolean (the incident) fails with a clear message", () => {
     let msg = "";
     try {
-      validateDeployManifest({ volume: null, name: "db", health_check: false }, "docker/.ocd-deploy.json");
+      validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "db", health_check: false }, "docker/.ocd-deploy.json");
     } catch (e) {
       msg = (e as Error).message;
     }
@@ -183,7 +174,7 @@ describe("validateDeployManifest", () => {
   test("bad internal_protocol enum fails", () => {
     let msg = "";
     try {
-      validateDeployManifest({ volume: null, name: "web", internal_protocol: "tpc" }, "a/.ocd-deploy.json");
+      validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", internal_protocol: "tpc" }, "a/.ocd-deploy.json");
     } catch (e) {
       msg = (e as Error).message;
     }
@@ -191,13 +182,13 @@ describe("validateDeployManifest", () => {
   });
 
   test("missing name fails", () => {
-    expect(() => validateDeployManifest({ volume: null }, "a/.ocd-deploy.json")).toThrow(/name:/);
+    expect(() => validateDeployManifest({ volume: null, placement: { "server-2": 1 } }, "a/.ocd-deploy.json")).toThrow(/name:/);
   });
 
   test("collects multiple issues at once", () => {
     let msg = "";
     try {
-      validateDeployManifest({ volume: null, name: "web", public: "yes", health_check: false }, "a/.ocd-deploy.json");
+      validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", public: "yes", health_check: false }, "a/.ocd-deploy.json");
     } catch (e) {
       msg = (e as Error).message;
     }
@@ -206,18 +197,18 @@ describe("validateDeployManifest", () => {
   });
 
   test("wrong-typed container_port fails", () => {
-    expect(() => validateDeployManifest({ volume: null, name: "web", build: BUILD, container_port: "3000" }, "a")).toThrow(
+    expect(() => validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", build: BUILD, container_port: "3000" }, "a")).toThrow(
       /container_port: expected integer 1-65535, got "3000"/,
     );
   });
 
   test("unknown key fails by default", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
-    expect(() => validateDeployManifest({ volume: null, name: "web", futureField: 1 }, "a/.ocd-deploy.json"))
+    expect(() => validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", futureField: 1 }, "a/.ocd-deploy.json"))
       .toThrow(/futureField: unknown key/);
     expect(warn).not.toHaveBeenCalled();
     expect(() => validateDeployManifest(
-      { volume: null, name: "web", build: BUILD, futureField: 1 },
+      { volume: null, placement: { "server-2": 1 }, name: "web", build: BUILD, futureField: 1 },
       "a/.ocd-deploy.json",
       { allowUnknown: true },
     )).not.toThrow();
@@ -227,84 +218,88 @@ describe("validateDeployManifest", () => {
     warn.mockRestore();
   });
 
-  test("durability_class validates", () => {
+  test("placement is required and maps servers to positive replica counts", () => {
     expect(() =>
-      validateDeployManifest({ volume: null, name: "web", build: BUILD, durability_class: "high" }, "a/.ocd-deploy.json"),
+      validateDeployManifest({ volume: null, placement: { "server-2": 1, "sight-capacity-1": 2, "7": 1 }, name: "web", build: BUILD }, "a/.ocd-deploy.json"),
     ).not.toThrow();
+    expect(() => validateDeployManifest({ volume: null, name: "web", build: BUILD }, "a/.ocd-deploy.json"))
+      .toThrow(/placement: .*\(required\)/);
+    expect(() => validateDeployManifest({ volume: null, placement: {}, name: "web", build: BUILD }, "a/.ocd-deploy.json"))
+      .toThrow(/placement: expected at least one server/);
+    for (const count of [0, -1, 1.5, "1"]) {
+      expect(() => validateDeployManifest({ volume: null, placement: { "server-2": count }, name: "web", build: BUILD }, "a/.ocd-deploy.json"))
+        .toThrow(/placement\.server-2: expected positive integer replica count/);
+    }
+  });
+
+  test("a volume app is placed on exactly one server with one replica", () => {
+    const volume = { size: 5, path: "/data" };
+    expect(() => validateDeployManifest({ volume, placement: { "server-2": 1 }, name: "db", build: BUILD }, "a/.ocd-deploy.json"))
+      .not.toThrow();
+    expect(() => validateDeployManifest({ volume, placement: { "server-2": 2 }, name: "db", build: BUILD }, "a/.ocd-deploy.json"))
+      .toThrow(/placement: Apps with a volume must be placed on exactly one server with 1 replica/);
+    expect(() => validateDeployManifest({ volume, placement: { "server-2": 1, "sight-capacity-1": 1 }, name: "db", build: BUILD }, "a/.ocd-deploy.json"))
+      .toThrow(/exactly one server/);
+  });
+
+  test("replicas, durability_class and placement_pool are rejected as unknown keys", () => {
+    for (const removed of [{ replicas: 2 }, { durability_class: "high" }, { placement_pool: "general" }]) {
+      expect(() => validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", build: BUILD, ...removed }, "a/.ocd-deploy.json"))
+        .toThrow(`${Object.keys(removed)[0]}: unknown key`);
+    }
   });
 
   test("CLI-focused domain, environment projection, auth and placement fields validate", () => {
     expect(() =>
       validateDeployManifest({
         name: "web",
-        volume: null,
+        volume: null, placement: { "server-2": 1 },
         build: BUILD,
         domain: "web.example.com",
         env: {},
         auth: { enabled: true, password_env: "OCD_BASIC_AUTH_PASSWORD" },
-        placement_pool: "production",
-        scale_to_zero_after: 0,
       }, "a/.ocd-deploy.json"),
     ).not.toThrow();
     expect(() =>
       validateDeployManifest({
         name: "web",
-        volume: null,
+        volume: null, placement: { "server-2": 1 },
         build: BUILD,
         auth: { enabled: true, password_env: "not-valid!" },
       }, "a/.ocd-deploy.json"),
     ).toThrow(/auth\.password_env/);
   });
 
-  test("environment selectors and complete autoscaling policy validate", () => {
+  test("environment selectors validate; autoscaling and scale-to-zero are rejected", () => {
     expect(() =>
       validateDeployManifest({
         name: "web",
-        volume: null,
+        volume: null, placement: { "server-2": 1 },
         build: BUILD,
         environment: "production",
-        replicas: 2,
-        autoscaling: {
-          enabled: true,
-          min_replicas: 1,
-          max_replicas: 5,
-          cpu_threshold: 80,
-          memory_threshold: 85,
-          requests_per_minute: 100,
-          cooldown_seconds: 300,
-        },
       }, "a/.ocd-deploy.json"),
     ).not.toThrow();
-    expect(() =>
-      validateDeployManifest({
-        name: "web",
-        volume: null,
-        build: BUILD,
-        replicas: 3,
-        autoscaling: { max_replicas: 2 },
-      }, "a/.ocd-deploy.json"),
-    ).toThrow(/autoscaling\.max_replicas/);
-  });
-
-  test("bad durability_class enum fails", () => {
-    let msg = "";
-    try {
-      validateDeployManifest({ volume: null, name: "web", durability_class: "gold" }, "a/.ocd-deploy.json");
-    } catch (e) {
-      msg = (e as Error).message;
+    for (const removed of [{ autoscaling: { enabled: true } }, { scale_to_zero_after: 0 }]) {
+      expect(() =>
+        validateDeployManifest({
+          name: "web",
+          volume: null, placement: { "server-2": 1 },
+          build: BUILD,
+          ...removed,
+        }, "a/.ocd-deploy.json"),
+      ).toThrow();
     }
-    expect(msg).toContain("durability_class");
   });
 
   test("minimal explicit no-volume manifest validates", () => {
-    expect(() => validateDeployManifest({ volume: null, name: "web", build: BUILD }, "a/.ocd-deploy.json")).not.toThrow();
+    expect(() => validateDeployManifest({ volume: null, placement: { "server-2": 1 }, name: "web", build: BUILD }, "a/.ocd-deploy.json")).not.toThrow();
   });
 
   test("legacy top-level `environments` key is rejected", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     expect(() =>
       validateDeployManifest(
-        { name: "web", volume: null, build: BUILD, environments: { staging: { branch: "develop" } } },
+        { name: "web", volume: null, placement: { "server-2": 1 }, build: BUILD, environments: { staging: { branch: "develop" } } },
         "a/.ocd-deploy.json",
       ),
     ).toThrow(/environments: unknown key/);
@@ -393,5 +388,22 @@ describe("explicit runtime environment", () => {
   });
   test("rejects unsupported output template placeholders", () => {
     expect(() => validateDeployManifest({ ...validApp, outputs: { URL: { template: "{environment.TOKEN}" } } }, "app.json")).toThrow("template");
+  });
+});
+
+describe("stack placement override", () => {
+  test("an app entry may replace its child placement with the same shape", () => {
+    expect(() => validateStackManifest({
+      name: "site",
+      apps: { web: { manifest: "web/.ocd-deploy.json", placement: { "server-2": 1, "sight-capacity-1": 1 } } },
+    }, "ocd-stack.json")).not.toThrow();
+    expect(() => validateStackManifest({
+      name: "site",
+      apps: { web: { manifest: "web/.ocd-deploy.json", placement: { "server-2": 0 } } },
+    }, "ocd-stack.json")).toThrow(/apps\.web\.placement\.server-2/);
+    expect(() => validateStackManifest({
+      name: "site",
+      apps: { web: { manifest: "web/.ocd-deploy.json", replicas: 2 } },
+    }, "ocd-stack.json")).toThrow(/replicas: unknown key/);
   });
 });

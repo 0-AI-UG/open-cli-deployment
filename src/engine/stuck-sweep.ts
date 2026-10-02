@@ -103,23 +103,6 @@ export function sweepStuckStates(): void {
   } catch (err) {
     log("sweep", `stuck pending/running query failed: ${err}`);
   }
-  // Detect crash between stop_containers and mark_sleeping: all replicas
-  // stopped but the app status didn't get flipped. Correct it.
-  try {
-    const apps = db.getApps();
-    for (const app of apps) {
-      if (app.status === "sleeping" || app.status === "deploying" || app.status === "stopped") continue;
-      const replicas = db.getReplicas(app.id);
-      if (replicas.length === 0) continue;
-      const allStopped = replicas.every((r) => r.status === "stopped" || r.status === "sleeping");
-      if (allStopped) {
-        log("sweep", `app#${app.id} (${app.name}): all replicas stopped but status='${app.status}' — flipping to sleeping`);
-        try { db.updateAppStatus(app.id, "sleeping"); } catch (err) { log("sweep", `flip failed: ${err}`); }
-      }
-    }
-  } catch (err) {
-    log("sweep", `sleep-state correction failed: ${err}`);
-  }
   try {
     for (const app of reconcileStaleAppStates()) {
       log("sweep", `app#${app.id} (${app.name}) was stale in 'deploying' after its operation finished — flipped to running`);

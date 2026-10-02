@@ -20,17 +20,15 @@ type EnqueueOut = { childOpIds: number[] };
 type WaitOut = ChildSummary;
 
 function shouldRedeploy(status: string): boolean {
-  // Redeploy the actively-serving apps plus paused and sleeping (scale-to-zero)
-  // ones — a redeploy recreates them from the current immutable image, so a
-  // cascade (env-var change or stack redeploy) brings dormant members back up
-  // on the new config instead of deferring to the next manual wake. Error /
+  // Redeploy the actively-serving apps plus paused ones — a redeploy recreates
+  // them from the current immutable image, so a cascade (env-var change or
+  // stack redeploy) brings paused members back up on the new config. Error /
   // failed / destroying apps are left alone.
   return (
     status === "running" ||
     status === "unhealthy" ||
     status === "deploying" ||
-    status === "paused" ||
-    status === "sleeping"
+    status === "paused"
   );
 }
 

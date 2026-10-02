@@ -291,7 +291,7 @@ type StatusTone = "success" | "warning" | "danger" | "neutral";
 export function statusTone(status: string): StatusTone {
   const s = status?.toLowerCase() || "unknown";
   if (["running", "done", "ready", "online", "healthy", "active", "deployed", "completed", "open", "succeeded", "success", "ok"].includes(s)) return "success";
-  if (["deploying", "waking", "sleeping", "pending", "queued", "compensating", "connecting", "disconnected", "ended", "working", "running_op", "provisioning", "starting", "stopping", "degraded", "partial", "rolling_back"].includes(s)) return "warning";
+  if (["deploying", "pending", "queued", "compensating", "connecting", "disconnected", "ended", "working", "running_op", "provisioning", "starting", "stopping", "degraded", "partial", "rolling_back"].includes(s)) return "warning";
   if (["unhealthy", "error", "failed", "offline", "cancelled", "compensated", "compensation_failed"].includes(s)) return "danger";
   return "neutral";
 }
@@ -311,7 +311,7 @@ export function humanize(value: string): string {
 export function StatusBadge({ status, subLabel }: { status: string; subLabel?: string }) {
   const s = status?.toLowerCase() || "unknown";
   const tone = statusTone(s);
-  const live = s === "deploying" || s === "waking" || s === "working";
+  const live = s === "deploying" || s === "working";
 
   return (
     <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-fg-dim">

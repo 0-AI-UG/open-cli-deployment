@@ -26,7 +26,7 @@ function worker(name: string) {
     location: "nbg1",
     status: "ready",
   });
-  const row = db.insertBuildWorker({ serverId: server.id, name: `${name}-${suffix}`, previousPool: "general" });
+  const row = db.insertBuildWorker({ serverId: server.id, name: `${name}-${suffix}` });
   db.updateBuildWorker(row.id, {
     status: "online",
     disk_free_bytes: 30 * 1024 ** 3,

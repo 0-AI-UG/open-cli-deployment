@@ -2694,6 +2694,131 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 123,
+    description: "Remove scale-to-zero and the autoscaler: replica count is only what the user declared",
+    up: (db) => {
+      // Sleeping/waking apps return to the ordinary health-tracked lifecycle.
+      // Their stopped anchor replicas become unhealthy so health checks restart
+      // them; convergence never targets zero replicas.
+      db.run(`UPDATE replicas SET status = 'unhealthy'
+        WHERE status IN ('sleeping', 'waking')
+          OR (status = 'stopped' AND app_id IN (SELECT id FROM apps WHERE status IN ('sleeping', 'waking')))`);
+      db.run(`UPDATE apps SET status = CASE
+          WHEN EXISTS (SELECT 1 FROM replicas WHERE replicas.app_id = apps.id AND replicas.status = 'running')
+            THEN 'running'
+          ELSE 'unhealthy'
+        END
+        WHERE status IN ('sleeping', 'waking')`);
+      const appColumns = new Set((db.query("PRAGMA table_info(apps)").all() as Array<{ name: string }>).map((c) => c.name));
+      if (appColumns.has("desired_replicas")) db.run("UPDATE apps SET desired_replicas = 1 WHERE desired_replicas < 1");
+      db.run(`DELETE FROM scaling_events
+        WHERE event_type IN ('autoscale_up', 'autoscale_down', 'autoscale_sleep', 'wake')`);
+      db.run("DELETE FROM settings WHERE key = 'proxy_wake_secret'");
+
+      // The config-revision trigger names autoscaling columns, and SQLite
+      // refuses to drop a column a trigger references.
+      db.run("DROP TRIGGER IF EXISTS apps_bump_config_revision");
+      const existing = new Set((db.query("PRAGMA table_info(apps)").all() as Array<{ name: string }>).map((c) => c.name));
+      for (const column of [
+        "autoscale_enabled",
+        "autoscale_cpu_threshold",
+        "autoscale_mem_threshold",
+        "autoscale_cooldown",
+        "autoscale_req_threshold",
+        "last_scale_at",
+        "min_replicas",
+        "max_replicas",
+        "scale_to_zero_after",
+        "sleeping_server_id",
+        "sleeping_host_port",
+        "last_request_at",
+        "requests_per_min",
+      ]) {
+        if (existing.has(column)) db.run(`ALTER TABLE apps DROP COLUMN ${column}`);
+      }
+      db.run(`CREATE TRIGGER apps_bump_config_revision
+        AFTER UPDATE OF
+          domain, image_ref, container_port, auth_password_hash,
+          environment_id, public, health_check,
+          health_check_mode, health_check_command, health_check_file,
+          health_check_max_age_seconds, health_check_expected_statuses,
+          internal_protocol, sticky, rate_limit_rps, ip_allowlist,
+          health_check_path, compress, public_port, public_protocol,
+          desired_replicas,
+          desired_volume_id, desired_volume_size, desired_volume_path,
+          extra_volumes, memory_mb, cpu_limit, durability_class,
+          max_per_host, min_locations, placement_pool
+        ON apps
+        BEGIN
+          UPDATE apps SET
+            config_revision = config_revision + 1,
+            rollout_requested_revision = CASE
+              WHEN rollout_requested_revision > 0 THEN config_revision + 1
+              ELSE 0
+            END
+          WHERE id = NEW.id;
+        END`);
+    },
+  },
+  {
+    version: 124,
+    description: "Explicit per-server placement replaces replica counts, durability, and capacity pools",
+    up: (db) => {
+      // apps.placement is the user-declared map of server id -> replica count.
+      // Existing apps keep exactly where their replicas run today.
+      const appColumns = new Set((db.query("PRAGMA table_info(apps)").all() as Array<{ name: string }>).map((c) => c.name));
+      if (!appColumns.has("placement")) db.run("ALTER TABLE apps ADD COLUMN placement TEXT");
+      const rows = db.query(`SELECT app_id, server_id, COUNT(*) AS n FROM replicas
+        GROUP BY app_id, server_id ORDER BY app_id, server_id`).all() as Array<{ app_id: number; server_id: number; n: number }>;
+      const placements = new Map<number, Record<string, number>>();
+      for (const row of rows) {
+        const placement = placements.get(row.app_id) ?? {};
+        placement[String(row.server_id)] = row.n;
+        placements.set(row.app_id, placement);
+      }
+      const update = db.prepare("UPDATE apps SET placement = ? WHERE id = ?");
+      for (const [appId, placement] of placements) update.run(JSON.stringify(placement), appId);
+
+      // SQLite refuses to drop a column a trigger references.
+      db.run("DROP TRIGGER IF EXISTS apps_bump_config_revision");
+      const dropColumns = (table: string, columns: string[]) => {
+        const existing = new Set((db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name));
+        for (const column of columns) {
+          if (existing.has(column)) db.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+        }
+      };
+      dropColumns("apps", ["desired_replicas", "durability_class", "max_per_host", "min_locations", "placement_pool"]);
+      // Build workers are identified by their build_workers row, not a pool.
+      dropColumns("servers", ["pool"]);
+      dropColumns("build_workers", ["previous_pool"]);
+      dropColumns("availability_samples", ["distinct_hosts", "distinct_locations"]);
+      // Server defaults only fed automatic provisioning.
+      db.run("DELETE FROM settings WHERE key IN ('default_server_type', 'default_location')");
+
+      db.run(`CREATE TRIGGER apps_bump_config_revision
+        AFTER UPDATE OF
+          domain, image_ref, container_port, auth_password_hash,
+          environment_id, public, health_check,
+          health_check_mode, health_check_command, health_check_file,
+          health_check_max_age_seconds, health_check_expected_statuses,
+          internal_protocol, sticky, rate_limit_rps, ip_allowlist,
+          health_check_path, compress, public_port, public_protocol,
+          placement,
+          desired_volume_id, desired_volume_size, desired_volume_path,
+          extra_volumes, memory_mb, cpu_limit
+        ON apps
+        BEGIN
+          UPDATE apps SET
+            config_revision = config_revision + 1,
+            rollout_requested_revision = CASE
+              WHEN rollout_requested_revision > 0 THEN config_revision + 1
+              ELSE 0
+            END
+          WHERE id = NEW.id;
+        END`);
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

@@ -547,8 +547,7 @@ async function probeServerHost(server: { ipv4: string; ssh_host_key: string }): 
     // ss -H suppresses header; -tlnp gives TCP listeners with process info.
     // Fallback to plain `ss -tln` if `-p` requires root and fails.
     // Cap high enough to never truncate: Traefik binds ~200 internal ingress
-    // entrypoints (20000-20199) plus a waker mirror block, on top of system
-    // ports. A low cap would drop real listeners and skew the collapsed counts
+    // entrypoints (20000-20199) on top of system ports. A low cap would drop real listeners and skew the collapsed counts
     // the server view shows for those ranges.
     `(ss -Htlnp 2>/dev/null || ss -Htln) | head -600`,
     `echo '${PROBE_SEP}'`,
@@ -693,7 +692,6 @@ export async function handleGetServerDetail(request: Request, serverId: number):
       type: server.type,
       location: server.location,
       status: server.status,
-      pool: server.pool,
       created_at: server.created_at,
       monthly_eur,
       currency,
@@ -723,20 +721,15 @@ export async function handleCreateServer(request: Request): Promise<Response> {
         { status: 409, headers: corsHeaders },
       );
     }
-    const body = await request.json() as { server_type: string; location: string; name?: string; pool?: string; reason?: string };
+    const body = await request.json() as { server_type: string; location: string; name?: string; reason?: string };
 
     if (!body.server_type || !body.location) {
       return Response.json({ error: "server_type and location are required" }, { status: 400, headers: corsHeaders });
     }
 
-    const pool = String(body.pool || "general").trim();
-    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(pool)) {
-      return Response.json({ error: "pool must be a lowercase capacity-pool slug" }, { status: 400, headers: corsHeaders });
-    }
     const planId = serverProvisioningResourceId({
       serverType: body.server_type,
       location: body.location,
-      pools: [pool],
       reason: body.reason || (body.name ? `server ${body.name}` : "an explicitly requested server"),
     });
     await enforceConfirmation(request, payload, "create_server", "server_plan", planId);
@@ -748,7 +741,6 @@ export async function handleCreateServer(request: Request): Promise<Response> {
         serverType: body.server_type,
         location: body.location,
         name: body.name,
-        pool,
       },
       trigger: payload.client === "cli" ? "cli" : "ui",
       triggeredBy: payload.userId,

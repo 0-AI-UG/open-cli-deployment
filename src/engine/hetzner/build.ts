@@ -68,7 +68,6 @@ export async function pullImmutableImageAndRun(
     hostKey?: string;
     configRevision?: number;
     envHash?: string;
-    extraPublish?: string[];
     command?: string[];
     capAdd?: string[];
   },
@@ -95,7 +94,6 @@ export async function pullImmutableImageAndRun(
     envVars: opts.envVars,
     configRevision: opts.configRevision,
     envHash: opts.envHash,
-    extraPublish: opts.extraPublish,
     command: opts.command,
     capAdd: opts.capAdd,
   }, opts.hostKey);

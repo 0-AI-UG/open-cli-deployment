@@ -1,11 +1,10 @@
 import * as db from "../shared/db.ts";
 import type { AppRow, ReplicaRow, ServerRow } from "../shared/db.ts";
 import { ensureHostLogPolicy, pruneServer } from "../shared/remote/index.ts";
-import { evaluateAutoScale, convergeAppReplicas } from "./scale/index.ts";
+import { convergeAppReplicas } from "./scale/index.ts";
 import { reconcileNetwork } from "./scale/network-reconciler.ts";
 import { reconcileProxy } from "./scale/proxy-manager.ts";
 import { reconcileTraefik } from "./scale/traefik-manager.ts";
-import { ingestServerRequestMetrics } from "./scale/request-metrics.ts";
 import { collectServerMetrics } from "./metrics-parse.ts";
 import { checkReplicaHealth, HEALTH_EXEMPT_STATUSES } from "./health.ts";
 import { sweepStuckStates } from "./stuck-sweep.ts";
@@ -43,17 +42,7 @@ async function processServer(work: ServerWorkItem): Promise<void> {
   const { server } = work;
 
   // --- Phase 1: One SSH call for all docker stats + server metrics ---
-  // Traefik runs on the panel only, so only the panel is scraped for request
-  // counters; workers skip the curl entirely.
-  const isPanel = server.id === db.getPanel()?.server_id;
-  const { containerStats, serverMetrics, traefikMetrics } = await collectServerMetrics(server, {
-    scrapeTraefik: isPanel,
-  });
-
-  // Request activity from the panel's Traefik per-service counters. On a failed
-  // scrape (null) the panel is left stale so sleep decisions skip. Workers never
-  // produce these metrics, so we only ingest for the panel.
-  if (isPanel) ingestServerRequestMetrics(server.id, traefikMetrics);
+  const { containerStats, serverMetrics } = await collectServerMetrics(server);
 
   // Apply container metrics to replicas
   for (const { replica } of work.replicas) {
@@ -94,7 +83,7 @@ async function processServer(work: ServerWorkItem): Promise<void> {
   const checks: Array<() => Promise<void>> = [];
 
   for (const { replica, app } of work.replicas) {
-    if (replica.status === "stopped" || replica.status === "paused" || replica.status === "sleeping" || replica.status === "waking") continue;
+    if (replica.status === "stopped" || replica.status === "paused") continue;
     checks.push(() => checkReplicaHealth(replica, app, server));
   }
 
@@ -149,7 +138,7 @@ async function tick(): Promise<void> {
       byApp.set(replica.app_id, list);
 
       // Skip non-live replicas for metrics/health (but still include in byApp)
-      if (replica.status === "stopped" || replica.status === "paused" || replica.status === "sleeping" || replica.status === "waking") continue;
+      if (replica.status === "stopped" || replica.status === "paused") continue;
 
       const app = db.getApp(replica.app_id);
       if (!app) continue;
@@ -163,7 +152,7 @@ async function tick(): Promise<void> {
       if (server.ipv4) ensureServer(server.id);
     }
     // Replica convergence is level-triggered, so apps with zero materialized
-    // rows must still participate (for example after confirmed server loss).
+    // rows must still participate.
     for (const app of db.getApps()) {
       if (!byApp.has(app.id)) byApp.set(app.id, []);
     }
@@ -184,14 +173,14 @@ async function tick(): Promise<void> {
       if (!app) continue;
 
       if (app.status === "running" || app.status === "unhealthy") {
-        const freshReplicas = list
+        // A replica on a server that is not ready counts as unhealthy: OCD
+        // never reschedules it elsewhere, so the outage must stay visible.
+        const liveReplicas = list
           .map((r) => db.getReplica(r.id))
-          .filter((r): r is NonNullable<typeof r> =>
-            r !== null &&
-            db.getServer(r.server_id)?.status === "ready" &&
-            !HEALTH_EXEMPT_STATUSES.has(r.status)
-          );
-        const allHealthy = freshReplicas.length > 0 && freshReplicas.every((r) => r.status === "running");
+          .filter((r): r is NonNullable<typeof r> => r !== null && !HEALTH_EXEMPT_STATUSES.has(r.status));
+        const allHealthy = liveReplicas.length > 0 &&
+          liveReplicas.every((r) => r.status === "running" && db.getServer(r.server_id)?.status === "ready") &&
+          (!app.placement || db.currentAvailability(app).meetsTarget);
         const newStatus = allHealthy ? "running" : "unhealthy";
         if (newStatus !== app.status) {
           log("status", `app ${appId}: ${app.status} -> ${newStatus}`);
@@ -199,17 +188,9 @@ async function tick(): Promise<void> {
         }
       }
 
-      // Autoscaler runs first (it only writes desired_replicas), then the
-      // convergence loop makes the live replica count match desired — for both
-      // autoscaled and manually-scaled apps. Level-triggered: manual scaling
-      // and the deploy op set desired_replicas and this brings it about.
-      if (app.autoscale_enabled) {
-        try {
-          await evaluateAutoScale(appId);
-        } catch (err) {
-          log("autoscale", `app ${appId}: ${err}`);
-        }
-      }
+      // The convergence loop makes the live replicas match the user-declared
+      // placement. Level-triggered: deploys and `ocd move` write the
+      // placement and this brings it about.
       try {
         await convergeAppReplicas(appId);
       } catch (err) {
@@ -218,44 +199,19 @@ async function tick(): Promise<void> {
     }
 
     // --- Availability SLO sampling (one sample per live app per tick) ---
-    // Record whether each app currently meets its replica-count / host-spread /
-    // location-spread target, feeding uptime% + MTTR. Apps that are
-    // intentionally down (scaled to zero, or sleeping/paused/stopped/waking)
-    // are skipped so scale-to-zero never registers as an outage. Fully guarded
+    // Record whether each app currently runs its declared placement, feeding
+    // uptime% + MTTR. Apps that are intentionally down (paused/stopped) are
+    // skipped so a manual pause never registers as an outage. Fully guarded
     // so a sampling error can never break the reconcile tick.
     try {
-      const serverLocation = new Map(allServers.map((s) => [s.id, s.location]));
       for (const app of db.getApps()) {
-        if (app.desired_replicas === 0) continue;
-        if (
-          app.status === "sleeping" ||
-          app.status === "paused" ||
-          app.status === "stopped" ||
-          app.status === "waking"
-        ) {
-          continue;
-        }
-        const running = db.getReplicas(app.id).filter((r) => r.status === "running");
-        const running_count = running.length;
-        const distinct_hosts = new Set(running.map((r) => r.server_id)).size;
-        const distinct_locations = new Set(
-          running.map((r) => serverLocation.get(r.server_id)).filter(Boolean),
-        ).size;
-        const meets_target = db.computeMeetsTarget({
-          running_count,
-          distinct_hosts,
-          distinct_locations,
-          min_replicas: app.min_replicas,
-          min_locations: app.min_locations,
-          max_per_host: app.max_per_host,
-        });
+        if (app.status === "paused" || app.status === "stopped" || !app.placement) continue;
+        const current = db.currentAvailability(app);
         db.insertAvailabilitySample({
           app_id: app.id,
-          meets_target,
-          desired_count: app.desired_replicas,
-          running_count,
-          distinct_hosts,
-          distinct_locations,
+          meets_target: current.meetsTarget,
+          desired_count: current.desired,
+          running_count: current.running,
         });
       }
     } catch (err) {

@@ -30,49 +30,21 @@ beforeEach(() => {
 });
 
 describe("computeMeetsTarget", () => {
-  // A "healthy" 2-replica app across 2 hosts / 2 locations.
-  const base = {
-    running_count: 2,
-    distinct_hosts: 2,
-    distinct_locations: 2,
-    min_replicas: 2,
-    min_locations: 1,
-    max_per_host: 0,
-  };
+  const running = (entries: Array<[number, number]>) => new Map(entries);
 
-  test("running below the replica floor → false", () => {
-    expect(computeMeetsTarget({ ...base, running_count: 1 })).toBe(false);
+  test("every placed server must run its declared count", () => {
+    const placement = { "5": 1, "15": 1 };
+    expect(computeMeetsTarget({ placement, running_by_server: running([[5, 1], [15, 1]]) })).toBe(true);
+    expect(computeMeetsTarget({ placement, running_by_server: running([[5, 2]]) })).toBe(false);
+    expect(computeMeetsTarget({ placement, running_by_server: running([[5, 1]]) })).toBe(false);
   });
 
-  test("fewer distinct locations than min_locations → false", () => {
-    expect(computeMeetsTarget({ ...base, min_locations: 2, distinct_locations: 1 })).toBe(false);
-    expect(computeMeetsTarget({ ...base, min_locations: 2, distinct_locations: 2 })).toBe(true);
+  test("replicas on unplaced servers do not count toward the target", () => {
+    expect(computeMeetsTarget({ placement: { "5": 2 }, running_by_server: running([[5, 1], [7, 1]]) })).toBe(false);
   });
 
-  test("max_per_host cap requires enough distinct hosts", () => {
-    // 2 replicas, cap 1/host → needs 2 hosts. One host fails, two passes.
-    const capped = { running_count: 2, distinct_locations: 1, min_replicas: 2, min_locations: 1, max_per_host: 1 };
-    expect(computeMeetsTarget({ ...capped, distinct_hosts: 1 })).toBe(false);
-    expect(computeMeetsTarget({ ...capped, distinct_hosts: 2 })).toBe(true);
-  });
-
-  test("max_per_host:0 ignores host spread entirely", () => {
-    expect(
-      computeMeetsTarget({
-        running_count: 3,
-        distinct_hosts: 1,
-        distinct_locations: 1,
-        min_replicas: 1,
-        min_locations: 1,
-        max_per_host: 0,
-      }),
-    ).toBe(true);
-  });
-
-  test("min_replicas:0 is treated as a floor of 1", () => {
-    const spread = { distinct_hosts: 1, distinct_locations: 1, min_replicas: 0, min_locations: 1, max_per_host: 0 };
-    expect(computeMeetsTarget({ ...spread, running_count: 1 })).toBe(true);
-    expect(computeMeetsTarget({ ...spread, running_count: 0 })).toBe(false);
+  test("no declared placement never meets a target", () => {
+    expect(computeMeetsTarget({ placement: {}, running_by_server: running([[5, 1]]) })).toBe(false);
   });
 });
 
@@ -95,8 +67,6 @@ describe("getAvailabilityStats", () => {
         meets_target: meets,
         desired_count: 2,
         running_count: meets ? 2 : 0,
-        distinct_hosts: meets ? 2 : 0,
-        distinct_locations: meets ? 1 : 0,
       });
     sample(true);
     sample(true);
@@ -112,8 +82,8 @@ describe("getAvailabilityStats", () => {
   // to exercise the downtime-run → recovery MTTR math deterministically.
   function insertAt(appId: number, sampledAt: string, meets: 0 | 1) {
     conn.run(
-      "INSERT INTO availability_samples (app_id, meets_target, desired_count, running_count, distinct_hosts, distinct_locations, sampled_at) VALUES (?, ?, 2, ?, ?, ?, ?)",
-      [appId, meets, meets ? 2 : 0, meets ? 2 : 0, meets ? 1 : 0, sampledAt],
+      "INSERT INTO availability_samples (app_id, meets_target, desired_count, running_count, sampled_at) VALUES (?, ?, 2, ?, ?)",
+      [appId, meets, meets ? 2 : 0, sampledAt],
     );
   }
   // Wide window so the crafted 2026-01 timestamps fall inside it regardless of

@@ -15,7 +15,7 @@ import {
   isValidRateLimitRps,
 } from "./manifest-schema.ts";
 import type { DeployManifest } from "./rpc.ts";
-import { resolveDurability } from "./durability.ts";
+import { placementShapeError, volumePlacementError } from "./placement.ts";
 
 // The manifest shape/bounds now live once in ./manifest-schema.ts (the Zod
 // source of truth). Re-export the numeric bounds/predicates here so existing
@@ -448,16 +448,7 @@ export function validateDeployRequest(req: {
   environment_id?: number | null;
   volume_id?: string;
   volume_size?: number;
-  replicas?: number;
-  durability_class?: string;
-  min_replicas?: number;
-  max_replicas?: number;
-  autoscale_enabled?: boolean;
-  autoscale_cpu_threshold?: number;
-  autoscale_mem_threshold?: number;
-  autoscale_req_threshold?: number;
-  autoscale_cooldown?: number;
-  scale_to_zero_after?: number;
+  placement?: Record<string, number>;
   memory_mb?: number;
   cpu_limit?: number;
   public?: boolean;
@@ -542,63 +533,11 @@ export function validateDeployRequest(req: {
     if (!parsed.success) return { valid: false, error: `${label}: ${parsed.error.message}` };
   }
 
-  if (
-    req.replicas !== undefined &&
-    (!Number.isInteger(req.replicas) || req.replicas < 1)
-  ) {
-    return {
-      valid: false,
-      error: "Replicas must be an integer >= 1",
-    };
-  }
-  if (req.min_replicas !== undefined && (!Number.isInteger(req.min_replicas) || req.min_replicas < 0)) {
-    return { valid: false, error: "Minimum replicas must be an integer >= 0" };
-  }
-  if (req.max_replicas !== undefined && (!Number.isInteger(req.max_replicas) || req.max_replicas < 1)) {
-    return { valid: false, error: "Maximum replicas must be an integer >= 1" };
-  }
-  const durability = resolveDurability(req.durability_class, req.replicas);
-  const durabilityFloor = durability.durabilityClass === "none"
-    ? 0
-    : durability.minReplicas;
-  const minimum = Math.max(req.min_replicas ?? 1, durabilityFloor);
-  const desired = Math.max(req.replicas ?? 1, durabilityFloor, minimum);
-  const maximum = Math.max(req.max_replicas ?? 1, minimum, desired);
-  if (
-    req.max_replicas !== undefined &&
-    req.min_replicas !== undefined &&
-    req.max_replicas < req.min_replicas
-  ) {
-    return { valid: false, error: "Maximum replicas must be >= minimum replicas" };
-  }
-  for (const [label, value] of [
-    ["CPU autoscale threshold", req.autoscale_cpu_threshold],
-    ["Memory autoscale threshold", req.autoscale_mem_threshold],
-  ] as const) {
-    if (value !== undefined && (!Number.isInteger(value) || value < 1 || value > 100)) {
-      return { valid: false, error: `${label} must be an integer between 1 and 100` };
-    }
-  }
-  if (
-    req.autoscale_req_threshold !== undefined &&
-    (!Number.isInteger(req.autoscale_req_threshold) || req.autoscale_req_threshold < 0)
-  ) {
-    return { valid: false, error: "Request autoscale threshold must be an integer >= 0" };
-  }
-  if (
-    req.autoscale_cooldown !== undefined &&
-    (!Number.isInteger(req.autoscale_cooldown) || req.autoscale_cooldown < 30)
-  ) {
-    return { valid: false, error: "Autoscale cooldown must be an integer >= 30 seconds" };
-  }
-  if (
-    req.scale_to_zero_after !== undefined &&
-    (!Number.isInteger(req.scale_to_zero_after) || req.scale_to_zero_after < 0)
-  ) {
-    return { valid: false, error: "Scale-to-zero delay must be an integer >= 0" };
-  }
-  if (req.volume_size && (desired > 1 || maximum > 1)) {
-    return { valid: false, error: "Apps with persistent storage cannot have more than 1 replica" };
+  const placementError = placementShapeError(req.placement);
+  if (placementError) return { valid: false, error: placementError };
+  if (req.volume_size) {
+    const volumeError = volumePlacementError(req.placement!);
+    if (volumeError) return { valid: false, error: volumeError };
   }
   if (req.volume_size !== undefined && (!Number.isInteger(req.volume_size) || req.volume_size < 0)) {
     return { valid: false, error: "Volume size must be 0 or a positive integer" };

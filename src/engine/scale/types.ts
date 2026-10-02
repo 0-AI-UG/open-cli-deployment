@@ -16,7 +16,7 @@ export function log(context: string, ...args: any[]) {
 
 /**
  * Shared `startAppReplica` options for the FORWARD-create paths (scale-up,
- * wake, rolling redeploy, health recreate) that source everything from the
+ * rolling redeploy, health recreate) that source everything from the
  * live app row. Snapshot/compensation paths (rollback, redeploy) source from a
  * captured snapshot instead and build their own options. Pass one of
  * `envFilePath` (pre-existing file) or `envVars` (rewritten from the DB).

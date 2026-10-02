@@ -18,6 +18,7 @@ import { StorageBindingsSchema } from "./storage-schema.ts";
  * Zod issues onto field-level "expected … got …" messages.
  */
 import { z } from "zod";
+import { volumePlacementError } from "./placement.ts";
 
 // --- numeric bounds + predicates (formerly in ./validate.ts) ----------------
 
@@ -181,46 +182,6 @@ const volumeSchema = z.object(
   { error: "expected object { size, id?, path? }" },
 );
 
-const autoscalingSchema = z.object({
-  enabled: z.boolean({ error: "expected boolean" }).optional(),
-  min_replicas: guardedNumber(
-    "expected non-negative integer",
-    (v) => Number.isInteger(v) && v >= 0,
-  ).optional(),
-  max_replicas: guardedNumber(
-    "expected positive integer",
-    (v) => Number.isInteger(v) && v >= 1,
-  ).optional(),
-  cpu_threshold: guardedNumber(
-    "expected integer 1-100",
-    (v) => Number.isInteger(v) && v >= 1 && v <= 100,
-  ).optional(),
-  memory_threshold: guardedNumber(
-    "expected integer 1-100",
-    (v) => Number.isInteger(v) && v >= 1 && v <= 100,
-  ).optional(),
-  requests_per_minute: guardedNumber(
-    "expected non-negative integer",
-    (v) => Number.isInteger(v) && v >= 0,
-  ).optional(),
-  cooldown_seconds: guardedNumber(
-    "expected integer >= 30",
-    (v) => Number.isInteger(v) && v >= 30,
-  ).optional(),
-}, { error: "expected autoscaling object" }).strict().superRefine((value, ctx) => {
-  if (
-    value.min_replicas !== undefined &&
-    value.max_replicas !== undefined &&
-    value.max_replicas < value.min_replicas
-  ) {
-    ctx.addIssue({
-      code: "custom",
-      message: "must be greater than or equal to min_replicas",
-      path: ["max_replicas"],
-    });
-  }
-});
-
 /** Extra host→container bind mount. */
 const extraVolumeSchema = z.object(
   {
@@ -302,6 +263,13 @@ const authSchema = z.object(
   { error: "expected object { enabled, password_env? }" },
 ).strict();
 
+/** Explicit per-server placement: server name or numeric id -> replica count. */
+const placementSchema = z.record(
+  nonEmptyString("expected a server name"),
+  guardedNumber("expected positive integer replica count", (v) => Number.isInteger(v) && v >= 1),
+  { error: 'expected object { "<server name>": <replicas>, ... }' },
+).refine((value) => Object.keys(value).length > 0, { error: "expected at least one server" });
+
 export const DeployManifestSchema = z
   .object({
     $schema: z.literal(1, { error: "expected 1" }).optional(),
@@ -337,11 +305,8 @@ export const DeployManifestSchema = z
     /** Custom public domain. */
     domain: z.string({ error: "expected string" }).optional(),
     auth: authSchema.optional(),
-    replicas: guardedNumber(
-      "expected positive integer",
-      (v) => Number.isInteger(v) && v >= 1,
-    ).optional(),
-    autoscaling: autoscalingSchema.optional(),
+    /** Required explicit placement: server name (or numeric id) -> replica count. */
+    placement: placementSchema,
     public: z.boolean({ error: "expected boolean" }).optional(),
     extra_volumes: z
       .array(extraVolumeSchema, {
@@ -394,18 +359,6 @@ export const DeployManifestSchema = z
       .optional(),
     /** Pool for public_port (default "tcp"). */
     public_protocol: z.enum(["tcp", "udp"], { error: 'expected "tcp" | "udp"' }).optional(),
-    /** Availability/durability policy: 'none' (default), 'standard', or 'high'.
-     *  Maps to concrete placement-spread + min-replica floors at deploy time. */
-    durability_class: z
-      .enum(["none", "standard", "high"], { error: 'expected "none" | "standard" | "high"' })
-      .optional(),
-    /** Placement pool used by the scheduler. */
-    placement_pool: nonEmptyString("expected a non-empty string").optional(),
-    /** Idle seconds before a deploy target may scale to zero. 0 means no delay. */
-    scale_to_zero_after: guardedNumber(
-      "expected non-negative integer",
-      (v) => Number.isInteger(v) && v >= 0,
-    ).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -416,16 +369,9 @@ export const DeployManifestSchema = z
         path: value.build ? ["image"] : ["build"],
       });
     }
-    if (
-      value.autoscaling?.max_replicas !== undefined &&
-      value.replicas !== undefined &&
-      value.autoscaling.max_replicas < value.replicas
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "must be greater than or equal to replicas",
-        path: ["autoscaling", "max_replicas"],
-      });
+    if (value.volume && value.placement) {
+      const error = volumePlacementError(value.placement);
+      if (error) ctx.addIssue({ code: "custom", message: error, path: ["placement"] });
     }
   });
 
@@ -444,7 +390,9 @@ const stackAppSchema = z
       .optional(),
     domain: z.string({ error: "expected string" }).optional(),
     public: z.boolean({ error: "expected boolean" }).optional(),
-  }, { error: "expected object { manifest, needs?, domain?, public? }" })
+    /** Replaces the child manifest's placement for this stack member. */
+    placement: placementSchema.optional(),
+  }, { error: "expected object { manifest, needs?, domain?, public?, placement? }" })
   .strict();
 
 export const StackManifestSchema = z

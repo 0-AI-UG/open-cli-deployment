@@ -7,7 +7,6 @@ import { parseConfig, watchConfig, PROXY_LISTEN_PORT, type ProxyConfig } from ".
 import { createListenerSet } from "./listeners.ts";
 import { applyNatRuleset, renderNatRuleset } from "./nat.ts";
 import { startStatusServer } from "./status.ts";
-import { httpWake, type WakeFn } from "./wake.ts";
 
 // Injected at compile time via `bun build --define OCD_PROXY_VERSION=...`;
 // absent under `bun run` (dev), so `typeof` keeps the reference safe.
@@ -19,13 +18,6 @@ export const VERSION: string = typeof OCD_PROXY_VERSION !== "undefined" ? OCD_PR
 // config never changes, so a transiently failed VIP bind or `nft -f` recovers
 // without waiting for the next config write. Injectable for tests.
 export const RECONCILE_INTERVAL_MS = 60_000;
-
-function makeWake(config: ProxyConfig): WakeFn {
-  if (config.wakeUrl) return httpWake(config.wakeUrl, config.wakeSecret);
-  return async (app) => {
-    throw new Error(`no wakeUrl configured — cannot wake app ${app.appId}`);
-  };
-}
 
 export async function runProxy(
   argv: string[],
@@ -44,10 +36,7 @@ export async function runProxy(
 
   const configText = await Bun.file(configPath).text();
   let config = parseConfig(configText);
-  let wakeImpl = makeWake(config);
-  // Stable WakeFn wrapper so listeners survive wakeUrl/secret changes on reload.
-  const wake: WakeFn = (app) => wakeImpl(app);
-  const listeners = createListenerSet(wake);
+  const listeners = createListenerSet();
 
   // Last successfully applied nft ruleset: re-apply only when the render
   // changes. Assigned only on success — a failed apply leaves it stale, so the
@@ -74,7 +63,7 @@ export async function runProxy(
   await syncNat(config);
   console.log(`[proxy] ocd-proxy ${VERSION} up — ${config.apps.length} apps (${listeners.size()} listeners bound)`);
 
-  // Loopback status endpoint for the panel's readiness/idle scraping. A bind
+  // Loopback status endpoint for the panel's readiness scraping. A bind
   // failure (port taken) degrades observability only — never fatal.
   let status: { port: number; stop(): void } | null = null;
   try {
@@ -91,7 +80,6 @@ export async function runProxy(
   const stopWatch = watchConfig(
     configPath,
     (next) => {
-      if (next.wakeUrl !== config.wakeUrl || next.wakeSecret !== config.wakeSecret) wakeImpl = makeWake(next);
       config = next;
       void listeners
         .reconcile(next)

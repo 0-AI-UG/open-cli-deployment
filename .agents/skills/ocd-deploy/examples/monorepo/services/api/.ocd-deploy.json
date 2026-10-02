@@ -23,6 +23,7 @@
       "from": "apps.redis.outputs.URL"
     }
   },
+  "placement": { "server-2": 1 },
   "volume": null,
   "health_check": {
     "path": "/health"

@@ -61,14 +61,14 @@ const PERMISSION_GROUPS: Array<{ label: string; permissions: Array<{ key: string
   {
     label: "Scaling",
     permissions: [
-      { key: "scaling.migrate", label: "Migrate replicas between servers" },
+      { key: "scaling.migrate", label: "Move apps between servers" },
     ],
   },
   {
     label: "Servers",
     permissions: [
       { key: "servers.create", label: "Create servers" },
-      { key: "servers.manage", label: "Manage servers and pool assignment" },
+      { key: "servers.manage", label: "Manage servers and build workers" },
       { key: "servers.delete", label: "Delete servers" },
     ],
   },

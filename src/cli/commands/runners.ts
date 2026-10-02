@@ -154,7 +154,7 @@ ${BOLD}Commands:${RESET}
       removal token is needed only when converting an existing Actions runner.
 
   remove <name|id>
-      Remove the worker and restore its server's previous capacity pool.
+      Remove the worker and release its server for app placement.
 
   deploy <source-id|repository-url> --commit=<sha>
       Build changed inputs and reconcile all repository stacks as one durable release.
@@ -166,7 +166,7 @@ ${BOLD}Commands:${RESET}
       Rotate and show a GitHub webhook URL and HMAC secret once.
 
   bootstrap
-      Reuse an empty server or provision and install dedicated build capacity.
+      Reserve an empty server as dedicated build capacity.
 
 ${DIM}The worker checks out the exact push SHA, uses BuildKit to push an immutable
 digest, then OCD reconciles the committed manifest or stack.${RESET}`);

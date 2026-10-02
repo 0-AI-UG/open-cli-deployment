@@ -34,7 +34,6 @@ export async function doctor(args: string[]): Promise<void> {
   const buildDelivery = !!repository;
   console.log(`\n${BOLD}Deploy readiness${RESET}`);
   console.log(`${icon(result.hetzner.status)} Hetzner        ${result.hetzner.configured ? "connected" : "not connected"}`);
-  console.log(`${icon(result.defaults.status)} Defaults       ${result.defaults.server_type && result.defaults.location ? `${result.defaults.server_type} / ${result.defaults.location}` : "not configured"}`);
   console.log(`${icon(result.worker.status)} Build worker   ${buildDelivery ? `${result.worker.online} online, ${result.worker.total} registered` : "not required for prebuilt images"}`);
   console.log(`${icon(result.registry.status)} Registry       ${result.registry.configured ? `${result.registry.scope} as ${result.registry.username}` : buildDelivery ? "not connected" : "anonymous pull unless the image is private"}`);
   console.log(`${icon(result.source.status)} Source access  ${buildDelivery ? (result.source.configured ? result.source.host : `${result.source.host} (public repositories only)`) : "not required for prebuilt images"}`);

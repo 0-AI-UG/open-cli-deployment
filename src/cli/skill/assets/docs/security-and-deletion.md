@@ -41,7 +41,7 @@ Stack/environment:
 
 Scaling/infrastructure:
 
-- `scaling.migrate`;
+- `scaling.migrate` (`ocd move`);
 - `servers.create`, `servers.manage`, `servers.delete`;
 - `volumes.delete`, `volumes.files.read`;
 - `resources.view`, `resources.delete`;

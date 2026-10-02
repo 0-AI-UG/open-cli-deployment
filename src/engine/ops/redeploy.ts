@@ -15,7 +15,6 @@ import {
   resolveAppEnvVars,
 } from "../../shared/env-crypto.ts";
 import { rollingRedeploy } from "../scale/index.ts";
-import { wakeApp } from "../scale/wake.ts";
 import { syncAppIngress } from "../scale/traefik-manager.ts";
 import { replicaBindHost } from "../scale/types.ts";
 import { registerOp } from "./registry.ts";
@@ -47,7 +46,6 @@ type RedeployInput = {
   allowUnchangedLegacyVolumeIntent?: boolean;
 };
 
-type WakeOut = { woke: boolean };
 type SetDeployingOut = { previousStatus: string };
 // Everything needed to re-run the previous immutable artifact if the candidate
 // fails its health check.
@@ -118,19 +116,6 @@ async function candidateEnvVars(app: AppRow, candidate: DeployRequest | null, ct
   const platform = platformEnvVars(effectiveApp);
   return { ...platform, ...values, ...await appStorageEnv(app.id, bindings), ...await appNtfyEnv(app.id, notifications), OCD_DEPLOY_TARGET: platform.OCD_DEPLOY_TARGET };
 }
-
-const wakeIfSleeping: Step<RedeployInput, WakeOut> = {
-  name: "wake_if_sleeping",
-  label: "Wake app",
-  async run(ctx) {
-    const app = db.getApp(ctx.input.appId);
-    if (!app) throw new Error("App not found");
-    if (app.status !== "sleeping") return { woke: false };
-    const result = await wakeApp(ctx.input.appId);
-    if (!result.ok) throw new Error(`Failed to wake sleeping app: ${result.error}`);
-    return { woke: true };
-  },
-};
 
 const setDeploying: Step<RedeployInput, SetDeployingOut> = {
   name: "set_deploying",
@@ -581,7 +566,6 @@ const redeployOp: OpKindDefinition<RedeployInput> = {
         return { valid: true };
       },
     },
-    wakeIfSleeping,
     preflightRegistryPull,
     snapshotCurrentRevision,
     setDeploying,

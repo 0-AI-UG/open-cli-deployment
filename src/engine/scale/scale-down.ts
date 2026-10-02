@@ -1,45 +1,28 @@
 import * as db from "../../shared/db.ts";
-import {
-  sshExec,
-  stopContainer,
-} from "../../shared/remote/index.ts";
-import { pushProxyForApp } from "./proxy-manager.ts";
+import { sshExec } from "../../shared/remote/index.ts";
 import { syncAppIngress } from "./traefik-manager.ts";
 import { type ProgressFn, log, type App, type Replica } from "./types.ts";
 
-export async function scaleDown(
+/** Drain and remove exactly the given replicas. Never touches the app's
+ * declared placement: a failed removal is retried by the next convergence
+ * pass instead of redefining what the user asked for. */
+export async function removeReplicas(
   app: App,
-  currentReplicas: Replica[],
-  currentCount: number,
-  targetCount: number,
-  emit: ProgressFn
+  toRemove: Replica[],
+  emit: ProgressFn,
 ) {
-  // Sort: prefer unhealthy first, then newest
-  const sorted = [...currentReplicas].sort((a, b) => {
-    if (a.status !== "running" && b.status === "running") return -1;
-    if (a.status === "running" && b.status !== "running") return 1;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
-
-  const toRemove = sorted.slice(0, currentCount - targetCount);
-
-  // When scaling to zero, the *last* replica in `toRemove` is kept on disk as
-  // the "sleeping anchor": container stopped (not removed), replica row
-  // preserved with status = "stopped". This makes wake a single `docker start`
-  // (~1s) instead of a fresh `docker run` (~several seconds). All other
-  // replicas going away are genuinely removed.
-  const goingToZero = targetCount === 0;
-  const anchorIdx = goingToZero ? toRemove.length - 1 : -1;
-
   let removedCount = 0;
-  for (let i = 0; i < toRemove.length; i++) {
-    const replica = toRemove[i];
-    const preserveAsAnchor = i === anchorIdx;
+  for (const replica of toRemove) {
     try {
       emit("scale", `Draining replica ${replica.container_name}...`);
 
       const server = db.getServer(replica.server_id);
-      if (!server) continue;
+      if (!server) {
+        // The server row itself is gone, so no container can remain.
+        db.deleteReplica(replica.id);
+        removedCount++;
+        continue;
+      }
       const hostKey = server.ssh_host_key || undefined;
 
       // Drop the replica from the ingress upstream pool first so in-flight
@@ -56,24 +39,10 @@ export async function scaleDown(
 
       const asUser = (cmd: string) => `su - deploy -c ${JSON.stringify(cmd)}`;
 
-      if (preserveAsAnchor) {
-        // Stop-but-preserve path (light sleep). Keep the container, env file,
-        // and volume mount on disk so wake is `docker start`.
-        try {
-          await stopContainer(server.ipv4, replica.container_name, hostKey);
-        } catch (err) {
-          log("scale", `Failed to stop container ${replica.container_name}: ${err}`);
-          throw err;
-        }
-        db.markReplicaStopped(replica.id);
-        emit("scale", `Replica ${replica.container_name} stopped (anchor for sleep)`);
-      } else {
-        // Stop-and-remove path (actual scale-down, not sleep).
-        await sshExec(server.ipv4, asUser(`docker rm -f ${replica.container_name} 2>/dev/null || true`), hostKey);
+      await sshExec(server.ipv4, asUser(`docker rm -f ${replica.container_name} 2>/dev/null || true`), hostKey);
 
-        db.deleteReplica(replica.id);
-        emit("scale", `Replica ${replica.container_name} removed`);
-      }
+      db.deleteReplica(replica.id);
+      emit("scale", `Replica ${replica.container_name} removed`);
       removedCount++;
     } catch (err) {
       log("scale", `Failed to remove replica ${replica.container_name}: ${err}`);
@@ -83,41 +52,24 @@ export async function scaleDown(
   }
 
   if (removedCount < toRemove.length) {
-    const actualCount = currentCount - removedCount;
-    db.updateAppScaling(app.id, { desired_replicas: actualCount });
-    throw new Error(`Scale-down incomplete — only removed ${removedCount} of ${toRemove.length} replicas. Some servers may need manual cleanup.`);
+    throw new Error(`Replica removal incomplete — removed ${removedCount} of ${toRemove.length}; the next convergence pass retries.`);
   }
 
-  // If going to 0, record the sleeping state and re-render ingress: the
-  // desired-state renderers point the app's public router at the panel waker
-  // and mark it sleeping in the proxy config, so any connection — browser or
-  // internal caller — transparently wakes the app and is held-and-forwarded.
-  if (targetCount === 0) {
-    const lastRemoved = toRemove[toRemove.length - 1];
-    const lastServer = db.getServer(lastRemoved.server_id);
-    if (lastServer) {
-      db.updateAppSleepingState(app.id, lastServer.id, lastRemoved.host_port);
-    }
-    db.updateAppStatus(app.id, "sleeping");
-    try {
-      await syncAppIngress(app.id);
-    } catch (err) {
-      log("scale", `Ingress sync after sleep failed: ${err}`);
-    }
-    // Push the re-rendered fleet-proxy config to the app's servers NOW (not
-    // at the next 30s reconciler tick): the proxy must mark the VIP sleeping
-    // — wake-on-connect — instead of routing to the stopped anchor.
-    // Best-effort; pushProxyForApp never throws.
-    await pushProxyForApp(app.id);
-    emit("scale", "App scaled to zero — sleeping");
-  } else {
-    // Re-render ingress so the upstream pool matches what's left after the
-    // scale-down. The draining-phase sync above already removed the
-    // draining replicas; this second sync is belt-and-braces.
-    try {
-      await syncAppIngress(app.id);
-    } catch (err) {
-      log("scale", `Ingress sync after scale-down failed: ${err}`);
-    }
+  // Re-render ingress so the upstream pool matches what's left. The
+  // draining-phase sync above already removed the draining replicas; this
+  // second sync is belt-and-braces.
+  try {
+    await syncAppIngress(app.id);
+  } catch (err) {
+    log("scale", `Ingress sync after replica removal failed: ${err}`);
   }
+}
+
+/** Removal order within one server: unhealthy replicas first, then newest. */
+export function removalOrder(replicas: Replica[]): Replica[] {
+  return [...replicas].sort((a, b) => {
+    if (a.status !== "running" && b.status === "running") return -1;
+    if (a.status === "running" && b.status !== "running") return 1;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 }

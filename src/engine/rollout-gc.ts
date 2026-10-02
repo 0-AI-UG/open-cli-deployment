@@ -29,7 +29,7 @@ function rolloutServers(appNames: string[]): Server[] {
 async function cleanServer(server: Server, log: (message: string) => void, dependencies: Dependencies): Promise<void> {
   const result = await dependencies.collect(server.ipv4, server.ssh_host_key || undefined, {
     ...serverGcProtections(server.id),
-    buildCacheKeepStorage: server.pool === "build-workers" ? "4GB" : "1GB",
+    buildCacheKeepStorage: db.getBuildWorkerByServerId(server.id) ? "4GB" : "1GB",
   });
   log(`Docker cleanup on ${server.name}: freed ${(result.reclaimed_bytes / 1024 ** 3).toFixed(1)} GiB`);
 }

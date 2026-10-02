@@ -201,18 +201,12 @@ function clientVisibleConfigDiff(existing: Record<string, unknown>, desired: App
     compress: desired.compress ?? false,
     public_port: desired.public_port ?? null,
     public_protocol: desired.public_protocol ?? "tcp",
-    placement_pool: desired.placement_pool ?? "general",
-    scale_to_zero_after: desired.scale_to_zero_after ?? 0,
-    desired_replicas: desired.replicas ?? 1,
-    min_replicas: desired.min_replicas ?? 1,
-    max_replicas: desired.max_replicas ?? Math.max(desired.replicas ?? 1, desired.min_replicas ?? 1),
-    autoscale_enabled: desired.autoscale_enabled ?? false,
     desired_volume_id: desired.volume_id ?? "",
     desired_volume_size: desired.volume_size ?? 0,
     desired_volume_path: desired.volume_path ?? "/data",
   };
   const booleanFields = new Set([
-    "public", "sticky", "compress", "autoscale_enabled",
+    "public", "sticky", "compress",
   ]);
   const changed: string[] = [];
   for (const [field, wanted] of Object.entries(desiredValues)) {

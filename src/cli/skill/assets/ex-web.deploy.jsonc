@@ -17,6 +17,7 @@
       "from": "apps.api.outputs.URL"
     }
   },
+  "placement": { "server-2": 1, "sight-capacity-1": 1 },
   "volume": null,
   "suggested_app_name": "blog-web",
   "compress": true

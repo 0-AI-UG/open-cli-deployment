@@ -24,15 +24,6 @@ if (RUN) mock.module("../shared/hetzner/index.ts", () => ({
   hetzner: compute,
 }));
 
-// provisionServer is only called when no ready server exists; stub it.
-const provisionServer = mock(async (opts: { name: string }) => ({
-  id: 12345,
-  provider_id: `h-${opts.name}`,
-  ipv4: "5.5.5.5",
-  ssh_host_key: "",
-}));
-if (RUN) mock.module("./provision-server.ts", () => ({ provisionServer }));
-
 // Track the simulated docker world: containers and dirs that "exist" on the host.
 type FakeWorld = {
   containers: Set<string>;
@@ -138,6 +129,8 @@ const baseDeployReq = (name: string) => ({
   image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   container_port: 3000,
   domain: "",
+  // Placement is explicit: every case seeds one ready server first.
+  placement: { [String(db.getServers().find((server) => server.status === "ready")?.id ?? 0)]: 1 },
 });
 
 beforeEach(() => {
@@ -148,7 +141,6 @@ beforeEach(() => {
     if (typeof m === "function" && "mockClear" in (m as any)) (m as any).mockClear();
   }
   for (const m of Object.values(compute._mocks)) m.mockClear();
-  provisionServer.mockClear();
 });
 
 // ---- 1. Full deploy lifecycle ----------------------------------------------
@@ -234,7 +226,7 @@ d("deploy: probe adopts orphaned side effect on resume", () => {
       unpark: () => {},
     } as any;
     const prior = {
-      pick_or_provision_server: { serverId: server.id, serverIp: server.ipv4, serverHostKey: "", provisioned: false, ingressIp: server.ipv4 },
+      resolve_placement: { serverId: server.id, serverIp: server.ipv4, serverHostKey: "", ingressIp: server.ipv4, placement: { [String(server.id)]: 1 } },
     };
     const adopted = await step.probe!(ctx, prior);
 

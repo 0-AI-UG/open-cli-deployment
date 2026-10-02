@@ -12,7 +12,6 @@ function app(over: Partial<ProxyApp>): ProxyApp {
     vip: "10.96.0.14",
     frontPorts: [80],
     backends: [],
-    sleeping: false,
     ...over,
   };
 }
@@ -67,12 +66,12 @@ describe("renderNatRuleset", () => {
     expect(out.indexOf("10.96.0.10")).toBeLessThan(out.indexOf("10.96.0.2"));
   });
 
-  test("render depends only on vip and frontPorts — backend/sleeping/name churn keeps the skip-compare stable", () => {
+  test("render depends only on vip and frontPorts — backend/name churn keeps the skip-compare stable", () => {
     // main.ts skips `nft -f` when the render is string-identical; backend pool
-    // churn and sleeping flips must not defeat that skip.
-    const before = renderNatRuleset([app({ backends: [], sleeping: true, name: "web" })]);
+    // churn and renames must not defeat that skip.
+    const before = renderNatRuleset([app({ backends: [], name: "web" })]);
     const after = renderNatRuleset([
-      app({ backends: ["10.0.0.9:12345", "10.0.0.10:12345"], sleeping: false, name: "renamed" }),
+      app({ backends: ["10.0.0.9:12345", "10.0.0.10:12345"], name: "renamed" }),
     ]);
     expect(after).toBe(before);
   });

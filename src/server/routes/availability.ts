@@ -24,20 +24,7 @@ export async function handleGetAvailability(request: Request, appId: number): Pr
     const stats = db.getAvailabilityStats(appId, windowSec);
 
     // Live "current" snapshot — same computation as the reconciler sample.
-    const running = db.getReplicas(appId).filter((r) => r.status === "running");
-    const running_count = running.length;
-    const distinct_hosts = new Set(running.map((r) => r.server_id)).size;
-    const distinct_locations = new Set(
-      running.map((r) => db.getServer(r.server_id)?.location).filter(Boolean),
-    ).size;
-    const meetsTarget = db.computeMeetsTarget({
-      running_count,
-      distinct_hosts,
-      distinct_locations,
-      min_replicas: app.min_replicas,
-      min_locations: app.min_locations,
-      max_per_host: app.max_per_host,
-    });
+    const current = db.currentAvailability(app);
 
     return Response.json(
       {
@@ -45,13 +32,7 @@ export async function handleGetAvailability(request: Request, appId: number): Pr
         mttrSeconds: stats.mttrSeconds,
         sampleCount: stats.sampleCount,
         lastMeetsTarget: stats.lastMeetsTarget,
-        current: {
-          desired: app.desired_replicas,
-          running: running_count,
-          distinctHosts: distinct_hosts,
-          distinctLocations: distinct_locations,
-          meetsTarget,
-        },
+        current,
       },
       { headers: corsHeaders },
     );

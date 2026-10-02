@@ -1,3 +1,4 @@
+import { parsePlacement, placementTotal } from "../../shared/placement.ts";
 import * as db from "../../shared/db.ts";
 import {
   enqueueOperation,
@@ -281,11 +282,15 @@ export async function stackAppAlreadyConverged(
   if (!desiredSourceRevision) return { converged: false, reason: "source revision was not preflighted" };
   if (app.status !== "running") return { converged: false, reason: `status is ${app.status}` };
   if (app.environment_stale) return { converged: false, reason: "linked environment is stale" };
+  const placement = parsePlacement(app.placement);
   const replicas = db.getReplicas(app.id);
-  if (replicas.length !== app.desired_replicas) {
+  const mismatched = Object.entries(placement).find(([serverId, count]) =>
+    replicas.filter((replica) => replica.server_id === Number(serverId)).length !== count
+  );
+  if (Object.keys(placement).length === 0 || mismatched || replicas.length !== placementTotal(placement)) {
     return {
       converged: false,
-      reason: `replicas ${replicas.length}/${app.desired_replicas}`,
+      reason: `replicas ${replicas.length}/${placementTotal(placement)} do not match placement`,
     };
   }
   const deployment = db.getDeployments(app.id).find((row) => row.status === "deployed");
@@ -422,7 +427,6 @@ const deployApps: Step<DeployStackInput, { ok: true }> = {
               environment_id: stackMemberEnvironmentId(appReq, environmentId),
               stack_id: stackId,
               stack_manifest_path: req.stack_manifest_path ?? null,
-              server_provisioning_approved: req.server_provisioning_approved === true,
             },
             trigger: "stack",
             triggeredBy: ctx.triggeredBy,

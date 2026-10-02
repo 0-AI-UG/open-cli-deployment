@@ -6,15 +6,6 @@ import { describe, test, expect, mock, beforeEach } from "bun:test";
 const compute = makeFakeComputeProvider();
 mock.module("../../shared/hetzner/index.ts", () => ({ hetzner: compute }));
 
-// provisionServer is only called when no ready server exists. Stub it.
-const provisionServer = mock(async (opts: { name: string }) => ({
-  id: 12345,
-  provider_id: `h-${opts.name}`,
-  ipv4: "5.5.5.5",
-  ssh_host_key: "",
-}));
-mock.module("../provision-server.ts", () => ({ provisionServer }));
-
 // Stub all remote + ingress + github + other deep deps so deploy.ts at least
 // imports cleanly even though we're only exercising selected steps.
 const healthCheckMock = mock(async () => ({ healthy: true, statusCode: 200 }));
@@ -111,7 +102,6 @@ async function primeAttestation(app: db.AppRow): Promise<void> {
 
 beforeEach(() => {
   dockerFreeBytes = 20 * 1024 ** 3;
-  provisionServer.mockClear();
   compute._mocks.volumeCreate.mockClear();
   compute._mocks.volumeDelete.mockClear();
   compute.volumes.list = async () => [];
@@ -131,8 +121,17 @@ const baseReq = (name: string) => ({
   domain: "example.com",
 });
 
-describe("deploy step: pick_or_provision_server", () => {
-  const step = stepByName("pick_or_provision_server");
+describe("deploy step: resolve_placement", () => {
+  const step = stepByName("resolve_placement");
+  const server = (status = "ready", ipv4 = "9.9.9.9") => db.insertServer({
+    name: `srv-${randomSuffix()}`,
+    provider_id: `h-${randomSuffix()}`,
+    ipv4,
+    ipv6: "",
+    type: "cx22",
+    location: "fsn1",
+    status,
+  });
 
   test("rejects a duplicate app name", async () => {
     const name = `dup-${randomSuffix()}`;
@@ -143,88 +142,59 @@ describe("deploy step: pick_or_provision_server", () => {
       container_port: 3000,
       env_vars: "{}",
     });
-    const { ctx } = makeCtx(baseReq(name));
+    const { ctx } = makeCtx({ ...baseReq(name), placement: { [server().name]: 1 } });
     expect(step.run(ctx, {})).rejects.toThrow(/already exists/i);
   });
 
   test("propagates validation error from validateDeployRequest", async () => {
-    const { ctx } = makeCtx({ ...baseReq("valid"), app_name: "Bad Name" });
+    const { ctx } = makeCtx({ ...baseReq("valid"), app_name: "Bad Name", placement: { [server().name]: 1 } });
     expect(step.run(ctx, {})).rejects.toThrow();
   });
 
-  test("reuses an existing ready server when no server_id is specified", async () => {
-    for (const s of db.getServers()) db.deleteServer(s.id);
-    const existing = db.insertServer({
-      name: `srv-${randomSuffix()}`,
-      provider_id: `h-${randomSuffix()}`,
-      ipv4: "9.9.9.9",
-      ipv6: "",
-      type: "cx22",
-      location: "fsn1",
-      status: "ready",
-    });
+  test("resolves server names and ids to the declared placement", async () => {
+    const first = server("ready", "9.9.9.1");
+    const second = server("ready", "9.9.9.2");
+    const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), placement: { [second.name]: 2, [String(first.id)]: 1 } });
+    const out = (await step.run(ctx, {})) as { serverId: number; serverIp: string; placement: Record<string, number> };
+    expect(out.placement).toEqual({ [String(first.id)]: 1, [String(second.id)]: 2 });
+    expect(out.serverId).toBe(first.id);
+    expect(out.serverIp).toBe("9.9.9.1");
+  });
+
+  test("requires a placement", async () => {
+    server();
     const { ctx } = makeCtx(baseReq(`app-${randomSuffix()}`));
-    const out = (await step.run(ctx, {})) as { serverId: number; serverIp: string; provisioned: boolean };
-    expect(out.serverId).toBe(existing.id);
-    expect(out.serverIp).toBe("9.9.9.9");
-    expect(out.provisioned).toBe(false);
-    expect(provisionServer).not.toHaveBeenCalled();
+    expect(step.run(ctx, {})).rejects.toThrow(/Placement/);
   });
 
-  test("rejects an invalid server_id target", async () => {
-    const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), server_id: 987654 });
-    expect(step.run(ctx, {})).rejects.toThrow(/not found|not ready/i);
+  test("fails on an unknown server instead of picking another", async () => {
+    server();
+    const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), placement: { "no-such-server": 1 } });
+    expect(step.run(ctx, {})).rejects.toThrow(/does not exist/);
   });
 
-  test("rejects a server_id target that is not status=ready", async () => {
-    const notReady = db.insertServer({
-      name: `srv-${randomSuffix()}`,
-      provider_id: `h-${randomSuffix()}`,
-      ipv4: "1.1.1.1",
-      ipv6: "",
-      type: "cx22",
-      location: "fsn1",
-      status: "provisioning",
-    });
-    const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), server_id: notReady.id });
-    expect(step.run(ctx, {})).rejects.toThrow(/not found|not ready/i);
+  test("fails on a server that is not ready", async () => {
+    const notReady = server("provisioning");
+    server();
+    const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), placement: { [notReady.name]: 1 } });
+    expect(step.run(ctx, {})).rejects.toThrow(/not ready/);
+  });
+
+  test("fails on a dedicated build-worker server", async () => {
+    const builder = server();
+    db.insertBuildWorker({ serverId: builder.id, name: `builder-${randomSuffix()}` });
+    const { ctx } = makeCtx({ ...baseReq(`app-${randomSuffix()}`), placement: { [builder.name]: 1 } });
+    expect(step.run(ctx, {})).rejects.toThrow(/build worker/);
   });
 
   test("rejects a ready host with insufficient Docker space before creating app state", async () => {
-    const target = db.insertServer({
-      name: `srv-${randomSuffix()}`, provider_id: `h-${randomSuffix()}`,
-      ipv4: "9.9.9.8", ipv6: "", type: "cx22", location: "fsn1", status: "ready",
-    });
+    const target = server("ready", "9.9.9.8");
     dockerFreeBytes = 4 * 1024 ** 3;
     const name = `app-${randomSuffix()}`;
-    const { ctx } = makeCtx({ ...baseReq(name), server_id: target.id });
+    const { ctx } = makeCtx({ ...baseReq(name), placement: { [target.name]: 1 } });
     expect(step.run(ctx, {})).rejects.toThrow(/Insufficient Docker disk space/);
     expect(db.getAppByName(name)).toBeNull();
-    db.deleteServer(target.id);
   });
-
-  test("provisions a new server when none exist and settings are valid", async () => {
-    // Clear all existing servers first.
-    const srvs = db.getServers();
-    for (const s of srvs) db.deleteServer(s.id);
-    db.saveSetting("default_server_type", "cx22");
-    db.saveSetting("default_location", "fsn1");
-
-    const { ctx } = makeCtx(baseReq(`app-${randomSuffix()}`));
-    const out = (await step.run(ctx, {})) as { provisioned: boolean; serverIp: string };
-    expect(provisionServer).toHaveBeenCalledTimes(1);
-    expect(out.provisioned).toBe(true);
-    expect(out.serverIp).toBe("5.5.5.5");
-  });
-
-  test("requires default_server_type before provisioning", async () => {
-    const srvs = db.getServers();
-    for (const s of srvs) db.deleteServer(s.id);
-    db.saveSetting("default_server_type", "");
-    const { ctx } = makeCtx(baseReq(`app-${randomSuffix()}`));
-    expect(step.run(ctx, {})).rejects.toThrow(/server type/i);
-  });
-
 });
 
 describe("deploy step: create_volume", () => {
@@ -242,12 +212,10 @@ describe("deploy step: create_volume", () => {
   test("returns null when volume_size is missing or zero", async () => {
     const { ctx } = makeCtx(baseReq("x"));
     const prior = {
-      pick_or_provision_server: {
+      resolve_placement: {
         serverId: 1,
         serverIp: "1.1.1.1",
         serverHostKey: "",
-        provisioned: false,
-        providerServerId: "h-xyz",
         ingressIp: "1.1.1.1",
       },
     };
@@ -261,17 +229,14 @@ describe("deploy step: create_volume", () => {
   });
 
   test("creates a volume and returns its providerId + mount path", async () => {
-    db.saveSetting("default_location", "fsn1");
     const server = managedServer("h-new");
     const req = { ...baseReq(`vol-${randomSuffix()}`), volume_size: 25, volume_path: "/var/lib/data" };
     const { ctx } = makeCtx(req);
     const prior = {
-      pick_or_provision_server: {
+      resolve_placement: {
         serverId: server.id,
         serverIp: "1.1.1.1",
         serverHostKey: "",
-        provisioned: true,
-        providerServerId: "h-new",
         ingressIp: "1.1.1.1",
       },
     };
@@ -288,7 +253,6 @@ describe("deploy step: create_volume", () => {
   });
 
   test("probe refuses a retained same-name volume instead of blind adoption", async () => {
-    db.saveSetting("default_location", "fsn1");
     const server = managedServer("h-new");
     const req = { ...baseReq(`collision-${randomSuffix()}`), volume_size: 10 };
     const { ctx } = makeCtx(req);
@@ -309,12 +273,10 @@ describe("deploy step: create_volume", () => {
       serverId: null,
     }];
     const prior = {
-      pick_or_provision_server: {
+      resolve_placement: {
         serverId: server.id,
         serverIp: "1.1.1.1",
         serverHostKey: "",
-        provisioned: true,
-        providerServerId: "h-new",
         ingressIp: "1.1.1.1",
       },
     };
@@ -326,12 +288,10 @@ describe("deploy step: create_volume", () => {
     const req = { ...baseReq(`vol-${randomSuffix()}`), volume_size: 10 };
     const { ctx } = makeCtx(req);
     const prior = {
-      pick_or_provision_server: {
+      resolve_placement: {
         serverId: server.id,
         serverIp: "1.1.1.1",
         serverHostKey: "",
-        provisioned: true,
-        providerServerId: "h-new2",
         ingressIp: "1.1.1.1",
       },
     };
@@ -412,11 +372,10 @@ function setupDeployedApp(healthCheckFlag: boolean) {
     server.id,
   );
   const prior = {
-    pick_or_provision_server: {
+    resolve_placement: {
       serverId: server.id,
       serverIp: server.ipv4,
       serverHostKey: "",
-      provisioned: false,
       ingressIp: server.ipv4,
     },
     insert_app_row: {
@@ -556,12 +515,12 @@ describe("resolveAppDomain", () => {
 
 describe("deploy: private apps", () => {
   const serverPrior = (server: { id: number; ipv4: string }) => ({
-    pick_or_provision_server: {
+    resolve_placement: {
       serverId: server.id,
       serverIp: server.ipv4,
       serverHostKey: "",
-      provisioned: false,
       ingressIp: server.ipv4,
+      placement: { [String(server.id)]: 1 },
     },
     create_volume: null,
   });
@@ -642,8 +601,8 @@ describe("deploy: private apps", () => {
       container_port: 3000,
       env_vars: "{}",
       public: false,
+      placement: { [String(server.id)]: 2 },
     });
-    db.updateAppScaling(app.id, { desired_replicas: 2, min_replicas: 2, max_replicas: 2 });
     for (let i = 1; i <= 2; i++) {
       const replica = db.insertReplica({
         app_id: app.id,
@@ -659,9 +618,9 @@ describe("deploy: private apps", () => {
       });
     }
     const step = stepByName("finalize_deploy");
-    const { ctx } = makeCtx({ app_name: name, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000, public: false, replicas: 2 });
-    await step.run(ctx, { insert_app_row: { appId: app.id } });
-    expect(db.getApp(app.id)!.desired_replicas).toBe(2);
+    const { ctx } = makeCtx({ app_name: name, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000, public: false, placement: { [server.name]: 2 } });
+    await step.run(ctx, { insert_app_row: { appId: app.id }, resolve_placement: { placement: { [String(server.id)]: 2 } } });
+    expect(JSON.parse(db.getApp(app.id)!.placement!)).toEqual({ [String(server.id)]: 2 });
   });
 
   test("finalize_deploy rejects an unattested desired replica instead of reporting success", async () => {
@@ -683,8 +642,8 @@ describe("deploy: private apps", () => {
       container_port: 3000,
       env_vars: "{}",
       public: true,
+      placement: { [String(server.id)]: 2 },
     });
-    db.updateAppScaling(app.id, { desired_replicas: 2, min_replicas: 2, max_replicas: 2 });
     for (let i = 1; i <= 2; i++) {
       const replica = db.insertReplica({
         app_id: app.id,
@@ -702,10 +661,9 @@ describe("deploy: private apps", () => {
       }
     }
     const step = stepByName("finalize_deploy");
-    const { ctx } = makeCtx({ app_name: name, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000, replicas: 2 });
-    await expect(step.run(ctx, { insert_app_row: { appId: app.id, domain: "" } }))
+    const { ctx } = makeCtx({ app_name: name, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000, placement: { [server.name]: 2 } });
+    await expect(step.run(ctx, { insert_app_row: { appId: app.id, domain: "" }, resolve_placement: { placement: { [String(server.id)]: 2 } } }))
       .rejects.toThrow(/replica convergence incomplete/i);
-    expect(db.getApp(app.id)!.desired_replicas).toBe(2);
   });
 });
 
@@ -726,12 +684,12 @@ describe("deploy: auto-domains", () => {
   }
 
   const serverPrior = (server: { id: number; ipv4: string }) => ({
-    pick_or_provision_server: {
+    resolve_placement: {
       serverId: server.id,
       serverIp: server.ipv4,
       serverHostKey: "",
-      provisioned: false,
       ingressIp: server.ipv4,
+      placement: { [String(server.id)]: 1 },
     },
     create_volume: null,
   });
@@ -805,7 +763,7 @@ describe("deploy op: structure", () => {
   test("has the expected step sequence", () => {
     const names = deployOp.steps.map((s) => s.name);
     expect(names).toEqual([
-      "pick_or_provision_server",
+      "resolve_placement",
       "create_volume",
       "insert_app_row",
       "setup_volume_bind_mount",
@@ -840,12 +798,12 @@ describe("deploy step: insert_app_row deploy targets", () => {
   }
 
   const serverPrior = (server: { id: number; ipv4: string }) => ({
-    pick_or_provision_server: {
+    resolve_placement: {
       serverId: server.id,
       serverIp: server.ipv4,
       serverHostKey: "",
-      provisioned: false,
       ingressIp: server.ipv4,
+      placement: { [String(server.id)]: 1 },
     },
     create_volume: null,
   });
@@ -891,7 +849,7 @@ describe("deploy step: insert_app_row deploy targets", () => {
       target_of: parent.id,
       environment_id: stagingEnv.id,
       env: {DATABASE_URL:{from:"environment.DATABASE_URL"}},
-      placement_pool: "staging",
+      placement: { [server.name]: 1 },
     });
     const out = (await step.run(ctx, serverPrior(server))) as {
       appId: number;
@@ -899,11 +857,11 @@ describe("deploy step: insert_app_row deploy targets", () => {
       flatEnvVars: Record<string, string>;
     };
 
-    // App row carries the target tag, parent link, and pool.
+    // App row carries the target tag, parent link, and resolved placement.
     const app = db.getApp(out.appId)!;
     expect(app.target).toBe("staging");
     expect(app.target_of).toBe(parent.id);
-    expect(app.placement_pool).toBe("staging");
+    expect(JSON.parse(app.placement!)).toEqual({ [String(server.id)]: 1 });
 
     // Links to the selected env and resolves ONLY its vars — the parent's
     // DATABASE_URL does not leak in (no inheritance).
@@ -943,7 +901,6 @@ describe("deploy step: insert_app_row deploy targets", () => {
       image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       container_port: 3000,
       target: "production",
-      placement_pool: "general",
     });
     const out = (await step.run(ctx, serverPrior(server))) as { appId: number; environmentId: number | null };
     const app = db.getApp(out.appId)!;
@@ -982,7 +939,7 @@ describe("deploy step: insert_app_row deploy targets", () => {
 });
 
 // Keep last: fills the whole internal port block (fleet app cap).
-describe("deploy step: pick_or_provision_server fleet cap", () => {
+describe("deploy step: resolve_placement fleet cap", () => {
   test("rejects a deploy once 200 apps exist", async () => {
     const fillers: number[] = [];
     try {
@@ -996,8 +953,8 @@ describe("deploy step: pick_or_provision_server fleet cap", () => {
           env_vars: "{}",
         }).id);
       }
-      const step = stepByName("pick_or_provision_server");
-      const { ctx } = makeCtx(baseReq(`cap-final-${randomSuffix()}`));
+      const step = stepByName("resolve_placement");
+      const { ctx } = makeCtx({ ...baseReq(`cap-final-${randomSuffix()}`), placement: { "1": 1 } });
       expect(step.run(ctx, {})).rejects.toThrow(/fleet limit of 200 apps/i);
     } finally {
       // Free the block again — later test files share this db.

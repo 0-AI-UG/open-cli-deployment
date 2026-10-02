@@ -12,10 +12,10 @@ import { syncAppIngress, getPanelIngressIpv4 } from "../../engine/scale/traefik-
 import { enqueue } from "../ipc/enqueue.ts";
 import { enqueueOp } from "./_ops.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
-import { applyAppConfig, classifyConfigOnlyChanges, deployRequestFromApp, diffAppConfig } from "../../shared/app-config.ts";
-import type { DeployRequest, ReleaseRequest } from "../../shared/rpc.ts";
+import { applyAppConfig, assertPlacementUsable, classifyConfigOnlyChanges, deployRequestFromApp, diffAppConfig, resolveRequestPlacement } from "../../shared/app-config.ts";
+import type { DeployRequest, PlacementEntry, ReleaseRequest } from "../../shared/rpc.ts";
+import { parsePlacement } from "../../shared/placement.ts";
 import { findActiveOperationByResourceKey } from "../../shared/db/operations.ts";
-import { approveAutomaticServerProvisioning } from "../lib/server-provisioning.ts";
 import { stackLockKeys, withOwningStackKeys } from "../lib/stack-operations.ts";
 import { reconcileAppDns } from "../../engine/dns-reconciler.ts";
 import { resolveOciImage } from "../../engine/oci-image.ts";
@@ -29,8 +29,14 @@ export function enrichAppForResponse(app: AppRow & Record<string, unknown>) {
   const envRow = app.environment_id ? db.getEnvironment(app.environment_id as number) : null;
   const panelIp = app.public_port != null ? getPanelIngressIpv4() : null;
   const { auth_password_hash, ...safe } = app;
+  const placement: PlacementEntry[] = Object.entries(parsePlacement(app.placement)).map(([serverId, replicas]) => ({
+    server_id: Number(serverId),
+    server_name: db.getServer(Number(serverId))?.name ?? `#${serverId}`,
+    replicas,
+  }));
   return {
     ...safe,
+    placement,
     env_vars: [],
     storage: getAppStorage(app.id),
     notifications: getAppNtfy(app.id),
@@ -78,10 +84,7 @@ export async function handleGetDashboard(request: Request): Promise<Response> {
           deployed_commit: db.getDeployedCommit(app.id),
           environment_stale: app.environment_stale,
         })))
-      : await Promise.all(visibleApps.map((app) => {
-          const reps = db.getReplicas(app.id);
-          return withDnsInstruction(enrichAppForResponse({ ...app, desired_replicas: app.desired_replicas ?? reps.length }));
-        }));
+      : await Promise.all(visibleApps.map((app) => withDnsInstruction(enrichAppForResponse(app))));
     return Response.json({ apps }, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
@@ -110,6 +113,17 @@ type AppDeployRequest = Partial<DeployRequest> & {
   deploy?: boolean;
 };
 
+/** Fail a new app's deploy up front when its placement names a server that
+ * does not exist, is not ready, or is a build worker. */
+function newAppPlacementError(req: DeployRequest): string | null {
+  try {
+    assertPlacementUsable(resolveRequestPlacement(req));
+    return null;
+  } catch (error) {
+    return (error as Error).message;
+  }
+}
+
 function manifestSpec(req: AppDeployRequest): DeployRequest {
   const {
     dry_run: _dryRun,
@@ -137,7 +151,12 @@ async function applyExistingAppConfig(
     );
   }
 
-  const changes = diffAppConfig(app, spec);
+  let changes;
+  try {
+    changes = diffAppConfig(app, spec);
+  } catch (error) {
+    return Response.json({ ok: false, error: (error as Error).message }, { status: 400, headers: corsHeaders });
+  }
   if (controls.dry_run) {
     return Response.json({
       ok: true,
@@ -325,11 +344,16 @@ export async function handleDeploy(request: Request): Promise<Response> {
       if (!validation.valid) {
         return Response.json({ ok: false, error: validation.error }, { status: 400, headers: corsHeaders });
       }
+      const placementError = existing ? null : newAppPlacementError(buildRequest);
+      if (placementError) return Response.json({ ok: false, error: placementError }, { status: 400, headers: corsHeaders });
       if (req.dry_run) {
         const build = buildRequest.build!;
-        const changes = existing
-          ? diffAppConfig(existing, { ...buildRequest, image_ref: existing.image_ref })
-          : [];
+        let changes: ReturnType<typeof diffAppConfig> = [];
+        try {
+          if (existing) changes = diffAppConfig(existing, { ...buildRequest, image_ref: existing.image_ref });
+        } catch (error) {
+          return Response.json({ ok: false, error: (error as Error).message }, { status: 400, headers: corsHeaders });
+        }
         return Response.json({
           ok: true,
           dry_run: true,
@@ -342,15 +366,6 @@ export async function handleDeploy(request: Request): Promise<Response> {
             image_repository: build.image_repository,
           },
         }, { headers: corsHeaders });
-      }
-      if (!existing && !buildRequest.server_id) {
-        await approveAutomaticServerProvisioning(
-          request,
-          payload,
-          `building and deploying app ${buildRequest.app_name}`,
-          [buildRequest.placement_pool || "general"],
-        );
-        buildRequest.server_provisioning_approved = true;
       }
       const { opId } = enqueue({
         kind: "build_app_delivery",
@@ -375,10 +390,6 @@ export async function handleDeploy(request: Request): Promise<Response> {
       );
     }
     const deployRequest = manifestSpec(req);
-    // Never trust this internal flag from the request body. New app deployment
-    // may select existing capacity, but any provider creation it falls back to
-    // must have been approved for this exact deployment first.
-    deployRequest.server_provisioning_approved = false;
     const validation = validateDeployRequest(deployRequest);
     if (!validation.valid) {
       return Response.json(
@@ -386,6 +397,8 @@ export async function handleDeploy(request: Request): Promise<Response> {
         { status: 400, headers: corsHeaders },
       );
     }
+    const placementError = newAppPlacementError(deployRequest);
+    if (placementError) return Response.json({ ok: false, error: placementError }, { status: 400, headers: corsHeaders });
     if (req.dry_run) {
       return Response.json(
         { ok: true, dry_run: true, would_create: true, changes: [] },
@@ -397,15 +410,6 @@ export async function handleDeploy(request: Request): Promise<Response> {
         { ok: false, error: `Cannot apply configuration only: app "${req.app_name}" does not exist` },
         { status: 404, headers: corsHeaders },
       );
-    }
-    if (!deployRequest.server_id) {
-      await approveAutomaticServerProvisioning(
-        request,
-        payload,
-        `deploying app ${deployRequest.app_name}`,
-        [deployRequest.placement_pool || "general"],
-      );
-      deployRequest.server_provisioning_approved = true;
     }
     const { opId } = enqueue({
       kind: "deploy",

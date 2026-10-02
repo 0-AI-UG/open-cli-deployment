@@ -7,7 +7,7 @@ and alias supported by that command.
 
 ```text
 ocd deploy [manifest] [--auth-password-env=KEY]
-    [--server=ID] [--dry-run] [--config-only] [--app=EXISTING_APP]
+    [--dry-run] [--config-only] [--app=EXISTING_APP]
     [--commit=sha] [--allow-unknown]
 ocd deploy stack [manifest] [--only=web,worker] [--with-dependents]
     [--changed | --all] [--config-only] [--commit=sha]
@@ -69,9 +69,7 @@ ocd rollback <app> [--deployment=<id>]
 ocd promote --from=<source-app> --to=<destination-app>
 ocd pause <app>
 ocd unpause <app>
-ocd scale wake <app>
-ocd scale policy show <app>
-ocd scale migrate <app> <replica-id> --to=<server-id>
+ocd move <app> --to <server> [--from <server>]
 ocd ops [--app=<app>]
 ocd ops <id>
 ocd ops logs <id> [--tail N] [--since TIME|CURSOR] [--child NAME|ID]
@@ -92,7 +90,6 @@ ocd servers diagnose <name|id>
 ocd servers create --type=X --location=X
 ocd servers delete <name|id>
 ocd servers refresh
-ocd servers pool <name|id> <pool>
 ocd servers metrics [name|id] [--since=N]
 ocd stack <ls|status|logs|member-logs>
 ocd delete <app>

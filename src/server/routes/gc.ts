@@ -47,7 +47,7 @@ export async function handleGcExecute(request: Request): Promise<Response> {
         server: { id: server.id, name: server.name, ipv4: server.ipv4 },
         ...(await garbageCollectServer(server.ipv4, server.ssh_host_key || undefined, {
           ...serverGcProtections(server.id),
-          buildCacheKeepStorage: server.pool === "build-workers" ? "4GB" : "1GB",
+          buildCacheKeepStorage: db.getBuildWorkerByServerId(server.id) ? "4GB" : "1GB",
         })),
         size_caveat: "Image sizes include shared layers. reclaimed_bytes is the observed root-filesystem free-space increase.",
       });

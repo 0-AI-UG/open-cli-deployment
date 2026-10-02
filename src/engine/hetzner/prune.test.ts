@@ -72,7 +72,7 @@ describe("parseDockerSize", () => {
 });
 
 describe("buildServerPruneSteps", () => {
-  test("protects DB-backed sleeping containers and removes only untracked stopped managed containers", () => {
+  test("protects DB-backed stopped containers and removes only untracked stopped managed containers", () => {
     const script = buildServerPruneSteps({
       activeAppNames: ["api"],
       protectedContainerNames: ["api-r2", "postgres"],

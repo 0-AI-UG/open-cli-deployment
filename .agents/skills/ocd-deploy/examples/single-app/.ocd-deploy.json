@@ -17,6 +17,7 @@
     },
     "NODE_ENV": "production"
   },
+  "placement": { "server-2": 1 },
   "volume": {
     "size": 5,
     "path": "/data"
@@ -25,7 +26,6 @@
     "path": "/healthz"
   },
   "suggested_app_name": "my-app",
-  "replicas": 1,
   "memory_mb": 512,
   "cpu_limit": 1,
   "environment": "production"

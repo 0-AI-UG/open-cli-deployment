@@ -35,20 +35,20 @@ export async function ensureHostLogPolicy(ip: string, hostKey?: string): Promise
 // dangling layers.
 /**
  * Periodic disk cleanup removes unused image data while preserving running,
- * stopped-anchor, current, and rollback images.
+ * stopped, current, and rollback images.
  *
  * NOTE: the container prune always excludes OCD-managed containers
- * (label!=ocd.managed=true). A sleeping app keeps its last container as a
- * *stopped* anchor so it can wake with a fast `docker start`; an unfiltered
- * `docker container prune` would delete that anchor, and once the container
- * is gone its image becomes unreferenced and gets swept by the image prune —
- * leaving the app unable to wake. OCD removes its own containers explicitly
- * (see scaleDown), so the blanket prune only needs to clear foreign junk.
+ * (label!=ocd.managed=true). A paused app keeps its containers *stopped* so
+ * unpause is a `docker start`; an unfiltered `docker container prune` would
+ * delete them, and once a container is gone its image becomes unreferenced
+ * and gets swept by the image prune. OCD removes its own containers
+ * explicitly (see scaleDown), so the blanket prune only needs to clear
+ * foreign junk.
  */
 export type PruneServerOptions = {
   activeAppNames?: string[];
   /** Every DB-backed app/service/panel container on this server, including
-   * sleeping stopped anchors. Managed stopped containers absent from this set
+   * paused apps' stopped containers. Managed stopped containers absent from this set
    * are interrupted-deploy or stale-placement debris and may be removed. */
   protectedContainerNames?: string[];
   /** The panel container whose GHCR repository should retain only the current
@@ -60,7 +60,7 @@ export type PruneServerOptions = {
 
 export type GcImageCategory =
   | "running"
-  | "stopped-anchor"
+  | "stopped"
   | "current"
   | "rollback"
   | "reclaimable-ocd"
@@ -166,7 +166,7 @@ export function buildServerGcScript(opts: GcRunOptions): string {
     `  [ "$actual_id" = "$id" ] || { echo "Docker returned mismatched image metadata for $id" >&2; exit 42; }`,
     "  category=reclaimable-foreign",
     `  printf '%b\\n' "$running_images" | grep -Fxq "$id" && category=running`,
-    `  if [ "$category" = reclaimable-foreign ] && printf '%b\\n' "$stopped_images" | grep -Fxq "$id"; then category=stopped-anchor; fi`,
+    `  if [ "$category" = reclaimable-foreign ] && printf '%b\\n' "$stopped_images" | grep -Fxq "$id"; then category=stopped; fi`,
     `  if [ "$category" = reclaimable-foreign ] && printf '%b\\n' "$protected_images" | grep -Fxq "$id"; then category=rollback; fi`,
     `  if [ "$category" = reclaimable-foreign ] && printf '%s' "$refs" | grep -Eq "\\\"($active_pattern):latest\\\""; then category=current; fi`,
     `  if [ "$category" = reclaimable-foreign ] && printf '%s' "$refs" | grep -Eq "\\\"($active_pattern):rollback\\\""; then category=rollback; fi`,
@@ -224,7 +224,7 @@ async function runServerGc(ip: string, hostKey: string | undefined, opts: GcRunO
   let freeAfter = 0;
   let sawSpace = false;
   const categories = new Set<GcImageCategory>([
-    "running", "stopped-anchor", "current", "rollback", "reclaimable-ocd", "reclaimable-foreign",
+    "running", "stopped", "current", "rollback", "reclaimable-ocd", "reclaimable-foreign",
   ]);
   for (const line of result.stdout.split("\n")) {
     if (line.startsWith("OCD_GC\t")) {
@@ -343,7 +343,7 @@ export function buildServerPruneSteps(opts: PruneServerOptions = {}): string[] {
   const protectedContainerNames = safeNames(opts.protectedContainerNames ?? []);
   const protectedContainers = protectedContainerNames.join("|");
   const steps: string[] = [
-    // OCD-managed stopped containers are normally sleeping anchors, but an
+    // OCD-managed stopped containers normally belong to paused apps, but an
     // interrupted scale/deploy can leave a created/exited container after its
     // replica row is gone. Remove only non-running containers absent from the
     // complete DB-backed protection set; never kill an untracked running one.

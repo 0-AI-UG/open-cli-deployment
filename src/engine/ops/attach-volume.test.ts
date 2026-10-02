@@ -50,7 +50,7 @@ function stepByName(name: string) {
   return step;
 }
 
-function makeApp(opts: { minReplicas?: number; maxReplicas?: number; withVolume?: boolean; replicas?: number } = {}) {
+function makeApp(opts: { withVolume?: boolean; replicas?: number } = {}) {
   const server = db.insertServer({
     name: `srv-${randomSuffix()}`,
     provider_id: `h-${randomSuffix()}`,
@@ -65,9 +65,6 @@ function makeApp(opts: { minReplicas?: number; maxReplicas?: number; withVolume?
     { name, domain: `${name}.example.com`, image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", container_port: 3000, env_vars: "{}" },
     server.id,
   );
-  if (opts.minReplicas !== undefined || opts.maxReplicas !== undefined) {
-    db.updateAppScaling(app.id, { min_replicas: opts.minReplicas ?? 1, max_replicas: opts.maxReplicas ?? 1 });
-  }
   if (opts.withVolume) db.updateAppVolume(app.id, "v-existing", "/mnt/x:/data");
   return { server, app: db.getApp(app.id)!, replica };
 }
@@ -172,32 +169,25 @@ describe("attach_volume: create_volume", () => {
 describe("attach_volume: attach_to_app", () => {
   const step = stepByName("attach_to_app");
 
-  test("records the volume and forces min/max replicas to 1, storing the prior values", async () => {
-    const { app, server } = makeApp({ minReplicas: 2, maxReplicas: 5 });
+  test("records the volume on the app", async () => {
+    const { app, server } = makeApp();
     const { ctx } = makeCtx({ appId: app.id, sizeGb: 10, mountPath: "/var/data" });
     const vol = { volumeId: "v-new", driverId: "hetzner-block", hostMountPath: `/mnt/ocd-${app.name}-op42`, volName: "x" };
-    const out = (await step.run(ctx, { validate: { serverId: server.id, priorMinReplicas: 2, priorMaxReplicas: 5 }, create_volume: vol })) as any;
-    expect(out.priorMinReplicas).toBe(2);
-    expect(out.priorMaxReplicas).toBe(5);
+    const out = (await step.run(ctx, { validate: { serverId: server.id }, create_volume: vol })) as any;
     expect(out.volumeMount).toBe(`/mnt/ocd-${app.name}-op42:/var/data`);
     const fresh = db.getApp(app.id)!;
     expect(fresh.volume_id).toBe("v-new");
-    expect(fresh.min_replicas).toBe(1);
-    expect(fresh.max_replicas).toBe(1);
     // Created by us → managed, so destroy will DELETE it.
     expect(fresh.volume_attached).toBeFalsy();
   });
 
-  test("compensate clears the volume, restores scaling, and recreates volume-less", async () => {
-    const { app } = makeApp({ minReplicas: 3, maxReplicas: 4 });
+  test("compensate clears the volume and recreates volume-less", async () => {
+    const { app } = makeApp();
     db.updateAppVolume(app.id, "v-x", "/mnt/y:/data");
-    db.updateAppScaling(app.id, { min_replicas: 1, max_replicas: 1 });
     const { ctx } = makeCtx({ appId: app.id, sizeGb: 10 });
-    await step.compensate!(ctx, { priorMinReplicas: 3, priorMaxReplicas: 4, volumeMount: "/mnt/y:/data" }, {});
+    await step.compensate!(ctx, { volumeMount: "/mnt/y:/data" }, {});
     const fresh = db.getApp(app.id)!;
     expect(fresh.volume_id).toBe("");
-    expect(fresh.min_replicas).toBe(3);
-    expect(fresh.max_replicas).toBe(4);
     expect(recreateAppContainer).toHaveBeenCalledWith(app.id, undefined, expect.anything());
   });
 });
@@ -214,8 +204,8 @@ describe("attach_volume: recreate_container", () => {
 });
 
 describe("attach_volume: full rollback on a failed recreate", () => {
-  test("a failed recreate rolls back volume, scaling, bind mount and cloud volume", async () => {
-    const { app, server } = makeApp({ minReplicas: 1, maxReplicas: 3 });
+  test("a failed recreate rolls back volume, bind mount and cloud volume", async () => {
+    const { app, server } = makeApp();
     const { ctx } = makeCtx({ appId: app.id, sizeGb: 10 }, 99);
 
     const validateOut = await stepByName("validate").run(ctx, {});
@@ -234,8 +224,6 @@ describe("attach_volume: full rollback on a failed recreate", () => {
 
     const fresh = db.getApp(app.id)!;
     expect(fresh.volume_id).toBe("");
-    expect(fresh.min_replicas).toBe(1);
-    expect(fresh.max_replicas).toBe(3);
     expect(removeVolumeBindMount).toHaveBeenCalled();
     expect(compute._mocks.volumeDetach).toHaveBeenCalled();
     expect(compute._mocks.volumeDelete).not.toHaveBeenCalled();
@@ -252,7 +240,7 @@ describe("attach_existing_volume: marks the volume as attached (detach-not-delet
   test("attach_to_app records the volume with volume_attached=1", async () => {
     const { app, server } = makeApp();
     const { ctx } = makeCtx({ appId: app.id, volumeId: "vol-preexisting", mountPath: "/data" });
-    await step.run(ctx, { validate: { hostMountPath: "/mnt/vol-vol-preexisting", driverId: "hetzner-block", serverId: server.id, priorMinReplicas: 1, priorMaxReplicas: 1 } });
+    await step.run(ctx, { validate: { hostMountPath: "/mnt/vol-vol-preexisting", driverId: "hetzner-block", serverId: server.id } });
     const fresh = db.getApp(app.id)!;
     expect(fresh.volume_id).toBe("vol-preexisting");
     // Pre-existing volume → attached, so destroy will DETACH (never delete) it.

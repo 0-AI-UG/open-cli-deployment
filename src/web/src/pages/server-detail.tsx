@@ -2,11 +2,9 @@ import { StorageMounts } from "../components/storage-mounts.tsx";
 import type { StorageMount } from "../../../shared/storage-display.ts";
 import { useState, useEffect } from "react";
 import { get } from "../api/client.ts";
-import { runCliAction } from "../api/cli-actions.ts";
-import { Badge, Card, CardHeader, Btn, CopyButton, DataRow, EmptyState, Stat, Table, StatusBadge, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
-import { Boxes, Server, RefreshCw, Terminal, FileWarning, Network, Layers, Check, X } from "lucide-react";
+import { Card, CardHeader, Btn, CopyButton, DataRow, EmptyState, Stat, Table, StatusBadge, PageShell, PageHeader, PageState } from "../components/ui.tsx";
+import { Boxes, Server, RefreshCw, Terminal, FileWarning, Network } from "lucide-react";
 import { PermissionGate } from "../components/permission-gate.tsx";
-import { NeoSelect } from "../components/neo-select.tsx";
 import { Sparkline, CpuUsage, MemUsage } from "./app-detail/shared.tsx";
 import type { ServerMetricSample } from "../types.ts";
 
@@ -62,9 +60,6 @@ type ServerDetail = {
   type: string;
   location: string;
   status: string;
-  // Capacity pool governing FUTURE replica placement. May be absent from the
-  // detail response until the backend includes it — treated as "general".
-  pool?: "general" | "staging" | string;
   created_at: string;
   monthly_eur: number | null;
   currency: string;
@@ -124,14 +119,11 @@ function portDot(port: number, address: string): string {
 // Fleet infrastructure ports show up as many near-identical listeners in a raw
 // socket scan; collapse each known block into a single summary chip instead of
 // flooding the view. Internal ingress is per-app VIPs: every app VIP shares the
-// proxy's single :18790 listener (PROXY_LISTEN_PORT in src/proxy/config.ts) and
-// wake calls hit the waker's :8896 (WAKER_HTTP_PORT in
-// src/engine/scale/traefik-constants.ts). The public pool range mirrors
-// src/shared/db/apps.ts (PUBLIC_*).
+// proxy's single :18790 listener (PROXY_LISTEN_PORT in src/proxy/config.ts).
+// The public pool range mirrors src/shared/db/apps.ts (PUBLIC_*).
 // tone "blue" = private-net only, "amber" = publicly exposed via the firewall.
 const PORT_GROUPS = [
   { key: "proxy vip", lo: 18789, hi: 18790, tone: "blue", note: "per-app VIP ingress — L4 proxy listeners (18790 internal, 18789 public raw)" },
-  { key: "waker", lo: 8896, hi: 8896, tone: "blue", note: "scale-to-zero wake endpoint" },
 ] as const;
 
 function portGroupKey(port: number): string | null {
@@ -139,25 +131,11 @@ function portGroupKey(port: number): string | null {
   return null;
 }
 
-// A pool name is a lowercase slug, ≤32 chars — mirrors the backend validation on
-// PATCH /api/servers/:id/pool. Sentinel select value that reveals the "new pool"
-// text input instead of switching pools.
-const POOL_SLUG = /^[a-z][a-z0-9-]*$/;
-const NEW_POOL = "__new-pool__";
-
 export function ServerDetailPage({ serverId }: { serverId: number }) {
   const [detail, setDetail] = useState<ServerDetail | null>(null);
   const [detailErr, setDetailErr] = useState<string | null>(null);
   const [history, setHistory] = useState<ServerMetricSample[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pool, setPool] = useState<string>("general");
-  const [poolSaving, setPoolSaving] = useState(false);
-  // Known pools from GET /api/pools (always includes general + staging); falls
-  // back to those two until the fetch resolves. Plus the inline "new pool" form.
-  const [poolOptions, setPoolOptions] = useState<string[]>(["general", "staging"]);
-  const [newPoolMode, setNewPoolMode] = useState(false);
-  const [newPoolValue, setNewPoolValue] = useState("");
-  const [newPoolErr, setNewPoolErr] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -166,59 +144,12 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
         get("/api/resources/metrics/history?since=3600"),
       ]);
       setDetail(d);
-      setPool(d.pool ?? "general");
       setHistory(h);
     } catch (err: any) {
       setDetailErr(err.message);
     } finally {
       setLoading(false);
     }
-    // Non-fatal: keep the two hardcoded fallbacks if the pool list can't load.
-    try {
-      const res = await get("/api/pools");
-      if (Array.isArray(res?.pools) && res.pools.length) setPoolOptions(res.pools);
-    } catch {
-      /* keep fallback */
-    }
-  };
-
-  const changePool = async (next: string) => {
-    const prev = pool;
-    if (next === prev) return;
-    setPool(next);
-    setPoolSaving(true);
-    try {
-      await runCliAction("servers.pool", { server: String(serverId), pool: next });
-      setDetail((d) => (d ? { ...d, pool: next } : d));
-      showToast(`Server moved to the "${next}" pool`, "success");
-    } catch (err: any) {
-      setPool(prev);
-      showToast(err?.message || "Failed to change pool", "error");
-    } finally {
-      setPoolSaving(false);
-    }
-  };
-
-  // Select handler: sentinel reveals the inline "new pool" input; anything else
-  // switches pools directly.
-  const onPoolSelect = (v: string) => {
-    if (v === NEW_POOL) {
-      setNewPoolValue("");
-      setNewPoolErr(null);
-      setNewPoolMode(true);
-      return;
-    }
-    changePool(v);
-  };
-
-  const confirmNewPool = () => {
-    const slug = newPoolValue.trim().toLowerCase();
-    if (!POOL_SLUG.test(slug) || slug.length > 32) {
-      setNewPoolErr("lowercase slug, ≤32 chars");
-      return;
-    }
-    setNewPoolMode(false);
-    changePool(slug);
   };
 
   useEffect(() => { load(); }, [serverId]);
@@ -239,7 +170,6 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
     .filter((g) => g.count > 0);
 
   const metricCell = "bg-surface px-4 py-3.5";
-  const poolHint = "New replicas schedule onto servers in this pool. 'staging' isolates staging-target apps from production.";
 
   return (
     <PageShell>
@@ -255,57 +185,6 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
           {detail.ipv4 && <span className="font-mono text-xs">{detail.ipv4}</span>}
         </>}
         actions={<>
-          <PermissionGate
-            permission="servers.delete"
-            fallback={
-              <span title={poolHint} className="inline-flex items-center gap-1.5 text-sm text-muted">
-                <Layers size={14} /> Pool <Badge>{pool}</Badge>
-              </span>
-            }
-          >
-            {newPoolMode ? (
-              <div className="relative flex items-center gap-1">
-                <input
-                  value={newPoolValue}
-                  onChange={(e) => { setNewPoolValue(e.target.value); setNewPoolErr(null); }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") confirmNewPool();
-                    if (e.key === "Escape") setNewPoolMode(false);
-                  }}
-                  placeholder="pool-name"
-                  autoFocus
-                  aria-invalid={newPoolErr ? true : undefined}
-                  className="w-32 font-mono"
-                />
-                <Btn variant="primary" onClick={confirmNewPool} title="Move to this pool">
-                  <Check size={14} />
-                </Btn>
-                <Btn variant="ghost" onClick={() => setNewPoolMode(false)} title="Cancel">
-                  <X size={14} />
-                </Btn>
-                {newPoolErr && (
-                  <span className="absolute left-0 top-full mt-1 whitespace-nowrap text-xs text-danger">
-                    {newPoolErr}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2" title={poolHint}>
-                <span className="inline-flex items-center gap-1.5 text-sm text-muted"><Layers size={14} /> Pool</span>
-                <div className="w-36">
-                  <NeoSelect
-                    value={pool}
-                    disabled={poolSaving}
-                    onChange={onPoolSelect}
-                    options={[
-                      ...Array.from(new Set([...poolOptions, pool])).sort().map((p) => ({ value: p, label: p })),
-                      { value: NEW_POOL, label: "+ New pool…" },
-                    ]}
-                  />
-                </div>
-              </div>
-            )}
-          </PermissionGate>
           <PermissionGate permission="terminal.access">
             <Btn onClick={() => { window.location.hash = `#/terminal/server/${detail.id}`; }}>
               <Terminal size={14} /> Shell

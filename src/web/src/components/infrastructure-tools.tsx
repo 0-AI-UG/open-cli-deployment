@@ -6,7 +6,7 @@ import { Badge, Btn, Card, CardHeader, CopyButton, EmptyState, Field, InlineNoti
 import { NeoSelect } from "./neo-select.tsx";
 import { PermissionGate } from "./permission-gate.tsx";
 
-type Server = { id: number; name: string; ipv4: string; status: string; pool?: string; apps?: Array<{ id: number }> };
+type Server = { id: number; name: string; ipv4: string; status: string; apps?: Array<{ id: number }> };
 type Worker = { id: number; name: string; status: string; worker_version: string; architecture: string; last_error: string; disk_free_bytes?: number; server: Server | null };
 type Source = { id: number; repository: string; branch: string; webhook_secret_configured: boolean; last_status: string; last_error: string };
 type GcRow = { server: { id: number; name: string }; images: unknown[]; reclaimable_ocd_image_bytes: number; reclaimable_foreign_image_bytes: number };
@@ -47,7 +47,7 @@ export function InfrastructureTools() {
   };
 
   const removeWorker = async (item: Worker) => {
-    if (!await confirm("Remove Build Worker", `Remove ${item.name} and return ${item.server?.name || "its server"} to its previous pool?`, true)) return;
+    if (!await confirm("Remove Build Worker", `Remove ${item.name} and release ${item.server?.name || "its server"} for apps?`, true)) return;
     setWorkerBusy(true);
     try { await runCliAction("runners.remove", { runner: String(item.id) }, { confirmed: true }); showToast("Build worker removed", "success"); await load(); }
     catch (error) { showToast(error instanceof Error ? error.message : "Removal failed", "error"); }

@@ -20,8 +20,6 @@ const S3_SETTING_KEYS = new Set([HETZNER_S3_ACCESS_KEY, HETZNER_S3_SECRET_KEY, H
 
 const PLAIN_SETTING_KEYS = new Set([
   "github_oauth_client_id",
-  "default_server_type",
-  "default_location",
   "oci_artifact_ref",
   "oci_registry_username",
   "github_build_username",
@@ -50,8 +48,6 @@ export async function handleGetSettings(request: Request): Promise<Response> {
         github_oauth_client_id: s.github_oauth_client_id ?? "",
         github_oauth_client_secret: maskToken(githubOauthClientSecret ?? ""),
         default_domain_suffix: s.default_domain_suffix ?? "",
-        default_server_type: s.default_server_type ?? "",
-        default_location: s.default_location ?? "",
         oci_artifact_ref: s.oci_artifact_ref ?? "",
         oci_registry_username: s.oci_registry_username ?? "",
         oci_registry_password: maskToken(registryPassword ?? ""),

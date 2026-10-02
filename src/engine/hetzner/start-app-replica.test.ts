@@ -63,7 +63,7 @@ describe("startAppReplica", () => {
   });
 
 
-  test("removeExisting:false skips the rm; network:null omits --network", async () => {
+  test("network:null omits --network", async () => {
     await startAppReplica("1.2.3.4", {
       containerName: "app2",
       image: "app2:latest",
@@ -72,9 +72,7 @@ describe("startAppReplica", () => {
       hostPort: 8081,
       containerPort: 3000,
       network: null,
-      removeExisting: false,
     });
-    expect(calls.some((c) => c.includes("docker rm -f"))).toBe(false);
     const run = calls.find((c) => c.includes("docker run -d"))!;
     expect(run).not.toContain("--network");
   });

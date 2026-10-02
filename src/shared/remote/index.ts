@@ -34,8 +34,6 @@ export {
   restartContainer,
   pauseContainer,
   unpauseContainer,
-  stopContainer,
-  startContainer,
   containerExists,
   containerRunning,
   ensureOcdNetwork,

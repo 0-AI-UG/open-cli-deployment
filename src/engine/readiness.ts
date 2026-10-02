@@ -1,4 +1,5 @@
 import * as db from "../shared/db.ts";
+import { parsePlacement } from "../shared/placement.ts";
 import { getHetznerToken, secretStore } from "../shared/secret-store.ts";
 import { probeBuildWorker } from "./build-worker.ts";
 import { imageMatchesRegistryScope } from "./registry-config.ts";
@@ -8,7 +9,6 @@ export type ReadinessStatus = "ready" | "warning" | "blocked";
 export type DeployReadiness = {
   ready: boolean;
   hetzner: { status: ReadinessStatus; configured: boolean };
-  defaults: { status: ReadinessStatus; server_type: string; location: string };
   worker: {
     status: ReadinessStatus;
     online: number;
@@ -38,7 +38,8 @@ function unusedReadyServer() {
     server.status === "ready" &&
     server.id !== panelServerId &&
     !workerServerIds.has(server.id) &&
-    db.getApps(server.id).length === 0
+    db.getApps(server.id).length === 0 &&
+    !db.getApps().some((app) => parsePlacement(app.placement)[String(server.id)])
   );
 }
 
@@ -68,11 +69,10 @@ export async function inspectDeployReadiness(input: {
   const coversRepository = input.repository
     ? repositoryHost(input.repository) === sourceHost
     : null;
-  const defaultsConfigured = !!(settings.default_server_type && settings.default_location);
   const actions: DeployReadiness["actions"] = [];
   if (buildDelivery && !online) actions.push({
-    command: candidate ? `ocd runners install --server=${candidate.id}` : "ocd runners bootstrap",
-    label: candidate ? `Install a worker on ${candidate.name}` : "Provision a build worker",
+    command: candidate ? `ocd runners install --server=${candidate.id}` : "ocd servers create --type=<type> --location=<location>",
+    label: candidate ? `Install a worker on ${candidate.name}` : "Create a dedicated build server, then install a worker on it",
   });
   if (buildDelivery && (!registryConfigured || coversTarget === false)) {
     actions.push({ command: "ocd registry login", label: "Connect the build output registry" });
@@ -82,13 +82,8 @@ export async function inspectDeployReadiness(input: {
   return {
     ready: !buildDelivery || (online > 0 && registryConfigured && coversTarget !== false),
     hetzner: { status: hetznerConfigured ? "ready" : "warning", configured: hetznerConfigured },
-    defaults: {
-      status: defaultsConfigured ? "ready" : "warning",
-      server_type: settings.default_server_type || "",
-      location: settings.default_location || "",
-    },
     worker: {
-      status: !buildDelivery ? "ready" : online ? "ready" : candidate || (hetznerConfigured && defaultsConfigured) ? "warning" : "blocked",
+      status: !buildDelivery ? "ready" : online ? "ready" : candidate ? "warning" : "blocked",
       online,
       total: workers.length,
       candidate_server: candidate ? { id: candidate.id, name: candidate.name } : null,

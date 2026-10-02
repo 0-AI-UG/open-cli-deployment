@@ -12,10 +12,6 @@ export type ServerRow = {
   ssh_host_key: string;
   /** Private-network IPv4 Hetzner assigned; used for fleet routing. */
   routing_address: string;
-  /** Named capacity pool this server belongs to. 'general' is the default pool
-   *  every server lands in; apps schedule onto servers whose pool matches their
-   *  placement_pool. */
-  pool: string;
   provider_status: string;
   last_observed_at: string | null;
   unavailable_ticks: number;
@@ -48,11 +44,10 @@ export function insertServer(server: {
   location: string;
   status: string;
   routing_address?: string;
-  pool?: string;
 }): ServerRow {
   return db
     .query(
-      "INSERT INTO servers (name, provider_id, ipv4, ipv6, type, location, status, routing_address, pool) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
+      "INSERT INTO servers (name, provider_id, ipv4, ipv6, type, location, status, routing_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *"
     )
     .get(
       server.name,
@@ -63,7 +58,6 @@ export function insertServer(server: {
       server.location,
       server.status,
       server.routing_address ?? "",
-      server.pool ?? "general",
     ) as ServerRow;
 }
 
@@ -98,12 +92,6 @@ export function updateServerHostKey(id: number, hostKey: string): void {
   db.query("UPDATE servers SET ssh_host_key = ? WHERE id = ?").run(hostKey, id);
 }
 
-/** Move a server into a named capacity pool. Apps schedule onto servers whose
- *  pool matches their placement_pool. */
-export function updateServerPool(id: number, pool: string): void {
-  db.query("UPDATE servers SET pool = ? WHERE id = ?").run(pool, id);
-}
-
 export function recordServerObservation(
   id: number,
   observation: {
@@ -129,18 +117,6 @@ export function recordServerObservation(
     observation.routingAddress ?? null,
     id,
   );
-}
-
-export function getServersByPool(pool: string): ServerRow[] {
-  return db
-    .query("SELECT * FROM servers WHERE pool = ? ORDER BY created_at DESC")
-    .all(pool) as ServerRow[];
-}
-
-/** Distinct, non-empty capacity pools any server is currently assigned to. */
-export function getDistinctServerPools(): string[] {
-  return (db.query("SELECT DISTINCT pool FROM servers WHERE pool <> ''").all() as { pool: string }[])
-    .map((r) => r.pool);
 }
 
 // --- Server-level metrics ---

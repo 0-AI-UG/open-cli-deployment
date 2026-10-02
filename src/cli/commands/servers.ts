@@ -1,5 +1,5 @@
 import { storageUsage, type StorageMount } from "../../shared/storage-display.ts";
-import { del, get, patch, post } from "../api.ts";
+import { del, get, post } from "../api.ts";
 import { followOp } from "../ops.ts";
 import { webConfirm, withWebConfirmation } from "../confirm.ts";
 import { BOLD, DIM, GREEN, RED, RESET, colorStatus, table } from "../format.ts";
@@ -14,7 +14,6 @@ interface Server {
   type: string;
   location: string;
   status?: string;
-  pool?: string;
   apps?: { id: number; name: string }[];
 }
 
@@ -77,14 +76,13 @@ export function parseServerCreateArgs(
 async function listServers(): Promise<void> {
   const list = await get<Server[]>("/api/servers");
   table(
-    ["ID", "NAME", "IP", "TYPE", "LOCATION", "POOL", "APPS"],
+    ["ID", "NAME", "IP", "TYPE", "LOCATION", "APPS"],
     list.map((s) => [
       String(s.id),
       s.name,
       s.ipv4,
       s.type,
       s.location,
-      s.pool || "general",
       s.apps?.map((a) => a.name).join(", ") || "-",
     ]),
   );
@@ -122,7 +120,7 @@ async function showServer(ref: string, diagnosticsOnly = false, storage = false)
   const detail = await get<ServerDetail>(`/api/resources/servers/${server.id}`);
   const host = detail.host;
   console.log(`${BOLD}${detail.name}${RESET}  ${colorStatus(detail.status)}  ${DIM}#${detail.id}${RESET}`);
-  console.log(`${DIM}Hetzner ID:${RESET} ${detail.provider_id || "-"}  ${DIM}Pool:${RESET} ${detail.pool || "general"}`);
+  console.log(`${DIM}Hetzner ID:${RESET} ${detail.provider_id || "-"}`);
   console.log(`${DIM}Network:${RESET} ${detail.ipv4}${detail.routing_address ? ` / ${detail.routing_address}` : ""}`);
   console.log(`${DIM}Usage:${RESET} CPU ${fmtPct(detail.cpu_percent)}  memory ${fmtPct(detail.memory_percent)}  disk ${detail.disk_free_gb ?? "-"}/${detail.disk_total_gb ?? "-"} GB free`);
   console.log(`${DIM}Cost:${RESET} ${detail.monthly_eur == null ? "-" : `${detail.currency} ${detail.monthly_eur.toFixed(2)}/month`}`);
@@ -209,15 +207,6 @@ function valueFlag(args: string[], name: string): string | undefined {
   return index >= 0 ? args[index + 1] : undefined;
 }
 
-async function setPool(ref: string, pool: string): Promise<void> {
-  if (!/^[a-z][a-z0-9-]{0,31}$/.test(pool)) {
-    throw new Error("Pool must be a lowercase slug of at most 32 characters");
-  }
-  const server = await resolveServer(ref);
-  await patch(`/api/servers/${server.id}/pool`, { pool });
-  console.log(`${GREEN}${server.name} moved to pool ${pool}.${RESET}`);
-}
-
 async function metrics(args: string[]): Promise<void> {
   const parsed = parseCliArgs(args, { since: { type: "string" } }, { maxPositionals: 1 });
   const ref = parsed.positionals[0];
@@ -248,7 +237,6 @@ ${BOLD}Commands:${RESET}
   create --type=X --location=X    Provision a server
   delete <name|id>                Destroy a Hetzner server
   refresh                         Refresh Hetzner server inventory
-  pool <name|id> <pool>           Change future-placement capacity pool
   metrics [name|id] [--since=N]   Server metric history`);
 }
 
@@ -277,9 +265,6 @@ export async function servers(args: string[] = []): Promise<void> {
       await post("/api/servers/refresh");
       console.log(`${GREEN}Server inventory refreshed.${RESET}`);
       return;
-    case "pool":
-      if (!rest[0] || !rest[1]) throw new Error("Usage: ocd servers pool <name|id> <pool>");
-      return setPool(rest[0], rest[1]);
     case "metrics":
       return metrics(rest);
     case "help":

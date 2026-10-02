@@ -102,7 +102,7 @@ When a build is waiting, check in this order:
 5. the registry accepts both the image push and BuildKit cache media types;
 6. the pushed commit is still the configured branch head for webhook builds.
 
-Removing a worker returns the server to its previous placement pool; it does not
+Removing a worker releases the server so apps can be placed on it again; it does not
 delete the Hetzner server. Treat all workers as trusted production hosts:
 repository Dockerfiles execute code and receive scoped push credentials during
 their operation.

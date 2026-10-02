@@ -38,6 +38,14 @@ import { handleListOperations, handleOperationEvents } from "./operations.ts";
 const DIGEST_A = `ghcr.io/acme/app@sha256:${"a".repeat(64)}`;
 const DIGEST_B = `ghcr.io/acme/app@sha256:${"b".repeat(64)}`;
 
+/** A ready app server; the preload wipes tables between tests, so look it up lazily. */
+function appServer(): db.ServerRow {
+  return db.getServers().find((server) => server.name === "app-server") ?? db.insertServer({
+    name: "app-server", provider_id: "", ipv4: "198.51.100.40", ipv6: "",
+    type: "cx23", location: "nbg1", status: "ready",
+  });
+}
+
 function makeApp(overrides: Partial<Parameters<typeof db.insertApp>[0]> = {}) {
   return db.insertApp({
     name: `app-${Math.random().toString(36).slice(2, 8)}`,
@@ -46,6 +54,7 @@ function makeApp(overrides: Partial<Parameters<typeof db.insertApp>[0]> = {}) {
     env_vars: "{}",
     image_ref: DIGEST_A,
     health_check: true,
+    placement: { [String(appServer().id)]: 1 },
     ...overrides,
   });
 }
@@ -63,6 +72,7 @@ function deployRequest(
       apply_mode: "manifest",
       image_ref: app.image_ref,
       container_port: app.container_port,
+      placement: { "app-server": 1 },
       volume_id: "",
       volume_size: 0,
       volume_path: "/data",
@@ -75,7 +85,6 @@ function deployRequest(
 describe("app response scrubbing", () => {
   test("secrets never leave the server; auth_enabled is derived", async () => {
     const app = makeApp({ auth_password: "hunter2" });
-    db.updateAppSleepingState(app.id, 1, 10001);
 
     const response = await handleGetApps(new Request("http://x/api/apps"));
     const row = ((await response.json()) as Array<Record<string, unknown>>).find((candidate) => candidate.id === app.id)!;
@@ -175,7 +184,7 @@ test("operation events report an updated wait reason on the same step", async ()
 
 describe("external artifact release endpoint", () => {
   test("enqueues an atomic immutable-image candidate and preserves configuration", async () => {
-    const app = makeApp({ sticky: true, placement_pool: "workers" });
+    const app = makeApp({ sticky: true, placement: { [String(appServer().id)]: 2 } });
     db.updateAppMemory(app.id, 768);
     const request = new Request(`http://x/api/apps/${app.id}/release`, {
       method: "POST",
@@ -189,14 +198,14 @@ describe("external artifact release endpoint", () => {
     const operation = getOperation(body.op_id)!;
     const input = JSON.parse(operation.input_json) as {
       gitCommit: string;
-      candidate: { image_ref: string; sticky: boolean; memory_mb: number; placement_pool: string };
+      candidate: { image_ref: string; sticky: boolean; memory_mb: number; placement: Record<string, number> };
     };
     expect(input.gitCommit).toBe("c".repeat(40));
     expect(input.candidate).toMatchObject({
       image_ref: DIGEST_B,
       sticky: true,
       memory_mb: 768,
-      placement_pool: "workers",
+      placement: { [String(appServer().id)]: 2 },
     });
     expect(operation.idempotency_key).toBe(`release:${app.id}:github-42-1`);
     expect(db.getApp(app.id)!.image_ref).toBe(DIGEST_A);
@@ -358,8 +367,8 @@ describe("CLI-only manifest endpoint", () => {
         selected_app_keys: ["web"],
         partial: true,
         apps: [
-          { key: "api", app_name: "api", container_port: 3000, image_ref: "ghcr.io/acme/app:latest" },
-          { key: "web", app_name: "web", container_port: 3000, image_ref: DIGEST_B },
+          { key: "api", app_name: "api", container_port: 3000, image_ref: "ghcr.io/acme/app:latest", placement: { "app-server": 1 } },
+          { key: "web", app_name: "web", container_port: 3000, image_ref: DIGEST_B, placement: { "app-server": 1 } },
         ],
       }),
     }));

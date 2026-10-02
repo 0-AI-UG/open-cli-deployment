@@ -5,7 +5,6 @@ useTempDataDir();
 import * as db from "../../shared/db.ts";
 import { enqueueOperation, listChildOperations } from "../../shared/db/operations.ts";
 import pauseAppOp from "./pause-app.ts";
-import wakeOp from "./wake.ts";
 import { appReplicaLifecycleOp } from "./app-lifecycle.ts";
 
 function context(opId: number, kind: string, input: unknown) {
@@ -78,16 +77,5 @@ describe("lifecycle operation boundaries", () => {
       "verify_replica",
       "persist_replica_state",
     ]);
-  });
-});
-
-describe("wake replay boundary", () => {
-  test("uses an exact completion probe and keeps publication separate", () => {
-    expect(wakeOp.steps.map((step) => step.name)).toEqual([
-      "check_sleeping",
-      "start_containers",
-      "sync_ingress",
-    ]);
-    expect(wakeOp.steps.find((step) => step.name === "start_containers")?.probe).toBeFunction();
   });
 });

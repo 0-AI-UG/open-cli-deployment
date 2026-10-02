@@ -3,7 +3,6 @@
 import { describe, test, expect } from "bun:test";
 import { openUdpListener } from "./udp.ts";
 import type { ProxyApp } from "./config.ts";
-import type { WakeFn } from "./wake.ts";
 
 function app(over: Partial<ProxyApp> = {}): ProxyApp {
   return {
@@ -12,14 +11,9 @@ function app(over: Partial<ProxyApp> = {}): ProxyApp {
     vip: "127.0.0.1",
     frontPorts: [53],
     backends: [],
-    sleeping: false,
     ...over,
   };
 }
-
-const noWake: WakeFn = async () => {
-  throw new Error("wake must not be called");
-};
 
 async function udpEchoServer() {
   return Bun.udpSocket({
@@ -39,7 +33,6 @@ describe("udp proxy", () => {
     const handle = await openUdpListener(
       app({ backends: [`127.0.0.1:${echo.port}`] }),
       { port: 0, protocol: "udp" },
-      noWake,
     );
     const replies: string[] = [];
     let notify: (() => void) | null = null;
@@ -78,43 +71,4 @@ describe("udp proxy", () => {
     }
   });
 
-  test("sleeping app: wakes once, forwards once backends exist", async () => {
-    const echo = await udpEchoServer();
-    let wakes = 0;
-    const wake: WakeFn = async () => {
-      wakes++;
-      await Bun.sleep(50);
-      return [`127.0.0.1:${echo.port}`];
-    };
-    const handle = await openUdpListener(
-      app({ appId: 201, backends: [], sleeping: true }),
-      { port: 0, protocol: "udp" },
-      wake,
-    );
-    const replies: string[] = [];
-    const client = await Bun.udpSocket({
-      hostname: "127.0.0.1",
-      port: 0,
-      socket: {
-        data(_socket, buf) {
-          replies.push(buf.toString());
-        },
-      },
-    });
-    try {
-      // Dropped while sleeping, but triggers the wake.
-      client.send("dropped", handle.port, "127.0.0.1");
-      client.send("dropped too", handle.port, "127.0.0.1");
-      await Bun.sleep(150);
-      client.send("after wake", handle.port, "127.0.0.1");
-      const deadline = Date.now() + 3000;
-      while (replies.length < 1 && Date.now() < deadline) await Bun.sleep(10);
-      expect(replies).toEqual(["after wake"]);
-      expect(wakes).toBe(1);
-    } finally {
-      client.close();
-      handle.stop();
-      echo.close();
-    }
-  });
 });

@@ -14,18 +14,6 @@ Compare the configured health mode/path/command/file with the behavior inside
 the container. Fix desired health configuration in `.ocd-deploy.json`, preview
 it with `ocd deploy --dry-run`, then run `ocd deploy`.
 
-## Sleeping app does not wake
-
-```bash
-ocd scale wake my-app
-ocd ops --app=my-app
-ocd app replicas my-app
-ocd logs my-app --tail=200
-```
-
-Use wake for the immediate operational action. Fix replica/autoscaling or
-scale-to-zero intent in the manifest and apply it with `ocd deploy`.
-
 ## Local and server configuration differ
 
 ```bash
@@ -45,6 +33,19 @@ ocd envs list
 
 Correct the manifest `environment`, then rerun deploy. Staging is an explicit
 app with its own manifest and environment.
+
+## Deploy rejects the placement
+
+`Placement server "x" does not exist` means the manifest names a server that
+`ocd servers` does not list; use its exact name or numeric ID. A server that is
+not `ready` or is a dedicated build worker cannot be placed on. OCD never picks
+another server or creates one; fix `placement` or create capacity with
+`ocd servers create`. A volume app whose placement names a different server
+fails with a pointer to `ocd move <app> --to <server>`, which moves the data.
+
+If a placed server becomes unavailable, its replicas are not rescheduled: the
+app stays unhealthy until the server returns or the placement changes. See
+[Placement](scaling-storage-and-placement.md#placement).
 
 ## Build or release cannot publish/pull an image
 

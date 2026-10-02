@@ -1,13 +1,15 @@
 import { reconcileNtfyService } from "../ntfy/service.ts";
 import { normalizeNtfyBindings, prepareNtfyBindings, saveAppNtfy, appNtfyEnv, deleteAppNtfy } from "../../shared/ntfy.ts";
 import { resolveStorageBindings, prepareStorageBindings, saveAppStorage, appStorageEnv, deleteAppStorage } from "../../shared/object-storage.ts";
-import type { DeployRequest, Server } from "../../shared/rpc.ts";
+import type { DeployRequest } from "../../shared/rpc.ts";
 import dbInstance, * as db from "../../shared/db.ts";
 import { isNotFoundError } from "../../shared/hetzner/errors.ts";
 import {
-  normalizeAppScaling,
+  assertPlacementUsable,
   resolveDeployRequestEnvironmentIds,
+  resolveRequestPlacement,
 } from "../../shared/app-config.ts";
+import { placementTotal, type Placement } from "../../shared/placement.ts";
 import {
   sshExec,
   pullImmutableImageAndRun,
@@ -27,12 +29,10 @@ import { createMasker } from "../../shared/mask.ts";
 import { platformEnvVars } from "../../shared/env-crypto.ts";
 import { serializeRuntimeConfig, resolveRuntimeEnv, runtimeAppFromRequest, preflightRuntimeEnv } from "../../shared/runtime-env.ts";
 import { getHetznerToken } from "../../shared/secret-store.ts";
-import { provisionServer } from "../provision-server.ts";
 import { registerOp } from "./registry.ts";
 import { FatalProbeError, type OpContext, type OpKindDefinition, type Step } from "../types.ts";
 import { attestReplica, hashEnvironment, latestDesiredImage } from "../revision.ts";
-import { scaleUp } from "../scale/scale-up.ts";
-import { metricHasRolloutSpace } from "../disk-capacity.ts";
+import { addReplicas } from "../scale/scale-up.ts";
 import { assertRolloutDiskSpace } from "../hetzner/build.ts";
 import { commitManifestDeliverySource } from "../manifest-delivery-source.ts";
 import {
@@ -43,13 +43,14 @@ import {
 
 type DeployInput = DeployRequest;
 
+/** The first placed server hosts the primary replica; finalize starts the
+ * rest of the declared placement. */
 type ServerOut = {
   serverId: number;
   serverIp: string;
   serverHostKey: string;
-  provisioned: boolean;
-  providerServerId?: string;
   ingressIp: string;
+  placement: Placement;
 };
 
 type VolumeOut = {
@@ -133,9 +134,9 @@ function domainSettings(_server: ServerOut): { default_domain_suffix?: string } 
 
 // --- Steps ----------------------------------------------------------------
 
-const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
-  name: "pick_or_provision_server",
-  label: "Pick server",
+const resolvePlacementStep: Step<DeployInput, ServerOut> = {
+  name: "resolve_placement",
+  label: "Resolve placement",
   async run(ctx) {
     const req = ctx.input;
     // Pre-flight: reject duplicate app names up front.
@@ -160,66 +161,22 @@ const pickOrProvisionServer: Step<DeployInput, ServerOut> = {
       assertSafeHostPath(v.host_path, req.app_name);
     }
 
-    const settings = db.getSettings();
+    // The declared placement is the whole truth: every named server must
+    // exist and be usable. OCD never picks or provisions a server.
+    const placement = resolveRequestPlacement(req);
+    assertPlacementUsable(placement);
+    const servers = Object.keys(placement).map((id) => db.getServer(Number(id))!);
+    for (const server of servers) await assertRolloutDiskSpace(server.ipv4, server.ssh_host_key || undefined);
+    const primary = servers[0];
     const panel = db.getPanel();
     const panelServerRow = panel ? db.getServer(panel.server_id) : null;
-
-    if (req.server_id) {
-      const target = db.getServer(req.server_id) as Server | null;
-      if (!target || target.status !== "ready") {
-        throw new Error("Target server not found or not ready");
-      }
-      await assertRolloutDiskSpace(target.ipv4, target.ssh_host_key || undefined);
-      const ingressIp = panelServerRow?.ipv4 || target.ipv4;
-      return {
-        serverId: target.id,
-        serverIp: target.ipv4,
-        serverHostKey: target.ssh_host_key || "",
-        provisioned: false,
-        ingressIp,
-      };
-    }
-    const desiredPool = req.placement_pool || "general";
-    const recentDisk = new Map(db.getRecentServerMetrics(120).map((metric) => [metric.server_id, metric] as const));
-    const existingReady = db.getServers().find((s) =>
-      s.status === "ready" &&
-      s.id !== panel?.server_id &&
-      s.pool === desiredPool &&
-      metricHasRolloutSpace(recentDisk.get(s.id))
-    );
-    if (existingReady) {
-      await assertRolloutDiskSpace(existingReady.ipv4, existingReady.ssh_host_key || undefined);
-      const ingressIp = panelServerRow?.ipv4 || existingReady.ipv4;
-      return {
-        serverId: existingReady.id,
-        serverIp: existingReady.ipv4,
-        serverHostKey: existingReady.ssh_host_key || "",
-        provisioned: false,
-        ingressIp,
-      };
-    }
-    const serverType = settings.default_server_type;
-    if (!serverType) throw new Error("No default server type configured — set one in Settings");
-    const location = settings.default_location;
-    if (!location) throw new Error("No default server location configured — set one in Settings");
-
-    const newServer = await provisionServer({
-      serverType,
-      location,
-      name: `ocd-${req.app_name}-op${ctx.opId}`,
-      pool: desiredPool,
-      approved: req.server_provisioning_approved === true,
-      emit: (step, detail) => ctx.log(`[${step}] ${detail}`),
-    });
-    await assertRolloutDiskSpace(newServer.ipv4, newServer.ssh_host_key || undefined);
-    const ingressIp = panelServerRow?.ipv4 || newServer.ipv4;
+    ctx.log(`Placement: ${servers.map((server) => `${server.name}×${placement[String(server.id)]}`).join(", ")}`);
     return {
-      serverId: newServer.id,
-      serverIp: newServer.ipv4,
-      serverHostKey: newServer.ssh_host_key || "",
-      provisioned: true,
-      providerServerId: newServer.provider_id,
-      ingressIp,
+      serverId: primary.id,
+      serverIp: primary.ipv4,
+      serverHostKey: primary.ssh_host_key || "",
+      ingressIp: panelServerRow?.ipv4 || primary.ipv4,
+      placement,
     };
   },
 };
@@ -230,7 +187,7 @@ const createVolume: Step<DeployInput, VolumeOut> = {
   async probe(ctx, prior) {
     const req = ctx.input;
     if (!req.volume_size || req.volume_size <= 0) return null;
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const serverRow = db.getServer(server.serverId);
     if (!serverRow) throw new FatalProbeError(`Server ${server.serverId} not found`);
     const driver = req.volume_driver
@@ -295,7 +252,7 @@ const createVolume: Step<DeployInput, VolumeOut> = {
     const req = ctx.input;
     if (!req.volume_size || req.volume_size <= 0) return null;
 
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const volumeServer = db.getServer(server.serverId);
     if (!volumeServer) throw new Error(`Server ${server.serverId} not found`);
     const driver = req.volume_driver
@@ -352,7 +309,7 @@ const createVolume: Step<DeployInput, VolumeOut> = {
       ctx.log(`Preserved pre-existing attachment for volume ${out.volumeId}`);
       return;
     }
-    const picked = prior["pick_or_provision_server"] as ServerOut | undefined;
+    const picked = prior["resolve_placement"] as ServerOut | undefined;
     const server = picked ? db.getServer(picked.serverId) ?? undefined : undefined;
     const driver = requireStorageDriver(out.driverId);
     try { await driver.detach(out.volumeId, server); } catch (err) {
@@ -385,7 +342,7 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
       );
     }
     const replica = replicas[0];
-    const server = prior["pick_or_provision_server"] as ServerOut | undefined;
+    const server = prior["resolve_placement"] as ServerOut | undefined;
     if (!server) return null;
     if (replica.server_id !== server.serverId) {
       throw new FatalProbeError(
@@ -416,7 +373,7 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
   async run(ctx, prior) {
     const req = resolveDeployRequestEnvironmentIds(ctx.input);
     Object.assign(ctx.input, req);
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const volume = prior["create_volume"] as VolumeOut;
 
     const { domain: useDomain } = resolveAppDomain(req, domainSettings(server), server.ingressIp);
@@ -431,9 +388,6 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
       (v) => `${v.host_path}:${v.container_path}`,
     );
 
-    // Durability policy -> concrete placement-spread + replica floors, applied
-    // AT INSERT so the SLO/placement layer enforces them from the first tick.
-    const scaling = normalizeAppScaling(req);
     // Single atomic commit: app row + first replica + volume intent.
     // metadata. Without the transaction a mid-step crash could leave the DB
     // with an app but no DNS / volume / extra-volume rows.
@@ -462,10 +416,7 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
           compress: req.compress,
           public_port: req.public_port,
           public_protocol: req.public_protocol,
-          durability_class: scaling.durability_class,
-          max_per_host: scaling.max_per_host,
-          min_locations: scaling.min_locations,
-          placement_pool: req.placement_pool,
+          placement: server.placement,
           target: targetTag,
           target_of: targetOf,
           desired_volume_id: req.volume_id ?? "",
@@ -479,17 +430,6 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
         server.serverId,
       );
       if (ctx.triggeredBy) db.updateAppDeployedBy(result.app.id, ctx.triggeredBy);
-      db.updateAppScaling(result.app.id, {
-        desired_replicas: scaling.desired_replicas,
-        min_replicas: scaling.min_replicas,
-        max_replicas: scaling.max_replicas,
-        autoscale_enabled: scaling.autoscale_enabled,
-        autoscale_cpu_threshold: scaling.autoscale_cpu_threshold,
-        autoscale_mem_threshold: scaling.autoscale_mem_threshold,
-        autoscale_req_threshold: scaling.autoscale_req_threshold,
-        autoscale_cooldown: scaling.autoscale_cooldown,
-        scale_to_zero_after: scaling.scale_to_zero_after,
-      });
       if (volume) {
         db.updateAppVolume(result.app.id, volume.volumeId, volume.volumeMount, volume.attached, volume.driverId);
         if (volume.attached) db.deleteRetiredVolume(volume.volumeId);
@@ -549,7 +489,7 @@ const setupVolumeBindMount: Step<DeployInput, { ok: true }> = {
   async run(ctx, prior) {
     const volume = prior["create_volume"] as VolumeOut;
     if (!volume) return { ok: true };
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const appOut = prior["insert_app_row"] as InsertAppOut;
 
     const hostMountPath = volume.volumeMount.split(":")[0];
@@ -595,7 +535,7 @@ const setupVolumeBindMount: Step<DeployInput, { ok: true }> = {
   async compensate(ctx, _out, prior) {
     const volume = prior["create_volume"] as VolumeOut;
     if (!volume) return;
-    const server = prior["pick_or_provision_server"] as ServerOut | undefined;
+    const server = prior["resolve_placement"] as ServerOut | undefined;
     const appOut = prior["insert_app_row"] as InsertAppOut | undefined;
     if (!server || !appOut) return;
     const hostMountPath = volume.volumeMount.split(":")[0];
@@ -619,7 +559,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
   label: "Pull and run immutable image",
   async probe(ctx, prior) {
     const req = ctx.input;
-    const server = prior["pick_or_provision_server"] as ServerOut | undefined;
+    const server = prior["resolve_placement"] as ServerOut | undefined;
     if (!server) return null;
     const hostKey = server.serverHostKey || undefined;
     // Adopt ONLY a container that is actually running. A container left behind
@@ -639,7 +579,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
   },
   async probeCompensated(_ctx, out, prior) {
     if (!out) return true;
-    const server = prior["pick_or_provision_server"] as ServerOut | undefined;
+    const server = prior["resolve_placement"] as ServerOut | undefined;
     const appOut = prior["insert_app_row"] as InsertAppOut | undefined;
     if (!server || !appOut) return true;
     const exists = await containerExists(server.serverIp, appOut.containerName, server.serverHostKey || undefined);
@@ -647,7 +587,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
   },
   async run(ctx, prior) {
     const req = ctx.input;
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const volume = prior["create_volume"] as VolumeOut;
     const appOut = prior["insert_app_row"] as InsertAppOut;
 
@@ -730,7 +670,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
   },
   async compensate(ctx, out, prior) {
     if (!out) return;
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const appOut = prior["insert_app_row"] as InsertAppOut;
     if (!server || !appOut) return;
     try {
@@ -802,7 +742,7 @@ const healthCheckStep: Step<DeployInput, { healthy: boolean; statusCode?: number
   label: "Health check",
   async run(ctx, prior) {
     const req = ctx.input;
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const appOut = prior["insert_app_row"] as InsertAppOut;
     const tenantServerRow = db.getServer(server.serverId);
     if (!tenantServerRow) throw new Error(`Server ${server.serverId} not found`);
@@ -890,7 +830,7 @@ const recordDeploymentHistory: Step<DeployInput, { deploymentId: number; gitComm
   },
   async run(ctx, prior) {
     const req = ctx.input;
-    const server = prior["pick_or_provision_server"] as ServerOut;
+    const server = prior["resolve_placement"] as ServerOut;
     const appOut = prior["insert_app_row"] as InsertAppOut;
     const build = prior["pull_and_run_container"] as ArtifactOut;
 
@@ -927,28 +867,31 @@ const finalizeDeploy: Step<DeployInput, { ok: true }> = {
   async run(ctx, prior) {
     const req = ctx.input;
     const appOut = prior["insert_app_row"] as InsertAppOut;
-    // Multi-replica deploys just declare the desired count; the reconciler's
-    // convergence loop brings the extra replicas up within a tick. Scaling
-    // only needs a route the panel can fan out over the private network —
-    // which every deployed app has (private apps via their internal
-    // entrypoint, public apps via the panel), so the sole blocker is a public
-    // app that somehow resolved to no domain at all.
+    // Bring up the rest of the declared placement before reporting success:
+    // every placed server must run exactly its declared replica count.
     const app = db.getApp(appOut.appId);
     if (!app) throw new Error("App disappeared before replica convergence");
-    const current = db.getReplicas(app.id);
-    const desired = app.volume_id ? 1 : app.desired_replicas;
-    if (desired > current.length) {
-      db.appendDeployLog(app.id, `[scale] Converging ${current.length} → ${desired} replicas before success`);
-      await scaleUp(app, current, current.length, desired, (phase, detail) => {
-        ctx.log(`[${phase}] ${detail}`);
-        db.appendDeployLog(app.id, `[${phase}] ${detail}`);
-      }, undefined, undefined, req.server_provisioning_approved === true, `op${ctx.opId}`);
+    const placement = (prior["resolve_placement"] as ServerOut).placement;
+    const emit = (phase: string, detail: string) => {
+      ctx.log(`[${phase}] ${detail}`);
+      db.appendDeployLog(app.id, `[${phase}] ${detail}`);
+    };
+    for (const [serverId, count] of Object.entries(placement)) {
+      const onServer = db.getReplicas(app.id).filter((replica) => replica.server_id === Number(serverId)).length;
+      if (onServer >= count) continue;
+      const server = db.getServer(Number(serverId));
+      if (!server) throw new Error(`Placement server #${serverId} disappeared during deploy`);
+      emit("scale", `Starting ${count - onServer} replica(s) on ${server.name}`);
+      await addReplicas(app, server, count - onServer, emit);
     }
     const finalReplicas = db.getReplicas(app.id);
     const divergent = finalReplicas.filter((replica) => replica.status !== "running" || !replica.attested_at);
-    if (finalReplicas.length !== desired || divergent.length > 0) {
+    const mismatched = Object.entries(placement).filter(([serverId, count]) =>
+      finalReplicas.filter((replica) => replica.server_id === Number(serverId)).length !== count
+    );
+    if (finalReplicas.length !== placementTotal(placement) || mismatched.length > 0 || divergent.length > 0) {
       throw new Error(
-        `Replica convergence incomplete: desired=${desired}, actual=${finalReplicas.length}, unattested=${divergent.map((r) => r.id).join(",") || "none"}`,
+        `Replica convergence incomplete: desired=${placementTotal(placement)}, actual=${finalReplicas.length}, unattested=${divergent.map((r) => r.id).join(",") || "none"}`,
       );
     }
     await commitManifestDeliverySource(appOut.appId, req.delivery_source);
@@ -977,7 +920,7 @@ const deployOp: OpKindDefinition<DeployInput> = {
   label: "Deploy app",
   resourceKeys: (input) => [`app:create:${input.app_name}`],
   steps: [
-    pickOrProvisionServer,
+    resolvePlacementStep,
     createVolume,
     insertAppRow,
     setupVolumeBindMount,

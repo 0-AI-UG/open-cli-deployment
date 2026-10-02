@@ -9,10 +9,7 @@ export {
   updateServer,
   deleteServer,
   updateServerHostKey,
-  updateServerPool,
   recordServerObservation,
-  getServersByPool,
-  getDistinctServerPools,
   insertServerMetricSample,
   getRecentServerMetrics,
   pruneOldServerMetrics,
@@ -85,10 +82,6 @@ export {
   clearAppRolloutRequest,
   markAppDeletionRequested,
   updateAppPublicEndpointStatus,
-  updateAppSleepingState,
-  clearAppSleepingState,
-  touchAppLastRequest,
-  updateAppRequestRate,
   updateAppDeployedBy,
   appendDeployLog,
   getDeployLog,
@@ -115,10 +108,7 @@ export {
   updateAppAuthPassword,
   updateAppPublic,
   updateAppInternalProtocol,
-  updateAppScaling,
-  updateAppDurability,
-  updateAppPlacementPool,
-  getDistinctPlacementPools,
+  updateAppPlacement,
   setAppTarget,
   setAppStackNeeds,
   parseStackNeeds,
@@ -163,8 +153,6 @@ export {
   updateReplicaStatus,
   recordReplicaAttestation,
   clearReplicaAttestation,
-  markReplicaStopped,
-  markReplicaRunning,
   updateReplicaMetrics,
   deleteReplica,
   getAllReplicas,
@@ -233,7 +221,7 @@ export {
   setUserPermissions,
   incrementTokenVersion,
 } from "./users.ts";
-export { getSettings, saveSetting, ensureProxyWakeSecret } from "./settings.ts";
+export { getSettings, saveSetting } from "./settings.ts";
 export type { PanelRow, PanelDeploymentRow } from "./panel.ts";
 export {
   getPanel,
@@ -278,6 +266,7 @@ export {
 export type { AvailabilitySampleRow } from "./availability.ts";
 export {
   computeMeetsTarget,
+  currentAvailability,
   insertAvailabilitySample,
   getAvailabilityStats,
   pruneOldAvailabilitySamples,

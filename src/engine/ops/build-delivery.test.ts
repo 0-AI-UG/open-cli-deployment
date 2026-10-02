@@ -27,7 +27,7 @@ function seedWorker(name: string) {
     location: "nbg1",
     status: "ready",
   });
-  const worker = db.insertBuildWorker({ serverId: server.id, name: `${name}-${suffix}`, previousPool: "general" });
+  const worker = db.insertBuildWorker({ serverId: server.id, name: `${name}-${suffix}` });
   return { server, worker };
 }
 
@@ -90,6 +90,7 @@ function appSpec(name: string): DeployRequest {
   return {
     app_name: name,
     container_port: 3000,
+    placement: { "1": 1 },
     git_commit: COMMIT,
     build: {
       repository: "https://github.com/acme/widgets.git",

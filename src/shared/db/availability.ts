@@ -1,7 +1,9 @@
 import db from "./connection.ts";
+import { getReplicas } from "./replicas.ts";
+import { parsePlacement, placementTotal } from "../placement.ts";
 
 // --- App availability samples ---
-// Periodic snapshots of whether an app met its durability/availability target,
+// Periodic snapshots of whether an app ran its declared placement,
 // used to compute uptime% and MTTR (mean time to recovery). One row per
 // reconciler evaluation; pruned on a retention window like the metrics tables.
 
@@ -11,36 +13,42 @@ export type AvailabilitySampleRow = {
   meets_target: number;
   desired_count: number;
   running_count: number;
-  distinct_hosts: number;
-  distinct_locations: number;
   sampled_at: string;
 };
 
 /**
- * Shared availability-target predicate. An app "meets target" when it has at
- * least its required number of replicas running, those running replicas span at
- * least `min_locations` distinct provider locations, and — when a per-host cap
- * is configured (`max_per_host > 0`) — they are spread across enough distinct
- * hosts to honour that cap (ceil(running / max_per_host) hosts).
- *
- * Lives here (a dependency-free helper) so BOTH the reconciler's periodic
- * sampler (src/engine/reconciler.ts) and the availability API route compute
- * `meets_target` identically without the engine importing server-route code.
+ * Shared availability-target predicate: an app meets its target when every
+ * placed server runs its declared number of healthy replicas. Lives here so
+ * the reconciler's sampler and the availability route agree.
  */
 export function computeMeetsTarget(p: {
-  running_count: number;
-  distinct_hosts: number;
-  distinct_locations: number;
-  min_replicas: number;
-  min_locations: number;
-  max_per_host: number;
+  /** Declared placement: server id -> replica count. */
+  placement: Record<string, number>;
+  /** Running replicas per server id. */
+  running_by_server: Map<number, number>;
 }): boolean {
-  const target_replicas = Math.max(p.min_replicas, 1);
-  return (
-    p.running_count >= target_replicas &&
-    p.distinct_locations >= p.min_locations &&
-    (p.max_per_host === 0 || p.distinct_hosts >= Math.ceil(p.running_count / p.max_per_host))
-  );
+  const entries = Object.entries(p.placement);
+  return entries.length > 0 &&
+    entries.every(([serverId, count]) => (p.running_by_server.get(Number(serverId)) ?? 0) >= count);
+}
+
+/** Live availability snapshot: running replicas against the declared placement. */
+export function currentAvailability(app: { id: number; placement: string | null }): {
+  desired: number;
+  running: number;
+  meetsTarget: boolean;
+} {
+  const placement = parsePlacement(app.placement);
+  const running = getReplicas(app.id).filter((replica) => replica.status === "running");
+  const runningByServer = new Map<number, number>();
+  for (const replica of running) {
+    runningByServer.set(replica.server_id, (runningByServer.get(replica.server_id) ?? 0) + 1);
+  }
+  return {
+    desired: placementTotal(placement),
+    running: running.length,
+    meetsTarget: computeMeetsTarget({ placement, running_by_server: runningByServer }),
+  };
 }
 
 export function insertAvailabilitySample(s: {
@@ -48,18 +56,14 @@ export function insertAvailabilitySample(s: {
   meets_target: boolean;
   desired_count: number;
   running_count: number;
-  distinct_hosts: number;
-  distinct_locations: number;
 }): void {
   db.query(
-    "INSERT INTO availability_samples (app_id, meets_target, desired_count, running_count, distinct_hosts, distinct_locations) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO availability_samples (app_id, meets_target, desired_count, running_count) VALUES (?, ?, ?, ?)"
   ).run(
     s.app_id,
     s.meets_target ? 1 : 0,
     s.desired_count,
     s.running_count,
-    s.distinct_hosts,
-    s.distinct_locations,
   );
 }
 

@@ -20,25 +20,18 @@ import { FatalProbeError, type OpKindDefinition, type Step } from "../types.ts";
 type AttachVolumeInput = { appId: number; sizeGb: number; mountPath?: string; driverId?: string };
 
 type CreateVolumeOut = { volumeId: string; driverId: string; hostMountPath: string; volName: string };
-type AttachToAppOut = { priorMinReplicas: number; priorMaxReplicas: number; volumeMount: string };
-type ValidateOut = SingleReplicaTarget & { priorMinReplicas: number; priorMaxReplicas: number; driverId: string };
+type AttachToAppOut = { volumeMount: string };
+type ValidateOut = SingleReplicaTarget & { driverId: string };
 
 const validate: Step<AttachVolumeInput, ValidateOut> = {
   name: "validate",
   label: "Validate preconditions",
   async run(ctx) {
     const target = loadSingleReplicaTarget(ctx.input.appId, { requireNoVolume: true });
-    const app = db.getApp(ctx.input.appId)!;
-    const server = db.getServer(target.serverId)!;
     const driver = ctx.input.driverId
       ? requireStorageDriver(ctx.input.driverId)
       : defaultStorageDriver();
-    return {
-      ...target,
-      driverId: driver.id,
-      priorMinReplicas: app.min_replicas,
-      priorMaxReplicas: app.max_replicas,
-    };
+    return { ...target, driverId: driver.id };
   },
 };
 
@@ -168,7 +161,6 @@ const attachToApp: Step<AttachVolumeInput, AttachToAppOut> = {
   label: "Record volume on app",
   async probe(ctx, prior) {
     const vol = prior["create_volume"] as CreateVolumeOut;
-    const before = prior["validate"] as ValidateOut;
     const app = db.getApp(ctx.input.appId);
     if (!app) throw new FatalProbeError("App disappeared while recording its volume");
     const volumeMount = `${vol.hostMountPath}:${ctx.input.mountPath || "/data"}`;
@@ -177,49 +169,24 @@ const attachToApp: Step<AttachVolumeInput, AttachToAppOut> = {
         `App already references unexpected volume ${app.volume_id}; refusing to overwrite it with ${vol.volumeId}`,
       );
     }
-    if (
-      app.volume_id === vol.volumeId &&
-      app.volume_mount === volumeMount &&
-      app.max_replicas === 1 &&
-      app.min_replicas === Math.min(1, before.priorMinReplicas)
-    ) {
-      return {
-        priorMinReplicas: before.priorMinReplicas,
-        priorMaxReplicas: before.priorMaxReplicas,
-        volumeMount,
-      };
-    }
+    if (app.volume_id === vol.volumeId && app.volume_mount === volumeMount) return { volumeMount };
     return null;
   },
   async run(ctx, prior) {
     const vol = prior["create_volume"] as CreateVolumeOut;
-    const before = prior["validate"] as ValidateOut;
-    const app = db.getApp(ctx.input.appId);
-    if (!app) throw new Error("App not found");
+    if (!db.getApp(ctx.input.appId)) throw new Error("App not found");
     const containerPath = ctx.input.mountPath || "/data";
     const volumeMount = `${vol.hostMountPath}:${containerPath}`;
-    const priorMinReplicas = before?.priorMinReplicas ?? app.min_replicas;
-    const priorMaxReplicas = before?.priorMaxReplicas ?? app.max_replicas;
     db.updateAppVolume(ctx.input.appId, vol.volumeId, volumeMount, false, vol.driverId);
-    // A volume locks the app to a single server: force min/max replicas to 1
-    // so autoscale + manual scaling cannot ever bring up replica 2+.
-    db.updateAppScaling(ctx.input.appId, { min_replicas: Math.min(1, app.min_replicas), max_replicas: 1 });
-    return { priorMinReplicas, priorMaxReplicas, volumeMount };
+    // A volume locks the app to a single server: manifest validation requires
+    // a volume app's placement to be exactly one server with one replica.
+    return { volumeMount };
   },
-  async compensate(ctx, out) {
-    // Clear the volume + restore the prior scaling floor, then recreate the
-    // container without the volume so the app returns to its pre-op running
-    // state (the cloud volume is deleted by create_volume's compensate, which
-    // runs after this one).
+  async compensate(ctx) {
+    // Clear the volume, then recreate the container without the volume so the
+    // app returns to its pre-op running state (the cloud volume is deleted by
+    // create_volume's compensate, which runs after this one).
     try { db.updateAppVolume(ctx.input.appId, "", ""); } catch (err) { ctx.log(`clear volume failed: ${err}`); }
-    if (out) {
-      try {
-        db.updateAppScaling(ctx.input.appId, {
-          min_replicas: out.priorMinReplicas,
-          max_replicas: out.priorMaxReplicas,
-        });
-      } catch (err) { ctx.log(`restore scaling failed: ${err}`); }
-    }
     const app = db.getApp(ctx.input.appId);
     if (!app) return;
     // Do NOT swallow a failed recreate: leaving the app with no serving

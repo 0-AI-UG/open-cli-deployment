@@ -13,7 +13,6 @@ describe("buildPanelReleaseScript", () => {
     image: "ghcr.io/0-ai-ug/open-cli-deployment@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     hostPort: 3001,
     containerPort: 3001,
-    routingAddress: "10.0.0.2",
     envFilePath: "/home/deploy/apps/ocd-panel/.env.deploy",
     volumeFlag: "-v /mnt/data:/app/data",
     volumeHostPath: "/mnt/data",
@@ -35,7 +34,7 @@ describe("buildPanelReleaseScript", () => {
   test("runs the new container on the same loopback port Traefik targets", () => {
     const script = buildPanelReleaseScript(base);
     expect(script).toContain(
-      "docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 -p 127.0.0.1:3001:3001 -p 10.0.0.2:8896:8896 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data ghcr.io/0-ai-ug/open-cli-deployment@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 -p 127.0.0.1:3001:3001 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data ghcr.io/0-ai-ug/open-cli-deployment@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     );
     // Old container is removed only after a successful pull (pull-then-swap).
     expect(script).toContain("docker rm -f ocd-panel");
@@ -65,7 +64,7 @@ describe("buildPanelReleaseScript", () => {
 
     test("restarts the previous image when the new one never becomes healthy", () => {
       const script = buildPanelReleaseScript(base);
-      expect(script).toContain('docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 -p 127.0.0.1:3001:3001 -p 10.0.0.2:8896:8896 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data $PREV_IMAGE');
+      expect(script).toContain('docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 -p 127.0.0.1:3001:3001 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data $PREV_IMAGE');
       expect(script).toContain("rolling back to $PREV_IMAGE");
     });
 
@@ -92,18 +91,6 @@ describe("buildPanelReleaseScript", () => {
       const script = buildPanelReleaseScript({ ...base, healthRetries: 5 });
       expect(script).toContain("for i in $(seq 1 5); do");
     });
-  });
-
-  test("publishes the HTTP waker port on the private IP so sleeping apps can wake", () => {
-    const script = buildPanelReleaseScript(base);
-    // Bound to the private IP (not 0.0.0.0): the waker bypasses Traefik's auth /
-    // allowlist middleware, so it must never be exposed on the public interface.
-    expect(script).toContain("-p 10.0.0.2:8896:8896");
-    expect(script).not.toContain("-p 0.0.0.0:8896");
-    // HTTP-only scope: the per-app raw TCP/UDP waker ranges are deliberately not
-    // published (would be a static 200+200 port block of docker-proxy processes).
-    expect(script).not.toContain("21000-21199");
-    expect(script).not.toContain("21200-21399");
   });
 
   test("snapshots the stopped database and restores it before starting the previous image", () => {
@@ -142,12 +129,6 @@ describe("buildPanelReleaseScript", () => {
     expect(exit).toBe(0);
   });
 
-  test("omits the waker port when the private IP is unknown", () => {
-    const script = buildPanelReleaseScript({ ...base, routingAddress: "" });
-    expect(script).not.toContain(":8896:8896");
-    // Still runs the panel on its loopback port.
-    expect(script).toContain("-p 127.0.0.1:3001:3001");
-  });
 
   test("retries the pull the requested number of times and gives up cleanly", () => {
     const script = buildPanelReleaseScript(base);

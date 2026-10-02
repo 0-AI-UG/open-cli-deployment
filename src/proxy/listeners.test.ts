@@ -5,11 +5,6 @@
 import { describe, test, expect } from "bun:test";
 import { createListenerSet } from "./listeners.ts";
 import type { ProxyApp, ProxyConfig } from "./config.ts";
-import type { WakeFn } from "./wake.ts";
-
-const noWake: WakeFn = async () => {
-  throw new Error("wake must not be called");
-};
 
 function freePort(): number {
   const listener = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
@@ -32,7 +27,7 @@ function echoServer(): { port: number; stop(): void } {
 }
 
 function configFor(apps: ProxyApp[], listenPort: number, publicListenPort?: number): ProxyConfig {
-  return { version: 1, wakeUrl: null, wakeSecret: "", listenPort, publicListenPort, apps };
+  return { version: 1, listenPort, publicListenPort, apps };
 }
 
 function roundtrip(port: number, payload: string): Promise<string> {
@@ -120,7 +115,7 @@ describe("listener reconciliation", () => {
   test("removed app closes its listener, re-added app starts serving again", async () => {
     const echo = echoServer();
     const port = freePort();
-    const set = createListenerSet(noWake);
+    const set = createListenerSet();
     try {
       const appA: ProxyApp = {
         appId: 1,
@@ -128,8 +123,7 @@ describe("listener reconciliation", () => {
         vip: "127.0.0.1",
         frontPorts: [80],
         backends: [`127.0.0.1:${echo.port}`],
-        sleeping: false,
-      };
+          };
       await set.reconcile(configFor([appA], port));
       expect(set.size()).toBe(1);
       expect(await roundtrip(port, "via vip")).toBe("via vip");
@@ -153,15 +147,14 @@ describe("listener reconciliation", () => {
     const echoOld = echoServer();
     const echoNew = echoServer();
     const port = freePort();
-    const set = createListenerSet(noWake);
+    const set = createListenerSet();
     const base: ProxyApp = {
       appId: 2,
       name: "b",
       vip: "127.0.0.1",
       frontPorts: [80],
       backends: [`127.0.0.1:${echoOld.port}`],
-      sleeping: false,
-    };
+      };
     try {
       await set.reconcile(configFor([base], port));
       expect(await roundtrip(port, "old pool")).toBe("old pool");
@@ -180,15 +173,14 @@ describe("listener reconciliation", () => {
     const echo = echoServer();
     const internalPort = freePort();
     const publicPort = freePort();
-    const set = createListenerSet(noWake);
+    const set = createListenerSet();
     const app: ProxyApp = {
       appId: 10,
       name: "raw-tcp",
       vip: "127.0.0.1",
       frontPorts: [80],
       backends: [`127.0.0.1:${echo.port}`],
-      sleeping: false,
-      authProtected: true, // has a password AND a public raw port — the combo the split listen ports exist for
+        authProtected: true, // has a password AND a public raw port — the combo the split listen ports exist for
       publicPort: 30040,
       publicProtocol: "tcp",
     };
@@ -209,15 +201,14 @@ describe("listener reconciliation", () => {
     const echo = await udpEchoServer();
     const internalPort = freePort();
     const publicPort = freePort();
-    const set = createListenerSet(noWake);
+    const set = createListenerSet();
     const app: ProxyApp = {
       appId: 11,
       name: "raw-udp",
       vip: "127.0.0.1",
       frontPorts: [53],
       backends: [`127.0.0.1:${echo.port}`],
-      sleeping: false,
-      publicPort: 30090,
+        publicPort: 30090,
       publicProtocol: "udp",
     };
     try {
@@ -232,7 +223,7 @@ describe("listener reconciliation", () => {
 
   test("internal-only app opens exactly one listener (no public port)", async () => {
     const echo = echoServer();
-    const set = createListenerSet(noWake);
+    const set = createListenerSet();
     const port = freePort();
     const app: ProxyApp = {
       appId: 12,
@@ -240,8 +231,7 @@ describe("listener reconciliation", () => {
       vip: "127.0.0.1",
       frontPorts: [80],
       backends: [`127.0.0.1:${echo.port}`],
-      sleeping: false,
-    };
+      };
     try {
       await set.reconcile(configFor([app], port));
       expect(set.size()).toBe(1);
@@ -253,7 +243,7 @@ describe("listener reconciliation", () => {
 
   test("bind failure is non-fatal and retried on the next reconcile", async () => {
     const echo = echoServer();
-    const set = createListenerSet(noWake);
+    const set = createListenerSet();
     // Occupy a port so the bind fails, then free it.
     const blocker = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
     const port = blocker.port;
@@ -263,8 +253,7 @@ describe("listener reconciliation", () => {
       vip: "127.0.0.1",
       frontPorts: [80],
       backends: [`127.0.0.1:${echo.port}`],
-      sleeping: false,
-    };
+      };
     try {
       await set.reconcile(configFor([appC], port));
       expect(set.size()).toBe(0); // bind failed, process alive

@@ -1,7 +1,7 @@
 import * as db from "../../shared/db.ts";
 import { sshExec, ensureOcdNetwork, pullImmutableImage, startAppReplica } from "../../shared/remote/index.ts";
 import { syncAppIngress } from "./traefik-manager.ts";
-import { scaleUp } from "./scale-up.ts";
+import { addReplicas } from "./scale-up.ts";
 import { type ProgressFn, log, type App, type Replica, replicaBindHost } from "./types.ts";
 import { resolveAppEnvVars } from "../../shared/env-crypto.ts";
 import { hashEnvironment, latestDesiredImage } from "../revision.ts";
@@ -10,14 +10,11 @@ import { requireStorageDriver } from "../storage/index.ts";
 const asUser = (cmd: string) => `su - deploy -c ${JSON.stringify(cmd)}`;
 
 /**
- * Migrate a single replica from its current server to a target server.
- *
- * Stateless apps: scale up by 1 onto the target, then drain and remove the old replica
- * (zero downtime — net replica count stays the same).
- *
- * Apps with a persistent volume: stop on source, move its portable volume to the target,
- * then start a fresh replica on the target. Brief downtime is unavoidable because a
- * volume can only be attached to one server at a time.
+ * Move a volume app's single replica and its volume to a target server: stop
+ * on source, move the portable volume to the target, then start a fresh
+ * replica on the target. Brief downtime is unavoidable because a volume can
+ * only be attached to one server at a time. Stateless apps move through
+ * their placement instead (see ops/move.ts).
  */
 export type MigrateResult =
   | { ok: true; sourceServerName: string; targetServerName: string; fromCount: number; toCount: number; replicaId: number; withVolume?: boolean }
@@ -39,7 +36,7 @@ export type VolumeMigrationContext = {
   volumeMountChanged?: boolean;
 };
 
-export async function migrateReplica(
+export async function migrateVolumeReplica(
   appId: number,
   replicaId: number,
   targetServerId: number,
@@ -49,6 +46,7 @@ export async function migrateReplica(
   try {
     const app = db.getApp(appId);
     if (!app) throw new Error("App not found");
+    if (!app.volume_id) throw new Error(`App ${app.name} has no volume; stateless apps move through their placement`);
 
     const targetServer = db.getServer(targetServerId);
     if (!targetServer || targetServer.status !== "ready") {
@@ -126,10 +124,7 @@ export async function migrateReplica(
         );
       }
 
-      if (app.volume_id) {
-        return await migrateWithVolume(app, replica, allReplicas, sourceServer, targetServer, emit, rollbackCtx, reservation);
-      }
-      return await migrateStateless(app, replica, allReplicas, sourceServer, targetServer, emit, reservation);
+      return await migrateWithVolume(app, replica, allReplicas, sourceServer, targetServer, emit, rollbackCtx, reservation);
     } finally {
       db.releaseHostPortReservation(reservation.id);
     }
@@ -138,63 +133,6 @@ export async function migrateReplica(
     log("migrate", `Failed to migrate replica ${replicaId}: ${msg}`);
     return { ok: false, error: msg };
   }
-}
-
-async function migrateStateless(
-  app: App,
-  replica: Replica,
-  allReplicas: Replica[],
-  sourceServer: ReturnType<typeof db.getServer>,
-  targetServer: ReturnType<typeof db.getServer>,
-  emit: ProgressFn,
-  reservation: { id: number; server_id: number; bind_address: string; host_port: number },
-): Promise<MigrateResult> {
-  if (!sourceServer || !targetServer) throw new Error("Server not found");
-  const currentCount = allReplicas.length;
-  const hostKey = sourceServer.ssh_host_key || undefined;
-
-  emit("migrate", `Creating new replica on ${targetServer.name}...`);
-  await scaleUp(app, allReplicas, currentCount, currentCount + 1, emit, targetServer.id, reservation);
-  const targetReplica = db.getReplicas(app.id).find((candidate) =>
-    candidate.server_id === targetServer.id && candidate.id !== replica.id
-  );
-  if (!targetReplica) throw new Error("Target replica row missing after scale-up");
-
-  emit("migrate", `Draining old replica ${replica.container_name}...`);
-  db.updateReplicaStatus(replica.id, "draining");
-  try {
-    await syncAppIngress(app.id);
-  } catch (err) {
-    log("migrate", `Ingress sync during drain failed (continuing): ${err}`);
-  }
-
-  emit("migrate", `Waiting 10s drain for ${replica.container_name}...`);
-  await Bun.sleep(10_000);
-
-  // Graceful stop first so SQLite WAL and other buffered writers flush.
-  // `docker stop -t 20` sends SIGTERM, waits up to 20s, then SIGKILL.
-  await sshExec(sourceServer.ipv4, asUser(`docker stop -t 20 ${replica.container_name} 2>/dev/null || true`), hostKey);
-  await sshExec(sourceServer.ipv4, asUser(`docker rm -f ${replica.container_name} 2>/dev/null || true`), hostKey);
-
-  db.deleteReplica(replica.id);
-  emit("migrate", `Old replica ${replica.container_name} removed`);
-
-  await syncAppIngress(app.id);
-
-  db.updateAppScaling(app.id, {
-    desired_replicas: currentCount,
-    last_scale_at: new Date().toISOString(),
-  });
-
-  emit("migrate", `Migration complete — replica now on ${targetServer.name}`);
-  return {
-    ok: true,
-    sourceServerName: sourceServer.name,
-    targetServerName: targetServer.name,
-    fromCount: currentCount,
-    toCount: currentCount,
-    replicaId: targetReplica.id,
-  };
 }
 
 async function migrateWithVolume(
@@ -361,11 +299,11 @@ async function migrateWithVolume(
     (r) => r.server_id === targetServer.id && r.id !== replica.id,
   );
   if (preExistingTarget) {
-    log("migrate", `Found pre-existing target replica ${preExistingTarget.container_name} from prior attempt — skipping scaleUp`);
+    log("migrate", `Found pre-existing target replica ${preExistingTarget.container_name} from prior attempt — skipping replica start`);
   } else {
     emit("migrate", `Starting ${app.name} on ${targetServer.name}...`);
     try {
-      await scaleUp(app, allReplicas, currentCount, currentCount + 1, emit, targetServer.id, reservation);
+      await addReplicas(app, targetServer, 1, emit, reservation);
     } catch (scaleErr) {
       log("migrate", `Failed to start replica on target after volume move: ${scaleErr}`);
       throw scaleErr;
@@ -385,11 +323,6 @@ async function migrateWithVolume(
   }
 
   await syncAppIngress(app.id);
-
-  db.updateAppScaling(app.id, {
-    desired_replicas: currentCount,
-    last_scale_at: new Date().toISOString(),
-  });
 
   emit("migrate", `Migration complete — replica and volume now on ${targetServer.name}`);
   return {

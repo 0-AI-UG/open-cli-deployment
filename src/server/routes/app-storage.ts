@@ -37,10 +37,7 @@ export async function handleGetAppStorage(request: Request, appId: number): Prom
       server_id: server.id,
       server_name: server.name,
       inventory: await inspectServerGc(server.ipv4, server.ssh_host_key || undefined, {
-        activeAppNames: [...new Set([
-          ...db.getApps(server.id).map((candidate) => candidate.name),
-          ...db.getApps().filter((candidate) => candidate.sleeping_server_id === server.id).map((candidate) => candidate.name),
-        ])],
+        activeAppNames: [...new Set(db.getApps(server.id).map((candidate) => candidate.name))],
       }),
     })));
     const reclaimable = inventories.flatMap(({ server_id, server_name, inventory }) =>

@@ -92,7 +92,7 @@ OCD without GitHub Actions minutes.
 ocd bootstrap [--domain=HOSTNAME] [--app-domain=SUFFIX]
     [--server-type=TYPE] [--location=LOCATION]
 ocd deploy [manifest] [--auth-password-env=KEY]
-    [--commit=sha] [--server=ID] [--app=EXISTING_APP]
+    [--commit=sha] [--app=EXISTING_APP]
     [--dry-run] [--config-only]
 ocd deploy stack [manifest] [--config-only] [--commit=sha]
 ocd release <app> --image <repository@sha256:digest> [--commit <sha>]
@@ -115,7 +115,6 @@ ocd rollback <app> [--deployment=<id>]
 ocd promote --from=<source-app> --to=<destination-app>
 ocd pause <app>
 ocd unpause <app>
-ocd scale wake <app>
 ocd envs <list|show|create|copy|rename|set|unset|deleted|restore|remove|purge>
 ocd stack <ls|status|logs>
 ocd manifest validate [path] [--allow-unknown]

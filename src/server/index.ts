@@ -78,9 +78,6 @@ export const server = Bun.serve({
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    // Sleeping apps no longer route to the panel: their Traefik routers point
-    // at the in-process hold-and-forward waker (src/engine/scale/waker.ts),
-    // which wakes the app and forwards the request transparently.
     const url = new URL(request.url);
 
     // Terminal WebSocket upgrade

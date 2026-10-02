@@ -6,7 +6,7 @@
   "image": "docker.io/binwiederhier/ntfy:v2.28.0",
   "container_port": 80,
   "public": true,
-  "replicas": 1,
+  "placement": { "<server-name>": 1 },
   "memory_mb": 128,
   "cpu_limit": 0.5,
   "command": ["serve"],

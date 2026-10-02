@@ -201,7 +201,7 @@ export function platformEnvVars(
 
 /** Convenience: resolve all env vars for an app from its linked environment,
  *  merged over the platform-injected OCD_INTERNAL_* vars (user vars win).
- *  Single choke point for redeploy/wake/rolling/scale-up/lifecycle/rollback/
+ *  Single choke point for redeploy/rolling/scale-up/lifecycle/rollback/
  *  reconciler; the first-deploy path (ops/deploy.ts buildAndRunContainer)
  *  merges platformEnvVars manually because it resolves env vars before the
  *  app row exists.

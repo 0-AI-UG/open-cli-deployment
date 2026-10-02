@@ -1,17 +1,15 @@
 // TCP data path: one Bun.listen per (app, tcp listener) on the app's VIP.
 // Random backend pick with connect-retry over the remaining backends (this IS
 // the health-aware LB), bidirectional piping with real backpressure, half-close
-// propagation, and hold-and-forward for sleeping apps (buffer the opening
-// client bytes, wake, connect, flush).
+// propagation, and buffering of the opening client bytes until the upstream
+// connect completes.
 
 import type { Socket, SocketHandler } from "bun";
 import type { ProxyApp, ProxyListener } from "./config.ts";
-import { recordActivity } from "./status.ts";
-import { sharedWake, type WakeFn } from "./wake.ts";
 
-// While an app is waking there is nowhere to write: buffer at most this much
-// from the client, then pause the socket until the upstream exists.
-const WAKE_BUFFER_CAP = 1 << 20; // 1 MiB
+// While the upstream is still connecting there is nowhere to write: buffer at
+// most this much from the client, then pause the socket until it exists.
+const CONNECT_BUFFER_CAP = 1 << 20; // 1 MiB
 
 export type TcpListenerHandle = {
   protocol: "tcp";
@@ -23,7 +21,7 @@ export type TcpListenerHandle = {
 type Conn = {
   client: Socket<Conn>;
   upstream: Socket<Conn> | null;
-  /** client → upstream bytes (includes the opening bytes buffered pre-wake). */
+  /** client → upstream bytes (includes the opening bytes buffered pre-connect). */
   toUpstream: Buffer[];
   toUpstreamBytes: number;
   /** upstream → client bytes awaiting a writable client. */
@@ -189,42 +187,15 @@ async function tryBackends(backends: string[], conn: Conn, app: ProxyApp): Promi
       return true;
     }
     conn.upstream = upstream;
-    flushToUpstream(conn); // opening bytes buffered while connecting/waking
+    flushToUpstream(conn); // opening bytes buffered while connecting
     return true;
   }
   return false;
 }
 
-async function connectUpstream(conn: Conn, ref: { app: ProxyApp }, wake: WakeFn): Promise<void> {
+async function connectUpstream(conn: Conn, ref: { app: ProxyApp }): Promise<void> {
   const app = ref.app;
-  // Empty pool: the app is asleep — wake it and connect to the returned pool.
-  const woke = app.backends.length === 0;
-  let backends = app.backends;
-  if (woke) {
-    try {
-      backends = await sharedWake(app, wake);
-    } catch (err) {
-      console.error(`[proxy] wake failed for app ${app.appId} (${app.name}): ${err}`);
-      teardown(conn);
-      return;
-    }
-    if (conn.closed) return;
-  }
-  if (await tryBackends(backends, conn, app)) return;
-  // Every configured backend refused: the pool is stale (the app slept or
-  // moved since the last config render). Fall back to the wake path once —
-  // never after a wake already produced this pool, or a dead app would loop.
-  if (!woke) {
-    try {
-      backends = await sharedWake(app, wake);
-    } catch (err) {
-      console.error(`[proxy] wake after all-refused pool failed for app ${app.appId} (${app.name}): ${err}`);
-      teardown(conn);
-      return;
-    }
-    if (conn.closed) return;
-    if (await tryBackends(backends, conn, app)) return;
-  }
+  if (await tryBackends(app.backends, conn, app)) return;
   console.error(`[proxy] no reachable backend for app ${app.appId} (${app.name})`);
   teardown(conn);
 }
@@ -243,7 +214,6 @@ async function connectUpstream(conn: Conn, ref: { app: ProxyApp }, wake: WakeFn)
 export function openTcpListener(
   app: ProxyApp,
   listener: ProxyListener,
-  wake: WakeFn,
   opts: { enforceAuth?: boolean } = {},
 ): TcpListenerHandle {
   const enforceAuth = opts.enforceAuth ?? true;
@@ -265,9 +235,8 @@ export function openTcpListener(
           closed: false,
         };
         socket.data = conn;
-        recordActivity(ref.app.appId);
         // L4 cannot check credentials — fail closed for password-protected
-        // apps: no backend dial, no wake, just destroy the connection. Skipped
+        // apps: no backend dial, just destroy the connection. Skipped
         // on the public raw listener (enforceAuth:false), which serves the
         // auth-free raw port exactly as Traefik did.
         if (enforceAuth && ref.app.authProtected) {
@@ -275,14 +244,14 @@ export function openTcpListener(
           return;
         }
         // Snapshot at connect time: config reloads affect new connections only.
-        void connectUpstream(conn, ref, wake);
+        void connectUpstream(conn, ref);
       },
       data(socket, chunk) {
         const conn = socket.data;
         conn.toUpstream.push(Buffer.from(chunk));
         conn.toUpstreamBytes += chunk.length;
         if (conn.upstream) flushToUpstream(conn);
-        else if (conn.toUpstreamBytes >= WAKE_BUFFER_CAP) socket.pause();
+        else if (conn.toUpstreamBytes >= CONNECT_BUFFER_CAP) socket.pause();
       },
       drain(socket) {
         flushToClient(socket.data);

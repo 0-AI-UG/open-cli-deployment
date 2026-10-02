@@ -32,6 +32,9 @@
     "mode": "exec",
     "command": "pg_isready"
   },
+  "placement": {
+    "server-2": 1
+  },
   "volume": {
     "size": 10,
     "path": "/var/lib/postgresql/data"

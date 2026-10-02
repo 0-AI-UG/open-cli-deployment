@@ -14,8 +14,8 @@
 //
 // Neither internal app-to-app traffic NOR the public raw TCP/UDP pool
 // (30000-30099) touches Traefik anymore — the per-host VIP proxy (src/proxy/)
-// owns both (port-less HTTP, natural ports, legacy internal_port URLs, raw
-// TCP/UDP, and scale-to-zero wake). The public pool used to be a block of
+// owns both (port-less HTTP, natural ports, legacy internal_port URLs, and raw
+// TCP/UDP). The public pool used to be a block of
 // static entrypoints reserved fleet-wide; the proxy replaces them with
 // nftables DNAT off the panel's public IP.
 //
@@ -28,7 +28,6 @@
 import * as db from "../../shared/db.ts";
 import {
   TRAEFIK_VERSION,
-  TRAEFIK_METRICS_PORT,
   TRAEFIK_STATIC_CONFIG_PATH,
   TRAEFIK_ACCESS_LOG_PATH,
   TRAEFIK_LOGROTATE_PATH,
@@ -62,10 +61,6 @@ export function traefikStaticConfig(): string {
   const entryPoints: Record<string, { address: string }> = {
     web: { address: ":80" },
     websecure: { address: ":443" },
-    // Prometheus metrics for the reconciler's per-tick scrape. Bound like the
-    // other entrypoints, but the managed-provider firewall only opens 22/80/443
-    // publicly — same not-internet-reachable stance as the public pool blocks.
-    metrics: { address: `:${TRAEFIK_METRICS_PORT}` },
   };
   // The public raw TCP/UDP pool (30000-30099) is no longer a set of Traefik
   // entrypoints — the per-host VIP proxy now owns that ingress via nftables
@@ -87,9 +82,6 @@ export function traefikStaticConfig(): string {
         },
       },
     },
-    // Per-service request counters (traefik_service_requests_total) feed the
-    // idle monitor's traffic-based sleep decisions.
-    metrics: { prometheus: { entryPoint: "metrics" } },
     // JSON access log for per-request debugging across the fleet. Buffered
     // (flushed every ~100 lines) so logging never serializes request handling.
     accessLog: {

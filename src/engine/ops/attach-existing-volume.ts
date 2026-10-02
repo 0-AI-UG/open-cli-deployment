@@ -18,19 +18,16 @@ import { FatalProbeError, type OpKindDefinition, type Step } from "../types.ts";
 type AttachExistingVolumeInput = { appId: number; volumeId: string; mountPath?: string; driverId?: string };
 
 type ValidateOut = SingleReplicaTarget & {
-  priorMinReplicas: number;
-  priorMaxReplicas: number;
   driverId: string;
   hostMountPath: string;
 };
-type AttachToAppOut = { priorMinReplicas: number; priorMaxReplicas: number; volumeMount: string };
+type AttachToAppOut = { volumeMount: string };
 
 const validate: Step<AttachExistingVolumeInput, ValidateOut> = {
   name: "validate",
   label: "Validate preconditions",
   async run(ctx) {
     const target = loadSingleReplicaTarget(ctx.input.appId, { requireNoVolume: true });
-    const app = db.getApp(ctx.input.appId)!;
     const server = db.getServer(target.serverId)!;
     const retired = db.getRetiredVolumes().find((v) => v.provider_volume_id === ctx.input.volumeId);
     const driver = requireStorageDriver(
@@ -46,8 +43,6 @@ const validate: Step<AttachExistingVolumeInput, ValidateOut> = {
       ...target,
       driverId: driver.id,
       hostMountPath: volInfo.hostPath,
-      priorMinReplicas: app.min_replicas,
-      priorMaxReplicas: app.max_replicas,
     };
   },
 };
@@ -181,15 +176,9 @@ const attachToApp: Step<AttachExistingVolumeInput, AttachToAppOut> = {
     if (
       app.volume_id === ctx.input.volumeId &&
       app.volume_mount === volumeMount &&
-      app.volume_attached === 1 &&
-      app.max_replicas === 1 &&
-      app.min_replicas === Math.min(1, before.priorMinReplicas)
+      app.volume_attached === 1
     ) {
-      return {
-        priorMinReplicas: before.priorMinReplicas,
-        priorMaxReplicas: before.priorMaxReplicas,
-        volumeMount,
-      };
+      return { volumeMount };
     }
     return null;
   },
@@ -199,26 +188,16 @@ const attachToApp: Step<AttachExistingVolumeInput, AttachToAppOut> = {
     if (!app) throw new Error("App not found");
     const containerPath = ctx.input.mountPath || "/data";
     const volumeMount = `${before.hostMountPath}:${containerPath}`;
-    const priorMinReplicas = before?.priorMinReplicas ?? app.min_replicas;
-    const priorMaxReplicas = before?.priorMaxReplicas ?? app.max_replicas;
     // attached=true: this is a pre-existing volume, so destroy must DETACH it,
     // never delete it (deleting would be data loss on a volume we don't own).
     db.updateAppVolume(ctx.input.appId, ctx.input.volumeId, volumeMount, true, before.driverId);
     db.deleteRetiredVolume(ctx.input.volumeId);
-    // A volume locks the app to a single server: force min/max replicas to 1.
-    db.updateAppScaling(ctx.input.appId, { min_replicas: Math.min(1, app.min_replicas), max_replicas: 1 });
-    return { priorMinReplicas, priorMaxReplicas, volumeMount };
+    // A volume locks the app to a single server: manifest validation requires
+    // a volume app's placement to be exactly one server with one replica.
+    return { volumeMount };
   },
-  async compensate(ctx, out) {
+  async compensate(ctx) {
     try { db.updateAppVolume(ctx.input.appId, "", ""); } catch (err) { ctx.log(`clear volume failed: ${err}`); }
-    if (out) {
-      try {
-        db.updateAppScaling(ctx.input.appId, {
-          min_replicas: out.priorMinReplicas,
-          max_replicas: out.priorMaxReplicas,
-        });
-      } catch (err) { ctx.log(`restore scaling failed: ${err}`); }
-    }
     const app = db.getApp(ctx.input.appId);
     if (!app) return;
     // Do NOT swallow a failed recreate: leaving the app with no serving

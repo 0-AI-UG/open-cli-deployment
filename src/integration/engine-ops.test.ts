@@ -89,10 +89,6 @@ d(
 
       const db = await import("../shared/db.ts");
 
-      // Seed global infrastructure defaults. DNS is always operator-owned.
-      db.saveSetting("default_server_type", SERVER_TYPE);
-      db.saveSetting("default_location", LOCATION);
-
       // Start engine in-process.
       const { startEngineInProcess } = await import("../engine/entrypoint.ts");
       startEngineInProcess();
@@ -214,7 +210,7 @@ d(
             app_name: ctx!.appName,
             image_ref: "ghcr.io/ocd/test@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             container_port: 8080,
-            server_id: ctx!.serverId,
+            placement: { [String(ctx!.serverId)]: 1 },
           },
           { timeoutMs: 10 * 60_000 },
         );
@@ -235,50 +231,6 @@ d(
         assertStepsOk(await getStepsForOp(result.opId));
       },
       10 * 60_000,
-    );
-
-    // ---- 4. scale-up -------------------------------------------------------
-    appTest(
-      "4. scale-up: 3 replicas running",
-      async () => {
-        expect(ctx).not.toBeNull();
-        const db = await import("../shared/db.ts");
-
-        const result = await enqueueAndWait(
-          "scale_up",
-          { appId: ctx!.appId, targetReplicas: 3 },
-          { timeoutMs: 5 * 60_000 },
-        );
-        expect(result.status).toBe("done");
-
-        const replicas = db.getReplicas(ctx!.appId);
-        expect(replicas.length).toBe(3);
-
-        assertStepsOk(await getStepsForOp(result.opId));
-      },
-      5 * 60_000,
-    );
-
-    // ---- 5. scale-down -----------------------------------------------------
-    appTest(
-      "5. scale-down: 1 replica",
-      async () => {
-        expect(ctx).not.toBeNull();
-        const db = await import("../shared/db.ts");
-
-        const result = await enqueueAndWait(
-          "scale_down",
-          { appId: ctx!.appId, targetReplicas: 1 },
-          { timeoutMs: 3 * 60_000 },
-        );
-        expect(result.status).toBe("done");
-
-        const replicas = db.getReplicas(ctx!.appId);
-        expect(replicas.length).toBe(1);
-
-        assertStepsOk(await getStepsForOp(result.opId));
-      },
-      3 * 60_000,
     );
 
     // ---- 6. restart-app ----------------------------------------------------
@@ -413,33 +365,6 @@ d(
         expect(["failed", "compensated"].includes(result.status)).toBe(true);
       },
       90_000,
-    );
-
-    // ---- 15. sleep / wake --------------------------------------------------
-    appTest(
-      "15. sleep then wake",
-      async () => {
-        expect(ctx).not.toBeNull();
-        const db = await import("../shared/db.ts");
-
-        const sleepResult = await enqueueAndWait(
-          "sleep",
-          { appId: ctx!.appId },
-          { timeoutMs: 3 * 60_000 },
-        );
-        expect(sleepResult.status).toBe("done");
-        expect(db.getApp(ctx!.appId)!.status).toBe("sleeping");
-
-        const wakeResult = await enqueueAndWait(
-          "wake",
-          { appId: ctx!.appId },
-          { timeoutMs: 3 * 60_000 },
-        );
-        expect(wakeResult.status).toBe("done");
-        const app = db.getApp(ctx!.appId);
-        expect(["running", "healthy"].includes(app!.status)).toBe(true);
-      },
-      6 * 60_000,
     );
 
     // ---- 16. basic auth ----------------------------------------------------

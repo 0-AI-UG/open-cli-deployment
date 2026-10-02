@@ -4,9 +4,6 @@ import { listPendingOperations, listRunningOperations, listCompensationFailedOpe
 /** Use the same DB-backed protection set for manual and automatic host GC. */
 export function serverGcProtections(serverId: number) {
   const placed = db.getApps(serverId).map((app) => app.name);
-  const sleeping = db.getApps()
-    .filter((app) => app.sleeping_server_id === serverId)
-    .map((app) => app.name);
   const protectedImageRefs = db.getPanel()?.server_id === serverId
     ? db.getPanelDeployments()
       .filter((deployment) => deployment.status === "deployed")
@@ -21,7 +18,7 @@ export function serverGcProtections(serverId: number) {
     ...listCompensationFailedOperationIds(),
   ])];
   return {
-    activeAppNames: [...new Set([...placed, ...sleeping])],
+    activeAppNames: [...new Set(placed)],
     protectedImageRefs,
     activeOperationIds,
   };

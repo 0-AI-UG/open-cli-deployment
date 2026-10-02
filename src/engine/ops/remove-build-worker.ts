@@ -5,7 +5,7 @@ import type { OpKindDefinition, Step } from "../types.ts";
 
 export type RemoveBuildWorkerInput = { workerId: number };
 
-const remove: Step<RemoveBuildWorkerInput, { serverId: number; previousPool: string }> = {
+const remove: Step<RemoveBuildWorkerInput, { serverId: number }> = {
   name: "remove_worker",
   label: "Remove OCD build worker",
   async run(ctx) {
@@ -22,8 +22,7 @@ const remove: Step<RemoveBuildWorkerInput, { serverId: number; previousPool: str
     );
     if (cleanup.exitCode !== 0) throw new Error(cleanup.stderr.trim() || "Could not remove build-worker files");
     db.deleteBuildWorker(worker.id);
-    db.updateServerPool(worker.server_id, worker.previous_pool || "general");
-    return { serverId: worker.server_id, previousPool: worker.previous_pool };
+    return { serverId: worker.server_id };
   },
 };
 

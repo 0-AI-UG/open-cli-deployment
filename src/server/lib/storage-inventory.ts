@@ -4,7 +4,7 @@ import { sshExec } from "../../shared/remote/index.ts";
 
 export function appStorageMounts(app: ReturnType<typeof db.getApps>[number]): StorageMount[] {
   const local = localVolumeIdentity(app.volume_id);
-  const serverId = local?.serverId ?? db.getReplicas(app.id)[0]?.server_id ?? app.sleeping_server_id ?? null;
+  const serverId = local?.serverId ?? db.getReplicas(app.id)[0]?.server_id ?? null;
   const server = serverId ? db.getServer(serverId) : null;
   const mounts: StorageMount[] = [];
   const add = (id: string, mount: string, kind: StorageMount["kind"]) => {

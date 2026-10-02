@@ -128,15 +128,6 @@ export function AppDetailPage({ appId }: { appId: number }) {
   if (loading) return <PageState title="Loading app" />;
   if (!app) return <PageState kind="empty" title="App not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/"; }}>Back to overview</Btn>} />;
 
-  // Cold-start ETA sub-label for the state badge. Scale-to-zero is a
-  // `docker stop` on the tenant host, so wake is always ~1s.
-  let badgeSubLabel: string | undefined;
-  if (app.status === "sleeping") {
-    badgeSubLabel = "wakes in ~1s";
-  } else if (app.status === "waking") {
-    badgeSubLabel = "starting...";
-  }
-
   const tabs = [
     { key: "overview", label: "Overview" },
     { key: "logs", label: "Logs" },
@@ -154,7 +145,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
             <div className="min-w-0 flex-1">
               <p className="text-xs text-muted">App</p>
               <h1 className="truncate text-2xl font-semibold tracking-tight text-fg">{app.name}</h1>
-              <div className="mt-1"><StatusBadge status={app.status} subLabel={app.environment_stale ? "stale environment" : badgeSubLabel} /></div>
+              <div className="mt-1"><StatusBadge status={app.status} subLabel={app.environment_stale ? "stale environment" : undefined} /></div>
             </div>
             <button onClick={() => setMobileActionsOpen(true)} aria-label="App actions" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted transition-colors active:bg-subtle"><MoreHorizontal size={20} /></button>
           </div>
@@ -175,7 +166,7 @@ export function AppDetailPage({ appId }: { appId: number }) {
           meta={<>
             <StatusBadge
               status={app.status}
-              subLabel={app.environment_stale ? "stale environment" : badgeSubLabel}
+              subLabel={app.environment_stale ? "stale environment" : undefined}
             />
             {server && (
               <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -279,12 +270,8 @@ export function AppDetailPage({ appId }: { appId: number }) {
       {tab === "scaling" && (
         <ScalingTab
           app={app}
-          appId={appId}
           replicas={replicas}
           scalingEvents={scalingEvents}
-          actionLoading={actionLoading}
-          action={action}
-          ops={ops}
         />
       )}
 

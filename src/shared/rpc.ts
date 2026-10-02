@@ -12,6 +12,8 @@ export type Server = {
   created_at: string;
 };
 
+export type PlacementEntry = { server_id: number; server_name: string; replicas: number };
+
 export type App = {
   id: number;
   /** Servers this app currently has replicas on (derived). */
@@ -26,15 +28,8 @@ export type App = {
   /** Whether HTTP basic auth is on (derived from the password hash server-side).
    *  The password and its hash are secrets and never leave the server. */
   auth_enabled: boolean;
-  desired_replicas: number;
-  min_replicas: number;
-  max_replicas: number;
-  autoscale_enabled: number;
-  autoscale_cpu_threshold: number;
-  autoscale_mem_threshold: number;
-  autoscale_cooldown: number;
-  autoscale_req_threshold: number; // target req/min per replica for HTTP request-based scaling; 0 = off
-  last_scale_at: string;
+  /** Declared placement, one entry per server. */
+  placement: PlacementEntry[];
   volume_id: string;
   volume_mount: string;
   volume_driver: string;
@@ -129,20 +124,11 @@ export type DeployRequest = {
   volume_path?: string; // Container mount path, defaults to /data
   volume_driver?: string; // Storage driver id; omitted selects the target server's default
   auth_password?: string; // If set, the ingress enforces HTTP basic auth (username "admin"). Requires internal_protocol 'http' (the default)
-  replicas?: number; // Number of replicas (default 1, >1 creates LB)
-  autoscale_enabled?: boolean;
-  min_replicas?: number;
-  max_replicas?: number;
-  autoscale_cpu_threshold?: number;
-  autoscale_mem_threshold?: number;
-  autoscale_req_threshold?: number;
-  autoscale_cooldown?: number;
+  /** Explicit placement: server name or numeric id -> replica count. OCD
+   * never chooses servers or replica counts on its own. */
+  placement: Record<string, number>;
   public?: boolean; // Whether the app is publicly accessible (default true)
   extra_volumes?: Array<{ host_path: string; container_path: string }>; // Additional volume mounts
-  server_id?: number; // If set, deploy to this specific server instead of auto-selecting
-  /** Internal authorization set only by a server route after browser approval.
-   * Client-supplied values are ignored and overwritten. */
-  server_provisioning_approved?: boolean;
   memory_mb?: number; // Per-container memory ceiling in MB. Omit / 0 → platform default
   cpu_limit?: number; // Per-container CPU ceiling in cores (fractional allowed). Omit / 0 → platform default
   command?: string[]; // Optional argv appended after the OCI image
@@ -167,15 +153,12 @@ export type DeployRequest = {
   compress?: boolean; // Response compression on the public router
   public_port?: number | "auto" | null; // Public raw TCP/UDP exposure: "auto" = lowest free pool port, number = specific pool port, omit = none
   public_protocol?: "tcp" | "udp"; // Pool for public_port (default "tcp"): 30000-30049 tcp, 30050-30099 udp
-  placement_pool?: string; // servers.pool this app's replicas may be placed on; omit / "general" = default pool
   target?: string; // deploy target tag: "" | "production" | "staging" | "dev"
   target_of?: number; // app id this is a staging/dev target of; omit = standalone
   /** @deprecated Legacy wire name for `target` (pre-rename clients). Honored only when `target` is absent. */
   env_label?: string;
   /** @deprecated Legacy wire name for `target_of` (pre-rename clients). Honored only when `target_of` is absent. */
   sibling_of?: number;
-  durability_class?: "none" | "standard" | "high"; // availability policy, mapped to placement-spread + min-replica floors at insert
-  scale_to_zero_after?: number; // idle seconds before scaling to zero (deploy-target override); omit = leave default
   /** Client-computed provenance for an explicitly applied manifest. These are
    * metadata only; the normalized fields above remain the desired spec. */
   manifest_path?: string;
@@ -259,8 +242,6 @@ export type StackDeployRequest = {
      * authoritative config diff requires a more disruptive action. */
     reconcile_mode?: "control" | "runtime" | "artifact";
   }>;
-  /** Internal authorization set only by the stack route after browser approval. */
-  server_provisioning_approved?: boolean;
 };
 
 export type ParsedManifest = {
@@ -271,6 +252,4 @@ export type ParsedManifest = {
 
 export type Settings = {
   default_domain_suffix: string;
-  default_server_type: string;
-  default_location: string;
 };

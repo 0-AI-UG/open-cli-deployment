@@ -1,8 +1,9 @@
 # App manifest catalog
 
 These are ordinary OCD app manifests for common infrastructure images. Copy a
-manifest into an application repository, adjust its name/environment/size, and
-reference it from `ocd-stack.json` like any other app.
+manifest into an application repository, adjust its name/environment/size and
+its `placement` (the server name from `ocd servers` that runs it), and reference
+it from `ocd-stack.json` like any other app.
 
 The catalog has no special runtime behavior or API. Images are resolved to an
 immutable digest during deploy, credentials live in the selected environment,
