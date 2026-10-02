@@ -380,13 +380,16 @@ export function PageShell({
   const sections: ReactNode[] = [];
   while (React.isValidElement(rest[0]) && rest[0].type === PageSection) sections.push(rest.shift());
   // The divider after a section moves up 1px to overlap the section's bottom
-  // edge instead of doubling it.
-  const divider = (end = false) => (
+  // edge instead of doubling it. Connector nodes mark the edges of a real
+  // section only: a PageSection or a flush panel, whose content is itself a
+  // grid. The title band and an open panel are not sections, so their
+  // dividers are plain rules and their sides stay dashed.
+  const divider = (end = false, nodes = true) => (
     <div aria-hidden="true" className={`section-divider ${end ? "section-divider-end" : ""}`}>
-      <span className="node node-l" />
-      <span className="node node-r" />
+      {nodes && <><span className="node node-l" /><span className="node node-r" /></>}
     </div>
   );
+  const panelIsSection = rest.length > 0 && flush;
   return (
     <div ref={wrapRef} className="page-wrap">
       {hero}
@@ -394,24 +397,26 @@ export function PageShell({
         <div aria-hidden="true" className="section-band" />
         {head.length > 0 && (
           <>
-            {divider()}
-            <div className="section-sides mb-px">{head}</div>
+            {divider(false, false)}
+            <div className="mb-px">{head}</div>
           </>
         )}
-        {/* The header band and the panel share one divider: the tab bar's
-            underline sits on it and the panel starts right below. */}
-        {(head.length > 0 || sections.length > 0 || rest.length > 0) && divider(head.length > 0)}
+        {/* The header band and what follows share one divider: the tab bar's
+            underline sits on it and the next band starts right below. It
+            carries nodes when that band is a section. */}
+        {(head.length > 0 || sections.length > 0 || rest.length > 0) && divider(head.length > 0, sections.length > 0 || panelIsSection)}
         {sections.map((section, i) => (
           <React.Fragment key={i}>
             {section}
             {/* With no panel after it, the footer rule closes the last band. */}
             {(i < sections.length - 1 || rest.length > 0) && divider(true)}
-            {(i < sections.length - 1 || rest.length > 0) && <><div aria-hidden="true" className="section-band" />{divider()}</>}
+            {(i < sections.length - 1 || rest.length > 0) && <><div aria-hidden="true" className="section-band" />{divider(false, i < sections.length - 1 || panelIsSection)}</>}
           </React.Fragment>
         ))}
         {rest.length > 0 && (
-          // The panel runs down to the footer rule, which closes it.
-          <div className={`zone-panel section-sides space-y-6 ${flush ? "zone-panel-flush" : ""} ${className}`}>{rest}</div>
+          // The panel runs down to the footer rule, which closes it. Only a
+          // flush panel is a section with solid sides.
+          <div className={`zone-panel space-y-6 ${flush ? "zone-panel-flush section-sides" : ""} ${className}`}>{rest}</div>
         )}
       </main>
       {/* The sheet closes with a full-width dashed rule, like the header's,
