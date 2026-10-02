@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Cloud, FileText, FileWarning, Folder, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
-import { PermissionGate } from "../components/permission-gate.tsx";
 import { Btn, Card, CardHeader, CopyButton, DataRow, EmptyState, PageHeader, PageShell, PageState, Spinner, showToast } from "../components/ui.tsx";
 
 type BucketDetail = {
@@ -124,86 +123,81 @@ export function BucketDetailPage({ bucketName }: { bucketName: string }) {
         </DataRow>
       </Card>
 
-      <PermissionGate
-        permission="buckets.objects.read"
-        fallback={<Card><EmptyState message="Viewing bucket contents requires the buckets.objects.read permission." icon={FileWarning} /></Card>}
-      >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
-          <Card className="flex min-w-0 flex-col overflow-hidden md:col-span-2">
-            <CardHeader
-              title="Objects"
-              icon={<Cloud size={15} />}
-              actions={<Btn variant="ghost" size="xs" onClick={() => loadPrefix(prefix)} title="Refresh"><RefreshCw size={14} /></Btn>}
-            />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+        <Card className="flex min-w-0 flex-col overflow-hidden md:col-span-2">
+          <CardHeader
+            title="Objects"
+            icon={<Cloud size={15} />}
+            actions={<Btn variant="ghost" size="xs" onClick={() => loadPrefix(prefix)} title="Refresh"><RefreshCw size={14} /></Btn>}
+          />
 
-            <nav aria-label="Prefix" className="flex flex-wrap items-center gap-0.5 border-b bg-subtle/40 px-3 py-2 font-mono text-xs">
-              <button onClick={() => goToPrefix("")} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${crumbs.length ? "text-fg-dim" : "font-medium text-fg"}`}>/</button>
-              {crumbs.map((crumb, index) => (
-                <span key={`${crumb}-${index}`} className="flex items-center gap-0.5">
-                  <ChevronRight size={12} className="text-muted" />
-                  <button onClick={() => goToPrefix(`${crumbs.slice(0, index + 1).join("/")}/`)} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${index === crumbs.length - 1 ? "font-medium text-fg" : "text-fg-dim"}`}>{crumb}</button>
-                </span>
-              ))}
-            </nav>
+          <nav aria-label="Prefix" className="flex flex-wrap items-center gap-0.5 border-b bg-subtle/40 px-3 py-2 font-mono text-xs">
+            <button onClick={() => goToPrefix("")} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${crumbs.length ? "text-fg-dim" : "font-medium text-fg"}`}>/</button>
+            {crumbs.map((crumb, index) => (
+              <span key={`${crumb}-${index}`} className="flex items-center gap-0.5">
+                <ChevronRight size={12} className="text-muted" />
+                <button onClick={() => goToPrefix(`${crumbs.slice(0, index + 1).join("/")}/`)} className={`rounded px-1.5 py-0.5 transition-colors hover:bg-subtle hover:text-fg ${index === crumbs.length - 1 ? "font-medium text-fg" : "text-fg-dim"}`}>{crumb}</button>
+              </span>
+            ))}
+          </nav>
 
-            {listLoading && !page ? (
-              <div className="flex justify-center py-10"><Spinner /></div>
-            ) : listErr ? (
-              <EmptyState message={listErr} icon={FileWarning} />
-            ) : !entries.length ? (
-              <EmptyState message="Empty prefix" icon={Folder} />
-            ) : (
-              <div className="max-h-[60vh] divide-y overflow-y-auto">
-                {prefix && (
-                  <button onClick={() => goToPrefix(crumbs.length > 1 ? `${crumbs.slice(0, -1).join("/")}/` : "")} className="flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg">
-                    <Folder size={14} className="text-muted" /> ..
+          {listLoading && !page ? (
+            <div className="flex justify-center py-10"><Spinner /></div>
+          ) : listErr ? (
+            <EmptyState message={listErr} icon={FileWarning} />
+          ) : !entries.length ? (
+            <EmptyState message="Empty prefix" icon={Folder} />
+          ) : (
+            <div className="max-h-[60vh] divide-y overflow-y-auto">
+              {prefix && (
+                <button onClick={() => goToPrefix(crumbs.length > 1 ? `${crumbs.slice(0, -1).join("/")}/` : "")} className="flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg">
+                  <Folder size={14} className="text-muted" /> ..
+                </button>
+              )}
+              {entries.map(entry => {
+                const active = entry.kind === "object" && objectKey === entry.value.key;
+                const isPrefix = entry.kind === "prefix";
+                return (
+                  <button
+                    key={entry.kind === "prefix" ? entry.value : entry.value.key}
+                    onClick={() => entry.kind === "prefix" ? goToPrefix(entry.value) : openObject(entry.value.key)}
+                    aria-current={active ? "true" : undefined}
+                    className={`flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs transition-colors ${active ? "bg-subtle text-fg" : "text-fg-dim hover:bg-subtle/50 hover:text-fg"}`}
+                  >
+                    {isPrefix ? <Folder size={14} className="shrink-0 text-muted" /> : <FileText size={14} className="shrink-0 text-muted" />}
+                    <span className={`flex-1 truncate ${isPrefix || active ? "font-medium text-fg" : ""}`}>{entry.name}</span>
+                    <span className="shrink-0 tabular-nums text-muted">{entry.kind === "object" ? fmtSize(entry.value.size) : ""}</span>
                   </button>
-                )}
-                {entries.map(entry => {
-                  const active = entry.kind === "object" && objectKey === entry.value.key;
-                  const isPrefix = entry.kind === "prefix";
-                  return (
-                    <button
-                      key={entry.kind === "prefix" ? entry.value : entry.value.key}
-                      onClick={() => entry.kind === "prefix" ? goToPrefix(entry.value) : openObject(entry.value.key)}
-                      aria-current={active ? "true" : undefined}
-                      className={`flex w-full items-center gap-2.5 px-4 py-2 text-left font-mono text-xs transition-colors ${active ? "bg-subtle text-fg" : "text-fg-dim hover:bg-subtle/50 hover:text-fg"}`}
-                    >
-                      {isPrefix ? <Folder size={14} className="shrink-0 text-muted" /> : <FileText size={14} className="shrink-0 text-muted" />}
-                      <span className={`flex-1 truncate ${isPrefix || active ? "font-medium text-fg" : ""}`}>{entry.name}</span>
-                      <span className="shrink-0 tabular-nums text-muted">{entry.kind === "object" ? fmtSize(entry.value.size) : ""}</span>
-                    </button>
-                  );
-                })}
-                {page?.nextCursor && (
-                  <button onClick={() => loadPrefix(prefix, page.nextCursor || undefined)} disabled={listLoading} className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg disabled:opacity-50">
-                    {listLoading ? "Loading…" : "Load more"}
-                  </button>
-                )}
-              </div>
-            )}
-          </Card>
+                );
+              })}
+              {page?.nextCursor && (
+                <button onClick={() => loadPrefix(prefix, page.nextCursor || undefined)} disabled={listLoading} className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-medium text-fg-dim transition-colors hover:bg-subtle/50 hover:text-fg disabled:opacity-50">
+                  {listLoading ? "Loading…" : "Load more"}
+                </button>
+              )}
+            </div>
+          )}
+        </Card>
 
-          <Card className="min-w-0 overflow-hidden md:col-span-3">
-            <CardHeader
-              title={objectKey ? <span className="font-mono text-xs">{objectKey}</span> : "Select an object"}
-              icon={<FileText size={15} />}
-              actions={objectView ? <span className="whitespace-nowrap text-xs tabular-nums text-muted">{fmtSize(objectView.size)}{objectView.truncated ? ` · truncated @ ${fmtSize(objectView.maxBytes)}` : ""}</span> : undefined}
-            />
-            {objectLoading ? (
-              <div className="flex justify-center py-10"><Spinner /></div>
-            ) : !objectKey ? (
-              <EmptyState message="Click an object on the left to view its contents" icon={FileText} />
-            ) : objectView?.binary ? (
-              <EmptyState message={`Binary object (${objectView.contentType}): preview not available`} icon={FileWarning} />
-            ) : (
-              <div className="p-4">
-                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-subtle/60 p-3 font-mono text-xs leading-relaxed text-fg">{objectView?.content || ""}</pre>
-              </div>
-            )}
-          </Card>
-        </div>
-      </PermissionGate>
+        <Card className="min-w-0 overflow-hidden md:col-span-3">
+          <CardHeader
+            title={objectKey ? <span className="font-mono text-xs">{objectKey}</span> : "Select an object"}
+            icon={<FileText size={15} />}
+            actions={objectView ? <span className="whitespace-nowrap text-xs tabular-nums text-muted">{fmtSize(objectView.size)}{objectView.truncated ? ` · truncated @ ${fmtSize(objectView.maxBytes)}` : ""}</span> : undefined}
+          />
+          {objectLoading ? (
+            <div className="flex justify-center py-10"><Spinner /></div>
+          ) : !objectKey ? (
+            <EmptyState message="Click an object on the left to view its contents" icon={FileText} />
+          ) : objectView?.binary ? (
+            <EmptyState message={`Binary object (${objectView.contentType}): preview not available`} icon={FileWarning} />
+          ) : (
+            <div className="p-4">
+              <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all rounded-lg border bg-subtle/60 p-3 font-mono text-xs leading-relaxed text-fg">{objectView?.content || ""}</pre>
+            </div>
+          )}
+        </Card>
+      </div>
     </PageShell>
   );
 }

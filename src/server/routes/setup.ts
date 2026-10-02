@@ -48,10 +48,10 @@ export async function handleSetupComplete(request: Request): Promise<Response> {
       );
     }
 
-    // Create admin user
+    // Create the first user
     const userId = crypto.randomUUID();
     const passwordHash = await Bun.password.hash(password, "bcrypt");
-    db.insertUser({ id: userId, username, password_hash: passwordHash, is_admin: true });
+    db.insertUser({ id: userId, username, password_hash: passwordHash });
 
     // Store non-secret settings
     db.saveSetting("default_domain_suffix", suffix);

@@ -126,7 +126,7 @@ async function waitForBrowserSetup(panelUrl: string, insecureTls: boolean): Prom
   const deadline = Date.now() + 30 * 60 * 1000;
   let lastMessage = 0;
   let accountCreated = false;
-  console.log(`${DIM}Waiting for administrator and passkey setup…${RESET}`);
+  console.log(`${DIM}Waiting for first-user and passkey setup…${RESET}`);
   while (Date.now() < deadline) {
     try {
       const response = await fetchPanel(`${panelUrl}/api/setup/status`, {
@@ -137,7 +137,7 @@ async function waitForBrowserSetup(panelUrl: string, insecureTls: boolean): Prom
         if (status.authenticationReady) return;
         if (status.setupComplete && !accountCreated) {
           accountCreated = true;
-          console.log(`${GREEN}Administrator created.${RESET} Waiting for passkey registration…`);
+          console.log(`${GREEN}First user created.${RESET} Waiting for passkey registration…`);
         }
       }
     } catch {
@@ -195,7 +195,7 @@ export async function bootstrap(args: string[]): Promise<void> {
     const insecureTls = insecureTlsFor(panelUrl);
     console.log(`\n${GREEN}Panel bootstrap completed.${RESET}`);
     savePanelUrl(panelUrl, insecureTls);
-    console.log(`Finish administrator and passkey setup at ${BOLD}${panelUrl}${RESET}`);
+    console.log(`Finish first-user and passkey setup at ${BOLD}${panelUrl}${RESET}`);
     if (!flags["no-open"]) openBrowser(panelUrl);
     await waitForBrowserSetup(panelUrl, insecureTls);
     console.log(`${GREEN}Browser setup complete.${RESET} Starting CLI authentication…`);

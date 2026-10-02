@@ -1,7 +1,7 @@
 import { localStorageInventory, measureStorage, serverStorageInventory } from "../lib/storage-inventory.ts";
 import { localVolumeIdentity } from "../../shared/storage-display.ts";
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { hetzner } from "../../shared/hetzner/index.ts";
@@ -14,7 +14,7 @@ import { getHetznerToken } from "../../shared/secret-store.ts";
 import { getS3Credentials, listBuckets, type S3Bucket } from "../../engine/object-storage/s3.ts";
 export async function handleGetResources(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "resources.view");
+    await requireAuthenticated(request);
 
     const hetznerConfigured = !!await getHetznerToken().catch(() => "");
     const dbServers = db.getServers();
@@ -211,7 +211,7 @@ export async function handleGetResources(request: Request): Promise<Response> {
 
 export async function handleGetServerMetricsHistory(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "metrics.view");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const since = parseInt(url.searchParams.get("since") || "3600", 10);
     const samples = db.getRecentServerMetrics(since);
@@ -223,14 +223,7 @@ export async function handleGetServerMetricsHistory(request: Request): Promise<R
 
 export async function handleDeleteResource(request: Request, type: string, id: string): Promise<Response> {
   try {
-    // The permission depends on what is being deleted: a server and a volume
-    // each have their own grant, and "resources.delete" covers the rest.
-    const permission = type === "server"
-      ? "servers.delete"
-      : type === "volume"
-        ? "volumes.delete"
-        : "resources.delete";
-    const payload = await requirePermission(request, permission);
+    const payload = await requireAuthenticated(request);
 
     if (type === "server") {
       const server = db.getServers().find((s) => s.provider_id === id || String(s.id) === id);
@@ -310,7 +303,7 @@ export async function handleDeleteResource(request: Request, type: string, id: s
 
 export async function handleGetVolumeDeletionAudit(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "volumes.delete");
+    await requireAuthenticated(request);
     return Response.json(db.getVolumeDeletionAudit(), { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
@@ -366,7 +359,7 @@ function shellQuote(s: string): string {
 
 export async function handleGetVolumeDetail(request: Request, volumeId: string): Promise<Response> {
   try {
-    await requirePermission(request, "resources.view");
+    await requireAuthenticated(request);
     const app = db.getApps().find((candidate) => candidate.volume_id === volumeId);
     const retired = db.getRetiredVolumes().find((candidate) => candidate.provider_volume_id === volumeId);
     const driverId = app?.volume_driver || retired?.driver_id;
@@ -407,7 +400,7 @@ export async function handleGetVolumeDetail(request: Request, volumeId: string):
 
 export async function handleListVolumeFiles(request: Request, volumeId: string): Promise<Response> {
   try {
-    await requirePermission(request, "volumes.files.read");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const subPath = url.searchParams.get("path") || "";
 
@@ -454,7 +447,7 @@ const FILE_VIEW_MAX_BYTES = 256 * 1024;
 
 export async function handleGetVolumeFile(request: Request, volumeId: string): Promise<Response> {
   try {
-    await requirePermission(request, "volumes.files.read");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const subPath = url.searchParams.get("path") || "";
     if (!subPath) {
@@ -638,7 +631,7 @@ async function probeServerHost(server: { ipv4: string; ssh_host_key: string }): 
 
 export async function handleGetServerDetail(request: Request, serverId: number): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const server = db.getServer(serverId);
     if (!server) {
       return Response.json({ error: "Server not found" }, { status: 404, headers: corsHeaders });
@@ -714,10 +707,10 @@ export async function handleGetServerDetail(request: Request, serverId: number):
 
 export async function handleCreateServer(request: Request): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "servers.create");
+    const payload = await requireAuthenticated(request);
     if (!await getHetznerToken().catch(() => "")) {
       return Response.json(
-        { error: "Hetzner is not configured. Add the Hetzner API token in Admin → Hetzner." },
+        { error: "Hetzner is not configured. Add the Hetzner API token in Settings → Hetzner." },
         { status: 409, headers: corsHeaders },
       );
     }

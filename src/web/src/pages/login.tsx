@@ -37,7 +37,7 @@ export function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block space-y-1.5">
             <span className="block text-sm font-medium text-fg">Username</span>
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" required autoFocus />
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" required autoFocus />
           </label>
           <label className="block space-y-1.5">
             <span className="block text-sm font-medium text-fg">Password</span>

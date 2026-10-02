@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
 import { handleError } from "../lib/utils.ts";
 import {
@@ -13,7 +13,7 @@ import {
   validateBucketName,
 } from "../../engine/object-storage/s3.ts";
 
-const NOT_CONFIGURED = "Hetzner Object Storage is not configured. Add its credentials in Admin → Hetzner.";
+const NOT_CONFIGURED = "Hetzner Object Storage is not configured. Add its credentials in Settings → Hetzner.";
 
 function providerError(error: unknown): Response {
   if (error instanceof S3Error) {
@@ -33,7 +33,7 @@ function providerError(error: unknown): Response {
 
 export async function handleListBuckets(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "resources.view");
+    await requireAuthenticated(request);
     const credentials = await getS3Credentials();
     if (!credentials) {
       return Response.json({ configured: false, buckets: [] }, { headers: corsHeaders });
@@ -49,7 +49,7 @@ export async function handleListBuckets(request: Request): Promise<Response> {
 
 export async function handleCreateBucket(request: Request): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "buckets.create");
+    const payload = await requireAuthenticated(request);
     const body = await request.json() as { name?: unknown };
     const checked = validateBucketName(typeof body.name === "string" ? body.name : "");
     if (!checked.valid) {
@@ -75,7 +75,7 @@ export async function handleCreateBucket(request: Request): Promise<Response> {
 
 export async function handleDeleteBucket(request: Request, rawName: string): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "buckets.delete");
+    const payload = await requireAuthenticated(request);
     const checked = validateBucketName(rawName);
     if (!checked.valid) {
       return Response.json({ error: checked.error }, { status: 400, headers: corsHeaders });
@@ -100,7 +100,7 @@ function bucketContext(rawName: string) {
 
 export async function handleGetBucket(request: Request, rawName: string): Promise<Response> {
   try {
-    await requirePermission(request, "resources.view");
+    await requireAuthenticated(request);
     const context = bucketContext(rawName);
     if ("error" in context) return Response.json({ error: context.error }, { status: 400, headers: corsHeaders });
     const credentials = await getS3Credentials();
@@ -117,7 +117,7 @@ export async function handleGetBucket(request: Request, rawName: string): Promis
 
 export async function handleListBucketObjects(request: Request, rawName: string): Promise<Response> {
   try {
-    await requirePermission(request, "buckets.objects.read");
+    await requireAuthenticated(request);
     const context = bucketContext(rawName);
     if ("error" in context) return Response.json({ error: context.error }, { status: 400, headers: corsHeaders });
     const url = new URL(request.url);
@@ -137,7 +137,7 @@ export async function handleListBucketObjects(request: Request, rawName: string)
 
 export async function handleGetBucketObject(request: Request, rawName: string): Promise<Response> {
   try {
-    await requirePermission(request, "buckets.objects.read");
+    await requireAuthenticated(request);
     const context = bucketContext(rawName);
     if ("error" in context) return Response.json({ error: context.error }, { status: 400, headers: corsHeaders });
     const key = new URL(request.url).searchParams.get("key") || "";

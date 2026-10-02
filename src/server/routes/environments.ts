@@ -2,7 +2,7 @@ import { appNtfyView } from "../../shared/ntfy.ts";
 import { generateEnvironmentValue } from "../../shared/environment-generate.ts";
 import { appStorageView } from "../../shared/object-storage.ts";
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission, requireAuthenticated } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { parseEnvVars, maskEnvVarsForResponse, serializeEnvVars, mergeEnvVarUpdate, processIncomingEnvVars, suspiciousPlaintextKeys, platformEnvVars, resolveAppEnvVars, SECRET_MASK } from "../../shared/env-crypto.ts";
@@ -11,7 +11,7 @@ import { enforceConfirmation } from "../lib/action-confirm.ts";
 
 export async function handleGetEnvironments(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "environments.view");
+    await requireAuthenticated(request);
     const envs = db.getEnvironments();
     const result = envs.map((e) => ({
       ...e,
@@ -25,7 +25,7 @@ export async function handleGetEnvironments(request: Request): Promise<Response>
 
 export async function handleGetDeletedEnvironments(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "environments.view");
+    await requireAuthenticated(request);
     const result = db.getDeletedEnvironments().map((environment) => ({
       ...environment,
       env_vars: maskEnvVarsForResponse(parseEnvVars(environment.env_vars)),
@@ -38,7 +38,7 @@ export async function handleGetDeletedEnvironments(request: Request): Promise<Re
 
 export async function handleCreateEnvironment(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "environments.manage");
+    await requireAuthenticated(request);
     const body = await request.json();
     const { name, env_vars } = body;
     if (!name || typeof name !== "string") {
@@ -69,10 +69,6 @@ export async function handleCreateEnvironment(request: Request): Promise<Respons
 
 export async function handleUpdateEnvironment(request: Request, id: number): Promise<Response> {
   try {
-    // This route carries two distinct actions: renaming (plain management) and
-    // writing env var *values*, i.e. secrets. They are permissioned separately
-    // so a user can be trusted with one without the other; the body decides
-    // which checks apply.
     const payload = await requireAuthenticated(request);
     const existing = db.getEnvironment(id);
     if (!existing) {
@@ -101,12 +97,6 @@ export async function handleUpdateEnvironment(request: Request, id: number): Pro
     }
 
     const renaming = typeof name === "string" && name.trim() !== "" && name.trim() !== existing.name;
-    if (renaming) {
-      await requirePermission(request, "environments.manage");
-    }
-    if (env_vars !== undefined) {
-      await requirePermission(request, "environments.secrets");
-    }
 
     // Only rewrite env vars when the body actually carries them — the merge
     // treats an absent list as "no entries", which would wipe every var on a
@@ -197,11 +187,7 @@ export async function handleUpdateEnvironment(request: Request, id: number): Pro
 
 export async function handleCopyEnvironment(request: Request, id: number): Promise<Response> {
   try {
-    // Creating the copy is a fleet-wide management action; the copy also
-    // duplicates the source environment's secrets, so the caller must be
-    // allowed to read them out of the source.
-    await requirePermission(request, "environments.manage");
-    await requirePermission(request, "environments.secrets");
+    await requireAuthenticated(request);
     const src = db.getEnvironment(id);
     if (!src) {
       return Response.json({ ok: false, error: "Environment not found" }, { status: 404, headers: corsHeaders });
@@ -223,7 +209,7 @@ export async function handleCopyEnvironment(request: Request, id: number): Promi
 
 export async function handleDeleteEnvironment(request: Request, id: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "environments.manage");
+    const payload = await requireAuthenticated(request);
     await enforceConfirmation(request, payload, "delete_environment", "environment", String(id));
     const env = db.getEnvironment(id);
     if (!env) {
@@ -251,7 +237,7 @@ export async function handleDeleteEnvironment(request: Request, id: number): Pro
 
 export async function handleRestoreEnvironment(request: Request, id: number): Promise<Response> {
   try {
-    await requirePermission(request, "environments.manage");
+    await requireAuthenticated(request);
     const environment = db.getDeletedEnvironment(id);
     if (!environment) {
       return Response.json({ ok: false, error: "Deleted environment not found" }, { status: 404, headers: corsHeaders });
@@ -269,7 +255,7 @@ export async function handleRestoreEnvironment(request: Request, id: number): Pr
 
 export async function handlePurgeEnvironment(request: Request, id: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "environments.manage");
+    const payload = await requireAuthenticated(request);
     const environment = db.getDeletedEnvironment(id);
     if (!environment) {
       return Response.json({ ok: false, error: "Deleted environment not found" }, { status: 404, headers: corsHeaders });
@@ -294,7 +280,7 @@ export async function handlePurgeEnvironment(request: Request, id: number): Prom
 
 export async function handleGetEnvironmentApps(request: Request, id: number): Promise<Response> {
   try {
-    await requirePermission(request, "environments.view");
+    await requireAuthenticated(request);
     const env = db.getEnvironment(id);
     if (!env) {
       return Response.json({ ok: false, error: "Environment not found" }, { status: 404, headers: corsHeaders });
@@ -329,7 +315,7 @@ export async function handleGetEnvironmentApps(request: Request, id: number): Pr
 
 export async function handleGenerateEnvironmentValue(request: Request, id: number): Promise<Response> {
   try {
-    await requirePermission(request, "environments.secrets");
+    await requireAuthenticated(request);
     const { key, type = "password" } = await request.json();
     if (typeof key !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(key) || !["password", "username"].includes(type)) {
       return Response.json({ error: "Provide an environment key and type password or username" }, { status: 400, headers: corsHeaders });

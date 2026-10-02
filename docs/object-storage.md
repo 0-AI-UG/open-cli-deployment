@@ -7,7 +7,7 @@ the Hetzner API token.
 ## Configure
 
 Generate an access key and secret key in the Hetzner Console. In OCD, open
-**Admin → Hetzner** and enter the Object Storage region (`fsn1`, `nbg1`, or
+**Settings → Hetzner** and enter the Object Storage region (`fsn1`, `nbg1`, or
 `hel1`) and both keys. OCD verifies the credentials before saving them and
 stores both values in its encrypted secret store. To rotate keys, update them
 in place.
@@ -27,9 +27,7 @@ before deleting the bucket.
 
 Select a bucket name under **Resources → Object Storage** to browse its
 delimiter-separated prefixes and preview text objects. Previews are capped at
-256 KiB and binary objects are not rendered. Non-admin users need the
-`buckets.objects.read` permission because object names and contents are
-application data.
+256 KiB and binary objects are not rendered.
 
 Object-storage credentials are often account- or project-wide. Do not inject
 OCD's administrative credential into applications. Apps should declare scoped
@@ -84,7 +82,7 @@ Declare app-owned access in the manifest:
 }
 ```
 
-Bindings require an existing bucket and the global `apps.storage.bind` permission for deployment. Administrators have this permission implicitly.
+Bindings require an existing bucket for deployment.
 Each app and named binding receives a different encrypted grant, even when they
 share a bucket or prefix.
 

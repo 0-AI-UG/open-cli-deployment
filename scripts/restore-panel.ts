@@ -23,6 +23,6 @@ async function main() {
     bytes = await getObject(source.hostname, decodeURIComponent(source.pathname.slice(1)), credentials);
   }
   const result = restoreArchive(bytes, recoveryKey, values["data-dir"]);
-  console.log(`Panel backup from ${result.createdAt} restored.\nMount the new directory as OCD_DATA_DIR and start the matching OCD release. Do not supply a different JWT_SECRET.\nAutomation is paused. Open Admin → Panel to verify server access and resume.\nBackup image: ${result.image || "not recorded (use the release that created this backup)"}`);
+  console.log(`Panel backup from ${result.createdAt} restored.\nMount the new directory as OCD_DATA_DIR and start the matching OCD release. Do not supply a different JWT_SECRET.\nAutomation is paused. Open Settings → Panel to verify server access and resume.\nBackup image: ${result.image || "not recorded (use the release that created this backup)"}`);
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : "Restore failed"); process.exitCode = 1; });

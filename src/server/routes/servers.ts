@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import { getServersWithApps } from "../../engine/deploy/index.ts";
 import { enrichAppForResponse } from "./apps.ts";
@@ -15,7 +15,7 @@ function scrubServersWithApps(servers: any[]): any[] {
 
 export async function handleGetServers(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const result = scrubServersWithApps(getServersWithApps());
     return Response.json(result, { headers: corsHeaders });
   } catch (error) {
@@ -25,7 +25,7 @@ export async function handleGetServers(request: Request): Promise<Response> {
 
 export async function handleDeleteServer(request: Request, serverId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "servers.delete");
+    const payload = await requireAuthenticated(request);
     if (!db.getServer(serverId)) {
       return Response.json({ error: "Server not found" }, { status: 404, headers: corsHeaders });
     }
@@ -56,7 +56,7 @@ export async function handleDeleteServer(request: Request, serverId: number): Pr
 
 export async function handleRefreshServers(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const result = scrubServersWithApps(getServersWithApps());
     return Response.json(result, { headers: corsHeaders });
   } catch (error) {

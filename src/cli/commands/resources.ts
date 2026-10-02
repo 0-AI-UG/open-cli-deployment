@@ -77,7 +77,7 @@ async function listResources(): Promise<void> {
   );
   console.log(`\n${BOLD}Buckets${RESET}`);
   if (!data.s3_configured) {
-    console.log(`${DIM}Hetzner Object Storage is not configured. Add its credentials in Admin → Hetzner.${RESET}`);
+    console.log(`${DIM}Hetzner Object Storage is not configured. Add its credentials in Settings → Hetzner.${RESET}`);
   } else if (data.s3_error) {
     console.log(`${RED}${data.s3_error}${RESET}`);
   } else {
@@ -134,7 +134,7 @@ export async function buckets(args: string[] = []): Promise<void> {
   const sub = args[0] || "list";
   if (["help", "--help", "-h"].includes(sub)) return bucketUsage();
   const data = await get<{ configured: boolean; buckets: ResourceBucket[] }>("/api/resources/buckets");
-  if (!data.configured) throw new Error("Hetzner Object Storage is not configured; add its credentials in Admin → Hetzner");
+  if (!data.configured) throw new Error("Hetzner Object Storage is not configured; add its credentials in Settings → Hetzner");
   if (sub === "list" || sub === "ls") {
     table(
       ["NAME", "REGION", "CREATED", "ENDPOINT"],

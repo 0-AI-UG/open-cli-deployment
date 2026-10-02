@@ -3,7 +3,7 @@ import { get, post } from "../../api/client.ts";
 import { Card, CardHeader, Btn, Badge, DataRow, EmptyState, StatusBadge, CopyButton, showToast, confirm } from "../../components/ui.tsx";
 import { History, RefreshCw, Server as ServerIcon } from "lucide-react";
 import { PanelProtection } from "./panel-protection.tsx";
-import { AdminNtfySettings } from "../../components/ntfy-settings.tsx";
+import { NtfyServiceSettings } from "../../components/ntfy-settings.tsx";
 import { DnsInstructionView } from "../../components/dns-instruction.tsx";
 import type { PanelApp, DeploymentRecord } from "../../types.ts";
 
@@ -18,18 +18,18 @@ export function PanelSettings() {
   const [busy, setBusy] = useState(false);
 
   const refresh = () => {
-    get("/api/admin/panel")
+    get("/api/panel")
       .then((data) => {
         setPanel(data.panel ? { ...data.panel, dns_instruction: data.dns_instruction } : null);
         setServer(data.server);
         if (data.panel) {
-          get("/api/admin/panel/latest-release")
+          get("/api/panel/latest-release")
             .then((release) => { setLatest(release); setLatestError(""); })
             .catch((error) => { setLatest(null); setLatestError(error instanceof Error ? error.message : "Could not find the latest main image"); });
         }
       })
       .catch(() => {});
-    get("/api/admin/panel/deployments").then((data) => setDeployments(data || [])).catch(() => {});
+    get("/api/panel/deployments").then((data) => setDeployments(data || [])).catch(() => {});
   };
 
   useEffect(() => { refresh(); }, []);
@@ -45,7 +45,7 @@ export function PanelSettings() {
     )) return;
     setBusy(true);
     try {
-      const result = await post("/api/admin/panel/latest-release", { commit: latest.commit, image: latest.image });
+      const result = await post("/api/panel/latest-release", { commit: latest.commit, image: latest.image });
       if (!result?.ok) throw new Error(result?.error || "Could not dispatch panel release");
       showToast("Panel redeploy dispatched; wait for it to return, then refresh", "success");
       setTimeout(refresh, 5000);
@@ -61,7 +61,7 @@ export function PanelSettings() {
   return (
     <>
       <PanelProtection />
-      <AdminNtfySettings />
+      <NtfyServiceSettings />
       {!panel ? <Card><EmptyState icon={ServerIcon} message="Not a self-hosted panel" description="This instance is not managed as a self-hosted panel app." /></Card> : (
         <Card className="overflow-hidden">
           <CardHeader icon={<ServerIcon size={15} />} title="Panel (self-hosted)" description="Redeploys automatically when main is pushed" actions={<StatusBadge status={panel.status} />} />

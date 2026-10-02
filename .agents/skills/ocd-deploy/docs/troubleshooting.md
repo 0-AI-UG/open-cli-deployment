@@ -53,7 +53,7 @@ read the repository, Dockerfile/context paths are repository-relative, and the
 OCI token can push. For an artifact-only release, confirm the complete
 `repository@sha256:<digest>` exists. Fleet hosts must authenticate to and reach
 the registry. Credentials are deliberately withheld when the image host differs
-from Admin Settings. Inspect operation logs before retrying.
+from Settings. Inspect operation logs before retrying.
 
 ## Stuck operation
 

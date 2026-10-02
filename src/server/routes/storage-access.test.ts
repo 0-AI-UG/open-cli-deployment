@@ -32,9 +32,9 @@ test("external readers list only named read-only grants and reject legacy tokens
   const { createToken } = await import("../lib/auth.ts");
   const { getStorageGrants, saveStorageGrants, storageTokenHash } = await import("../../shared/object-storage.ts");
   const { handleStorageReaders, handleStorageAuthorize } = await import("./storage-access.ts");
-  db.insertUser({ id: "reader-admin", username: "reader-admin", password_hash: "unused", is_admin: true });
-  const token = await createToken({ userId: "reader-admin", username: "reader-admin" });
-  const req = (method: string, body?: unknown) => new Request("https://panel.example/api/admin/storage-readers", {
+  db.insertUser({ id: "reader-user", username: "reader-user", password_hash: "unused" });
+  const token = await createToken({ userId: "reader-user", username: "reader-user" });
+  const req = (method: string, body?: unknown) => new Request("https://panel.example/api/storage/readers", {
     method, headers: { authorization: `Bearer ${token}` }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const legacyToken = `ocds_${"b".repeat(64)}`;

@@ -30,7 +30,7 @@ export function PanelProtection() {
     void get("/api/resources/buckets")
       .then((result: { configured: boolean; buckets: { name: string }[] }) => {
         if (cancelled) return;
-        setBucketList({ names: result.buckets.map(b => b.name), error: result.configured ? "" : "Configure Hetzner Object Storage credentials in Admin → Hetzner." });
+        setBucketList({ names: result.buckets.map(b => b.name), error: result.configured ? "" : "Configure Hetzner Object Storage credentials in Settings → Hetzner." });
       })
       .catch(() => {
         if (!cancelled) setBucketList({ names: [], error: "Could not load buckets. Check the Hetzner Object Storage credentials and permission to list buckets, then retry." });
@@ -38,7 +38,7 @@ export function PanelProtection() {
     return () => { cancelled = true; };
   }, [showSetup, bucketRefresh]);
   const load = async (reset = false) => {
-    const s = await get("/api/admin/protection");
+    const s = await get("/api/protection");
     setState(s);
     setForm(f => !f || reset ? { backup_enabled: s.backup_enabled, backup_bucket: s.backup_bucket, backup_prefix: s.backup_prefix, backup_retention: s.backup_retention } : f);
   };
@@ -53,7 +53,7 @@ export function PanelProtection() {
   const canSave = validBucket && state.recovery_key_configured;
   const activeBackup = state.backups.some(b => b.status === "pending" || b.status === "running");
   const save = async () => {
-    await put("/api/admin/protection", form);
+    await put("/api/protection", form);
     await load(true); setEditing(false); setRecoveryKey(""); showToast("Backup settings saved", "success");
   };
   const downloadKey = () => {
@@ -69,7 +69,7 @@ export function PanelProtection() {
         <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 border-b py-2"><span className="text-sm font-medium text-fg">Original panel stopped</span><input type="checkbox" checked={stopped} onChange={e => setStopped(e.target.checked)} /></label>
         <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 py-2"><span className="text-sm font-medium text-fg">Resume saved operations</span><input type="checkbox" checked={resumeOps} onChange={e => setResumeOps(e.target.checked)} /></label>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-subtle/40 px-4 py-3"><span className="text-xs text-muted">Backups stay off until you enable them.</span><Btn variant="primary" disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/admin/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn></div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-subtle/40 px-4 py-3"><span className="text-xs text-muted">Backups stay off until you enable them.</span><Btn variant="primary" disabled={busy || !stopped || !resumeOps} onClick={() => action(async () => { await post("/api/protection/resume", { original_panel_stopped: stopped, resume_saved_operations: resumeOps }); await load(true); showToast("Server access verified; automation resumed", "success"); })}>Verify servers and resume</Btn></div>
     </Card>}
     <Card className="overflow-hidden">
       <CardHeader
@@ -78,7 +78,7 @@ export function PanelProtection() {
         description="Encrypted backups of panel state, credentials, and SSH keys."
         actions={!showSetup ? <>
           <Btn disabled={busy} onClick={() => { setEditing(true); setError(""); }}><Settings2 size={14} /> Edit settings</Btn>
-          <Btn variant="primary" disabled={busy || state.recovery_pending || activeBackup} onClick={() => action(async () => { await post("/api/admin/protection/backup", {}); showToast("Backup queued", "success"); })}><Archive size={14} />{activeBackup ? "Backup in progress" : "Back up now"}</Btn>
+          <Btn variant="primary" disabled={busy || state.recovery_pending || activeBackup} onClick={() => action(async () => { await post("/api/protection/backup", {}); showToast("Backup queued", "success"); })}><Archive size={14} />{activeBackup ? "Backup in progress" : "Back up now"}</Btn>
         </> : undefined}
       />
       {showSetup ? <>
@@ -99,7 +99,7 @@ export function PanelProtection() {
         <section className="mx-4 mt-2 border-t pb-4 pt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h4 className="text-sm font-semibold text-fg">Recovery key</h4><p className="mt-0.5 text-xs text-muted">Keep this key outside the panel. You’ll need it to restore a backup.</p></div>
-            <Btn disabled={busy} onClick={() => action(async () => { const r = await post("/api/admin/protection/recovery-key", {}); setRecoveryKey(r.recovery_key); })}><KeyRound size={14} /> {state.recovery_key_configured ? "Show recovery key" : "Create recovery key"}</Btn>
+            <Btn disabled={busy} onClick={() => action(async () => { const r = await post("/api/protection/recovery-key", {}); setRecoveryKey(r.recovery_key); })}><KeyRound size={14} /> {state.recovery_key_configured ? "Show recovery key" : "Create recovery key"}</Btn>
           </div>
           {recoveryKey && <div className="mt-3 space-y-3 rounded-lg border bg-subtle/60 p-3"><code className="block select-all break-all font-mono text-xs text-fg">{recoveryKey}</code><div className="flex flex-wrap gap-2"><Btn size="xs" onClick={downloadKey}><Download size={12} /> Download key</Btn><Btn size="xs" variant="ghost" onClick={() => setRecoveryKey("")}>Hide key</Btn></div></div>}
         </section>

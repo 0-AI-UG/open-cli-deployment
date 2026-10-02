@@ -27,7 +27,7 @@ export function BuildSettings() {
   const refresh = () => Promise.all([
     get("/api/runners").then((data) => setWorkers(data || [])),
     get("/api/build-sources").then((data) => setSources(data || [])),
-    get("/api/admin/connections").then((c) => {
+    get("/api/connections").then((c) => {
       setRegistry(c.registry ?? { connected: false });
       setSource(c.source ?? { connected: false });
     }),
@@ -156,7 +156,7 @@ function ConnectionRow({ kind, icon, title, tip, idle, detail, connected, offLab
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  const path = `/api/admin/connections/${kind}`;
+  const path = `/api/connections/${kind}`;
 
   const run = async (fn: () => Promise<unknown>, message: string) => {
     setBusy(true);

@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { getHetznerToken, HETZNER_API_TOKEN, secretStore, maskToken } from "../../shared/secret-store.ts";
@@ -27,7 +27,7 @@ const PLAIN_SETTING_KEYS = new Set([
 
 export async function handleGetSettings(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const s = db.getSettings();
     const registryPassword = await secretStore.get("oci_registry_password");
     const githubBuildToken = await secretStore.get("github_build_token");
@@ -61,7 +61,7 @@ export async function handleGetSettings(request: Request): Promise<Response> {
 
 export async function handleSaveSettings(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const settings = await request.json() as Record<string, unknown>;
 
     if ([...S3_SETTING_KEYS].some((key) => Object.hasOwn(settings, key))) {

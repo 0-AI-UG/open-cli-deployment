@@ -32,7 +32,7 @@ async function secret(args: string[], defaultEnv: string, label: string): Promis
 }
 
 async function status(kind: "registry" | "source") {
-  const connections = await get<Connections>("/api/admin/connections");
+  const connections = await get<Connections>("/api/connections");
   const value = connections[kind];
   console.log(`${BOLD}${kind === "registry" ? "OCI registry" : "Git source"}${RESET}: ${value.connected ? `${GREEN}connected${RESET}` : "not connected"}`);
   if (kind === "registry") console.log(`${DIM}Scope:${RESET} ${(value as Connections["registry"]).scope || "-"}`);
@@ -44,7 +44,7 @@ export async function registry(args: string[]): Promise<void> {
   const sub = args[0] || "status";
   if (sub === "status") return status("registry");
   if (sub === "logout" || sub === "disconnect") {
-    await del("/api/admin/connections/registry");
+    await del("/api/connections/registry");
     console.log(`${GREEN}Registry connection removed.${RESET}`);
     return;
   }
@@ -54,7 +54,7 @@ export async function registry(args: string[]): Promise<void> {
   const username = flag(rest, "username") || await promptLine("Registry username: ");
   const token = await secret(rest, "OCD_REGISTRY_TOKEN", "Registry password/token");
   if (!token) throw new Error("Registry password/token is required");
-  await put("/api/admin/connections/registry", { scope, username, token });
+  await put("/api/connections/registry", { scope, username, token });
   console.log(`${GREEN}Registry connected for ${scope}.${RESET}`);
 }
 
@@ -62,7 +62,7 @@ export async function source(args: string[]): Promise<void> {
   const sub = args[0] || "status";
   if (sub === "status") return status("source");
   if (sub === "logout" || sub === "disconnect") {
-    await del("/api/admin/connections/source");
+    await del("/api/connections/source");
     console.log(`${GREEN}Source connection removed. Public repositories remain available.${RESET}`);
     return;
   }
@@ -73,6 +73,6 @@ export async function source(args: string[]): Promise<void> {
   const username = flag(rest, "username") || defaultUsername || await promptLine("Git checkout username: ");
   const token = await secret(rest, "OCD_SOURCE_TOKEN", "Read-only source token");
   if (!token) throw new Error("Source token is required");
-  await put("/api/admin/connections/source", { host, username, token });
+  await put("/api/connections/source", { host, username, token });
   console.log(`${GREEN}Source access connected for ${host}.${RESET}`);
 }

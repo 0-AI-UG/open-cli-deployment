@@ -1,6 +1,6 @@
 import template from "../../../services/ntfy/.ocd-deploy.json";
 import type { DeployRequest } from "../../shared/rpc.ts";
-/** The Admin shortcut deploys the same manifest shipped under services/ntfy. */
+/** The Settings → Panel shortcut deploys the same manifest shipped under services/ntfy. */
 export function ntfyDeployRequest(input: { name: string; domain: string; server_id: number }, environmentId: number, image: string): DeployRequest {
   return {
     app_name: input.name, domain: input.domain, placement: { [String(input.server_id)]: 1 },

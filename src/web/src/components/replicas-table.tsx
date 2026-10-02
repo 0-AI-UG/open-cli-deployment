@@ -1,6 +1,5 @@
 import { Terminal } from "lucide-react";
 import { Btn, StatusBadge, Table } from "./ui.tsx";
-import { PermissionGate } from "./permission-gate.tsx";
 import { CpuUsage, MemUsage, Sparkline } from "../pages/app-detail/shared.tsx";
 
 export type ReplicaRow = {
@@ -52,11 +51,9 @@ export function ReplicasTable({
           <td className="whitespace-nowrap text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
           <td className="text-info"><Sparkline values={cpuSeries(r.id)} color="currentColor" /></td>
           <td className="text-right">
-            <PermissionGate permission="terminal.container">
-              <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
-                <Terminal size={12} /> Shell
-              </Btn>
-            </PermissionGate>
+            <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
+              <Terminal size={12} /> Shell
+            </Btn>
           </td>
         </tr>
       ))}

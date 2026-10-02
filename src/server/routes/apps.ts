@@ -1,7 +1,7 @@
 import { getAppNtfy } from "../../shared/ntfy.ts";
 import { getAppStorage, appStorageView } from "../../shared/object-storage.ts";
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission, requireCliPermission, requireAuthenticated } from "../lib/permissions.ts";
+import { requireAuthenticated, requireCli } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import type { AppRow } from "../../shared/db/apps.ts";
@@ -21,7 +21,7 @@ import { reconcileAppDns } from "../../engine/dns-reconciler.ts";
 import { resolveOciImage } from "../../engine/oci-image.ts";
 
 /** Enrich app row for API responses — adds environment name and strips every
- *  secret/credential field so nothing sensitive leaks to `apps.view` users. */
+ *  secret/credential field so nothing sensitive leaks into app listings. */
 export function enrichAppForResponse(app: AppRow & Record<string, unknown>) {
   const envRow = app.environment_id ? db.getEnvironment(app.environment_id as number) : null;
   const placement: PlacementEntry[] = Object.entries(parsePlacement(app.placement)).map(([serverId, replicas]) => ({
@@ -48,7 +48,7 @@ async function withDnsInstruction<T extends { id: number }>(app: T): Promise<T &
 
 export async function handleGetServers(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const result = await Promise.all(getServersWithApps().map(async (s: any) => ({
       ...s,
       apps: await Promise.all((s.apps || []).map((a: any) => withDnsInstruction(enrichAppForResponse(a)))),
@@ -61,7 +61,7 @@ export async function handleGetServers(request: Request): Promise<Response> {
 
 export async function handleGetDashboard(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const compact = new URL(request.url).searchParams.get("compact") === "1";
     const visibleApps = db.getApps();
     const apps = compact
@@ -91,7 +91,7 @@ function appResponse(a: AppRow) {
 
 export async function handleGetApps(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "apps.view");
+    await requireAuthenticated(request);
     const result = await Promise.all(db.getApps().map(appResponse));
     return Response.json(result, { headers: corsHeaders });
   } catch (error) {
@@ -101,7 +101,7 @@ export async function handleGetApps(request: Request): Promise<Response> {
 
 export async function handleGetApp(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "apps.view");
+    await requireAuthenticated(request);
     const app = db.getApp(appId);
     if (!app) return Response.json({ error: "App not found" }, { status: 404, headers: corsHeaders });
     return Response.json(await appResponse(app), { headers: corsHeaders });
@@ -235,7 +235,7 @@ async function applyExistingAppConfig(
 /** Re-run an app from its stored immutable artifact and desired configuration. */
 export async function handleRedeployApp(request: Request, appId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "apps.deploy");
+    const payload = await requireAuthenticated(request);
     const app = db.getApp(appId);
     if (!app) return Response.json({ error: "App not found" }, { status: 404, headers: corsHeaders });
     const { opId } = enqueue(withOwningStackKeys({
@@ -256,7 +256,7 @@ export async function handleRedeployApp(request: Request, appId: number): Promis
  * state and committed only after the candidate passes health checks. */
 export async function handleReleaseApp(request: Request, appId: number): Promise<Response> {
   try {
-    const payload = await requireCliPermission(request, "apps.deploy");
+    const payload = await requireCli(request);
     const app = db.getApp(appId);
     if (!app) return Response.json({ error: "App not found" }, { status: 404, headers: corsHeaders });
     const body = await request.json() as ReleaseRequest;
@@ -304,10 +304,8 @@ export async function handleReleaseApp(request: Request, appId: number): Promise
 
 export async function handleDeploy(request: Request): Promise<Response> {
   try {
-    const payload = await requireCliPermission(request, "apps.deploy");
+    const payload = await requireCli(request);
     const req = await request.json() as AppDeployRequest;
-    if (req.storage && Object.keys(req.storage).length) await requirePermission(request, "apps.storage.bind");
-    if (req.notifications && Object.keys(req.notifications).length) await requirePermission(request, "apps.notifications.bind");
     if (!req?.app_name || typeof req.app_name !== "string") {
       return Response.json({ ok: false, error: "app_name is required" }, { status: 400, headers: corsHeaders });
     }
@@ -429,7 +427,7 @@ export async function handleDeploy(request: Request): Promise<Response> {
 
 export async function handleDestroyApp(request: Request, appId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "apps.destroy");
+    const payload = await requireAuthenticated(request);
     await enforceConfirmation(request, payload, "delete_app", "app", String(appId));
     const volumeId = db.getApp(appId)?.volume_id;
     const { opId } = enqueue({
@@ -446,12 +444,12 @@ export async function handleDestroyApp(request: Request, appId: number): Promise
 }
 
 export function handleRestartApp(request: Request, appId: number): Promise<Response> {
-  return enqueueOp(request, { permission: "apps.restart", kind: "restart_app", resourceKeys: [`app:${appId}`], input: { appId } });
+  return enqueueOp(request, { kind: "restart_app", resourceKeys: [`app:${appId}`], input: { appId } });
 }
 
 export async function handleReloadAppEnvironment(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "apps.restart");
+    await requireAuthenticated(request);
     const body = await request.clone().json().catch(() => ({})) as { force?: boolean };
     if (body.force !== true) {
       return Response.json(
@@ -460,7 +458,6 @@ export async function handleReloadAppEnvironment(request: Request, appId: number
       );
     }
     return enqueueOp(request, {
-      permission: "apps.restart",
      
       kind: "reload_app",
       resourceKeys: [`app:${appId}`],
@@ -472,16 +469,16 @@ export async function handleReloadAppEnvironment(request: Request, appId: number
 }
 
 export function handlePauseApp(request: Request, appId: number): Promise<Response> {
-  return enqueueOp(request, { permission: "apps.pause", kind: "pause_app", resourceKeys: [`app:${appId}`], input: { appId } });
+  return enqueueOp(request, { kind: "pause_app", resourceKeys: [`app:${appId}`], input: { appId } });
 }
 
 export function handleUnpauseApp(request: Request, appId: number): Promise<Response> {
-  return enqueueOp(request, { permission: "apps.pause", kind: "unpause_app", resourceKeys: [`app:${appId}`], input: { appId } });
+  return enqueueOp(request, { kind: "unpause_app", resourceKeys: [`app:${appId}`], input: { appId } });
 }
 
 export async function handleGetContainerLogs(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "apps.logs");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const tail = parseInt(url.searchParams.get("tail") || "100", 10);
     const replicaIdParam = url.searchParams.get("replica_id");
@@ -511,7 +508,7 @@ export async function handleGetContainerLogs(request: Request, appId: number): P
 
 export async function handleGetDeployLog(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "deployments.view");
+    await requireAuthenticated(request);
     const log = db.getDeployLog(appId);
     return Response.json({ log }, { headers: corsHeaders });
   } catch (error) {
@@ -521,7 +518,7 @@ export async function handleGetDeployLog(request: Request, appId: number): Promi
 
 export async function handleGetDeployments(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "deployments.view");
+    await requireAuthenticated(request);
     const deployments = db.getDeployments(appId);
     return Response.json(deployments, { headers: corsHeaders });
   } catch (error) {

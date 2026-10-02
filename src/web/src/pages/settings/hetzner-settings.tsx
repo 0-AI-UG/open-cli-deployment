@@ -34,7 +34,7 @@ export function HetznerSettings() {
     });
   };
 
-  const load = () => get("/api/admin/settings").then(apply).catch(() => {}).finally(() => setLoading(false));
+  const load = () => get("/api/settings").then(apply).catch(() => {}).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
 
   const setF = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -43,7 +43,7 @@ export function HetznerSettings() {
   const save = async (payload: Record<string, string>, done: () => void, message: string) => {
     setSaving(true);
     try {
-      await put("/api/admin/settings", payload);
+      await put("/api/settings", payload);
       await load();
       showToast(message, "success");
       done();

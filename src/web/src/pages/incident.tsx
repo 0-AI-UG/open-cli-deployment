@@ -6,7 +6,7 @@ import type { Incident } from "../../../shared/incidents.ts";
 import { incidentDate, incidentDuration, incidentGuide } from "../lib/incidents.ts";
 
 export function IncidentPage({ id }: { id: string }) {
-  const [data, setData] = useState<{ incident: Incident; canResolve: boolean } | null>(null);
+  const [data, setData] = useState<{ incident: Incident } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState(false);
@@ -64,7 +64,7 @@ export function IncidentPage({ id }: { id: string }) {
   };
   return <PageShell width="md">
     <PageHeader title="Incident details" eyebrow="Activity" description={incident?.title || "Outage and recovery history"} backHref="#/incidents" backLabel="Back to incidents" actions={<>
-      {incident && !resolved && data?.canResolve && <Btn variant="primary" loading={resolving} disabled={resolving} onClick={() => void markFixed()}><CheckCircle2 size={14} /> Mark as fixed</Btn>}
+      {incident && !resolved && <Btn variant="primary" loading={resolving} disabled={resolving} onClick={() => void markFixed()}><CheckCircle2 size={14} /> Mark as fixed</Btn>}
       <Btn disabled={loading || resolving} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>
     </>} />
     {error && <InlineNotice tone="danger">{error}{incident && " Displaying the last loaded state."}</InlineNotice>}

@@ -22,7 +22,7 @@ Direct SSH remains available through `ocd ssh`.
 
 ## Hetzner settings
 
-Configure Hetzner in **Admin → Hetzner**. Credentials remain in the encrypted
+Configure Hetzner in **Settings → Hetzner**. Credentials remain in the encrypted
 secret store.
 
 - **Hetzner API token** for servers, the private network, firewalls, and

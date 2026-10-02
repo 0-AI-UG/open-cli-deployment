@@ -3,7 +3,7 @@ import { del, get, post } from "../api.ts";
 import { table } from "../format.ts";
 
 type Reader = { id: string; name: string; connection: string; bucket: string; prefix: string; createdAt: string };
-const path = "/api/admin/storage-readers";
+const path = "/api/storage/readers";
 const option = (args: string[], name: string) => args.find(arg => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
 
 export async function storageReaders(args: string[]): Promise<void> {

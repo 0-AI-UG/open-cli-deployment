@@ -15,8 +15,8 @@ function enable() {
   db.saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, app_id: app.id, alerts: true, apps: true })));
   return db.getApp(app.id)!;
 }
-function user(id: string, admin = false) {
-  db.insertUser({ id, username: id, password_hash: "unused", is_admin: admin });
+function user(id: string) {
+  db.insertUser({ id, username: id, password_hash: "unused" });
   db.saveSetting(`ntfy_user.${id}`, JSON.stringify({ enabled: true, events: ["app", "delivery", "disk", "backup"], recovery: true }));
 }
 test("normal service manifest has private auth, persistent storage and bounded resources", async () => {
@@ -82,25 +82,26 @@ test("app bindings isolate apps, access changes and generations; retirement foll
   expect(ntfyCredentials().filter(c => c.owner_id === "101")).toHaveLength(1);
   expect(ntfyAccess(changed.primary)).toBe("ro");
 });
-test("event fanout is permission-scoped and deduplicated", () => {
-  enable(); user("admin", true); user("outsider");
-  const incident = { key: "backup:failed", incident_id: "incident", title: "Backup failed", path: "/admin" };
+test("event fanout follows preferences and is deduplicated", () => {
+  enable(); user("alice"); user("outsider");
+  db.saveSetting("ntfy_user.outsider", JSON.stringify({ enabled: false, events: ["backup"], recovery: true }));
+  const incident = { key: "backup:failed", incident_id: "incident", title: "Backup failed", path: "/settings?section=panel" };
   enqueueNtfyIncident(incident, false, 1000); enqueueNtfyIncident(incident, false, 1000);
-  expect(db.default.query("SELECT user_id FROM ntfy_outbox").all()).toEqual([{ user_id: "admin" }]);
+  expect(db.default.query("SELECT user_id FROM ntfy_outbox").all()).toEqual([{ user_id: "alice" }]);
   expect(db.default.query("SELECT path FROM ntfy_outbox LIMIT 1").get()).toEqual({ path: "/incidents/incident" });
   enqueueNtfyIncident(incident, true, 2000);
   expect(db.default.query("SELECT count(*) AS n FROM ntfy_outbox").get()).toEqual({ n: 2 });
 });
 test("failed sends retry, redact provider errors, and recheck preference revocation", async () => {
-  enable(); user("admin", true);
-  await ensureNtfyCredential("system", "events"); await ensureNtfyCredential("user", "admin");
-  enqueueNtfyIncident({ key: "backup:failed", incident_id: "incident", title: "Backup failed", path: "/admin" }, false, 1000);
+  enable(); user("alice");
+  await ensureNtfyCredential("system", "events"); await ensureNtfyCredential("user", "alice");
+  enqueueNtfyIncident({ key: "backup:failed", incident_id: "incident", title: "Backup failed", path: "/settings?section=panel" }, false, 1000);
   let calls = 0;
   const fetcher = (async () => { calls++; return new Response("sensitive upstream diagnostic", { status: 503 }); }) as unknown as typeof fetch;
   await deliverNtfy(fetcher, 1000); await deliverNtfy(fetcher, 2000);
   expect(calls).toBe(1);
   expect(db.default.query("SELECT attempts,error FROM ntfy_outbox").get()).toEqual({ attempts: 1, error: "ntfy delivery failed; check service connectivity" });
-  db.saveSetting("ntfy_user.admin", JSON.stringify({ enabled: false, events: ["backup"], recovery: true }));
+  db.saveSetting("ntfy_user.alice", JSON.stringify({ enabled: false, events: ["backup"], recovery: true }));
   await deliverNtfy(fetcher, 32000);
   expect(calls).toBe(1);
   expect(db.default.query("SELECT count(*) AS n FROM ntfy_outbox").get()).toEqual({ n: 0 });
@@ -118,6 +119,7 @@ test("schema 116 upgrades ntfy tables without changing existing settings", async
     const previous = new Database(path); initializeCurrentSchema(previous);
     previous.run("DROP TABLE panel_incident_history"); previous.run("DROP TABLE ntfy_outbox"); previous.run("DROP TABLE ntfy_credentials");
     previous.run("UPDATE schema_version SET version=116");
+    previous.run("CREATE TABLE user_permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, permission TEXT NOT NULL, scope_type TEXT NOT NULL DEFAULT 'global', scope_id TEXT, UNIQUE(user_id, permission, scope_type, scope_id))");
     previous.run("INSERT INTO settings(key,value) VALUES ('preserve','value')"); previous.close();
     const upgraded = createDatabase(path);
     expect(upgraded.query("SELECT value FROM settings WHERE key='preserve'").get()).toEqual({ value: "value" });

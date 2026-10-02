@@ -32,16 +32,16 @@ describe("provider-neutral initial setup", () => {
     expect(await response.json()).toEqual({ setupComplete: false, authenticationReady: false });
   });
 
-  test("creates the admin without infrastructure credentials", async () => {
-    const response = await handleSetupComplete(jsonReq({ username: "admin", password: "correct-horse" }));
+  test("creates the first user without infrastructure credentials", async () => {
+    const response = await handleSetupComplete(jsonReq({ username: "owner", password: "correct-horse" }));
     expect(response.status).toBe(201);
     expect(await secretStore.get("hetzner_api_token")).toBeNull();
     expect(db.getUsers()).toHaveLength(1);
   });
 
-  test("reports authentication ready only after the admin registers a passkey", async () => {
-    await handleSetupComplete(jsonReq({ username: "admin", password: "correct-horse" }));
-    const user = db.getUserByUsername("admin")!;
+  test("reports authentication ready only after the first user registers a passkey", async () => {
+    await handleSetupComplete(jsonReq({ username: "owner", password: "correct-horse" }));
+    const user = db.getUserByUsername("owner")!;
     expect(isSetupAuthenticationReady()).toBe(false);
     db.insertWebAuthnCredential({
       id: "credential-1",
@@ -60,7 +60,7 @@ describe("provider-neutral initial setup", () => {
 
   test("normalizes the optional provider-neutral domain suffix", async () => {
     const response = await handleSetupComplete(jsonReq({
-      username: "admin",
+      username: "owner",
       password: "correct-horse",
       default_domain_suffix: "Apps.Example.org.",
     }));
@@ -69,9 +69,9 @@ describe("provider-neutral initial setup", () => {
   });
 
   test("validates required account fields and domain suffix before creating a user", async () => {
-    expect((await handleSetupComplete(jsonReq({ username: "admin" }))).status).toBe(400);
+    expect((await handleSetupComplete(jsonReq({ username: "owner" }))).status).toBe(400);
     expect((await handleSetupComplete(jsonReq({
-      username: "admin",
+      username: "owner",
       password: "correct-horse",
       default_domain_suffix: "not a domain",
     }))).status).toBe(400);
@@ -79,8 +79,8 @@ describe("provider-neutral initial setup", () => {
   });
 
   test("rejects a second setup and stores a bcrypt password hash", async () => {
-    await handleSetupComplete(jsonReq({ username: "admin", password: "plaintext-secret" }));
-    const user = db.getUserByUsername("admin")!;
+    await handleSetupComplete(jsonReq({ username: "owner", password: "plaintext-secret" }));
+    const user = db.getUserByUsername("owner")!;
     expect(user.password_hash).not.toBe("plaintext-secret");
     expect(await Bun.password.verify("plaintext-secret", user.password_hash)).toBe(true);
     expect((await handleSetupComplete(jsonReq({ username: "other", password: "correct-horse" }))).status).toBe(400);

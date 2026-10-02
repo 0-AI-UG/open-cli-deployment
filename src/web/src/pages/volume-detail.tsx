@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { get } from "../api/client.ts";
 import { Badge, Card, CardHeader, Btn, CopyButton, DataRow, Spinner, EmptyState, Stat, showToast, PageShell, PageHeader, PageState } from "../components/ui.tsx";
-import { PermissionGate } from "../components/permission-gate.tsx";
 import { Folder, FileText, ChevronRight, RefreshCw, FileWarning } from "lucide-react";
 
 type VolumeDetail = {
@@ -158,16 +157,6 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
           />
         </Card>
       ) : (
-        // Browsing a volume means reading application data, so the whole
-        // browser + viewer pair is behind volumes.files.read.
-        <PermissionGate
-          permission="volumes.files.read"
-          fallback={
-            <Card>
-              <EmptyState message="Viewing volume contents requires the volumes.files.read permission." icon={FileWarning} />
-            </Card>
-          }
-        >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
           {/* File browser */}
           <Card className="flex min-w-0 flex-col overflow-hidden md:col-span-2">
@@ -255,7 +244,6 @@ export function VolumeDetailPage({ volumeId }: { volumeId: string }) {
             )}
           </Card>
         </div>
-        </PermissionGate>
       )}
     </PageShell>
   );

@@ -12,9 +12,6 @@ export function handleError(error: unknown): Response {
     if (name === "AuthError") {
       return Response.json({ error: error.message }, { status: 401, headers: corsHeaders });
     }
-    if (name === "ForbiddenError") {
-      return Response.json({ error: error.message }, { status: 403, headers: corsHeaders });
-    }
     if (name === "PermissionError") {
       return Response.json({ error: error.message }, { status: 403, headers: corsHeaders });
     }

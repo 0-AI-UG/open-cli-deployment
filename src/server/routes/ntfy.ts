@@ -1,7 +1,7 @@
 import { isNtfyApp, validateNtfyApp } from "../../engine/ntfy/service.ts";
 import { findActiveOperationByResourceKey } from "../../shared/db/operations.ts";
 import * as db from "../../shared/db.ts";
-import { requireAdmin, requireAuthenticated } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { handleError } from "../lib/utils.ts";
 import { enqueue } from "../ipc/enqueue.ts";
@@ -9,9 +9,9 @@ import { ntfySettings, ntfyPreferences, ensureNtfyCredential, credentialSecret, 
 import { NtfySettingsSchema, NtfyPreferencesSchema, CreateNtfyAppSchema } from "../../shared/ntfy-schema.ts";
 import { enqueueNtfyTest } from "../../engine/ntfy/alerts.ts";
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { ...corsHeaders, "cache-control": "no-store" } });
-export async function handleAdminNtfy(request: Request): Promise<Response> {
+export async function handleNtfySettings(request: Request): Promise<Response> {
   try {
-    const actor = await requireAdmin(request);
+    const actor = await requireAuthenticated(request);
     if (request.method === "PUT") {
       const parsed = NtfySettingsSchema.safeParse(await request.json());
       if (!parsed.success) return json({ error: parsed.error.issues[0]?.message || "Invalid ntfy settings" }, 400);
@@ -50,7 +50,7 @@ export async function handleUserNtfy(request: Request): Promise<Response> {
     if (request.method === "PUT") {
       const parsed = NtfyPreferencesSchema.safeParse(await request.json());
       if (!parsed.success) return json({ error: "Invalid notification preferences" }, 400);
-      if (parsed.data.enabled && (!settings?.enabled || !settings.alerts || !ntfyApp())) return json({ error: "Ask an administrator to enable ntfy alerts first" }, 409);
+      if (parsed.data.enabled && (!settings?.enabled || !settings.alerts || !ntfyApp())) return json({ error: "Enable ntfy alerts in Settings → Panel first" }, 409);
       if (parsed.data.enabled) await ensureNtfyCredential("user", actor.userId);
       const result = db.default.transaction(() => {
         db.saveSetting(`ntfy_user.${actor.userId}`, JSON.stringify(parsed.data));
@@ -88,7 +88,7 @@ export async function handleNtfyTest(request: Request): Promise<Response> {
 
 export async function handleCreateNtfyApp(request: Request): Promise<Response> {
   try {
-    const actor = await requireAdmin(request);
+    const actor = await requireAuthenticated(request);
     const parsed = CreateNtfyAppSchema.safeParse(await request.json());
     if (!parsed.success) return json({ error: "Provide an app name, HTTPS domain, and server" }, 400);
     if (ntfyApp()) return json({ error: "The ntfy app already exists; open its app page" }, 409);

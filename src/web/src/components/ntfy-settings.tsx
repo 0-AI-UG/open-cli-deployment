@@ -28,14 +28,14 @@ function ConnectionRow({ label, value }: { label: string; value: string }) {
     <Btn size="xs" variant="ghost" onClick={copy} ariaLabel={`Copy ${label.toLowerCase()}`}>{copied ? <Check size={12} className="text-success" /> : <Copy size={12} />} {copied ? "Copied" : "Copy"}</Btn>
   </div>;
 }
-export function AdminNtfySettings() {
+export function NtfyServiceSettings() {
   const [form, setForm] = useState(defaultSettings);
   const [state, setState] = useState<ServiceState | null>(null);
   const [create, setCreate] = useState({ name: "ntfy", domain: "", server_id: 0 });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function load(initial = false) {
-    const s = await get("/api/admin/ntfy") as ServiceState;
+    const s = await get("/api/ntfy") as ServiceState;
     setState(s);
     if (initial && s.settings) setForm(s.settings);
     else setForm(f => ({ ...f, app_id: s.app?.id ?? f.app_id }));
@@ -45,7 +45,7 @@ export function AdminNtfySettings() {
   async function apply(creating = false) {
     setBusy(true); setError("");
     try {
-      const result = creating ? await post("/api/admin/ntfy/app", create) : await put("/api/admin/ntfy", form);
+      const result = creating ? await post("/api/ntfy/app", create) : await put("/api/ntfy", form);
       setState(s => s ? { ...s, opId: result.opId } : s);
       showToast(creating ? "ntfy app deployment queued" : "Notification settings queued", "success");
       await load();
@@ -101,7 +101,7 @@ export function UserNtfySettings() {
     <CardHeader icon={<Bell size={15} />} title="Notifications" description="Alerts delivered to your ntfy client" actions={state ? <Badge tone={on ? "success" : "neutral"}>{on ? "On" : "Off"}</Badge> : undefined} />
     {error && <div className="px-4 pt-4"><InlineNotice tone="danger">{error}</InlineNotice></div>}
     {!state ? <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted"><Spinner /> Loading notifications…</div> : <>
-      {!state.available && <div className="px-4 pt-4"><InlineNotice tone="warning">Shared notifications are unavailable. Ask an administrator to enable them.</InlineNotice></div>}
+      {!state.available && <div className="px-4 pt-4"><InlineNotice tone="warning">Shared notifications are unavailable. Enable them in Settings → Panel.</InlineNotice></div>}
       <div className="px-4">
         <ToggleRow label="Send me OCD alerts" checked={form.enabled} disabled={!state.available && !form.enabled} onChange={enabled => setForm({ ...form, enabled })} />
         {([['app', 'Unhealthy apps'], ['delivery', 'Failed deployments'], ['disk', 'Disk pressure'], ['backup', 'Panel backups']] as const).map(([key, label]) => <ToggleRow key={key} label={label} checked={form.events.includes(key)} disabled={!form.enabled} onChange={checked => setForm({ ...form, events: checked ? [...form.events, key] : form.events.filter(k => k !== key) })} />)}

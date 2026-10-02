@@ -1,6 +1,5 @@
 import { loadConfig, saveConfig } from "../config.ts";
 import { BOLD, GREEN, DIM, RESET } from "../format.ts";
-import { CLI_ACCESS_DENIED_MESSAGE } from "../api.ts";
 
 function openBrowser(url: string): void {
   const cmd = process.platform === "win32" ? "start"
@@ -83,29 +82,20 @@ export async function login(args: string[], options: { insecureTls?: boolean } =
     if (tokenRes.ok) {
       const { token } = (await tokenRes.json()) as { token: string };
 
-      // Fetch username. /api/me also reports the account's global permissions,
-      // which lets us warn here rather than letting the first real command die
-      // on a 403 the user cannot connect back to this login.
+      // Fetch username.
       let username: string | undefined;
-      let cliAccessDenied = false;
       try {
         const meRes = await panelFetch(`${panelUrl}/api/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (meRes.ok) {
-          const me = (await meRes.json()) as {
-            user?: { username?: string; isAdmin?: boolean; permissions?: string[] };
-          };
+          const me = (await meRes.json()) as { user?: { username?: string } };
           username = me.user?.username;
-          if (me.user && !me.user.isAdmin && Array.isArray(me.user.permissions)) {
-            cliAccessDenied = !me.user.permissions.includes("cli.access");
-          }
         }
       } catch {}
 
       saveConfig({ panel_url: panelUrl, token, username, ...(insecureTls ? { insecure_tls: true } : {}) });
       console.log(`${GREEN}  Logged in${username ? ` as ${BOLD}${username}` : ""}${RESET}`);
-      if (cliAccessDenied) console.error(`  ${CLI_ACCESS_DENIED_MESSAGE}`);
       return;
     }
 

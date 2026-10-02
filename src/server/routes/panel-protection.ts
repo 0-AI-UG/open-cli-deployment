@@ -2,7 +2,7 @@ import { z } from "zod";
 import { unlinkSync } from "node:fs";
 import db, { getSettings, saveSetting, getServers } from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
-import { requireAdmin } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import { corsHeaders } from "../lib/cors.ts";
 import { getS3Credentials, validateBucketName } from "../../engine/object-storage/s3.ts";
@@ -20,7 +20,7 @@ const settingsSchema = z.object({
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { ...corsHeaders, "cache-control": "no-store" } });
 export async function handleGetProtection(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const s = getSettings();
     return json({
       backup_enabled: s.panel_backup_enabled === "1", backup_bucket: s.panel_backup_bucket || "", backup_prefix: s.panel_backup_prefix || "ocd-panel", backup_retention: Number(s.panel_backup_retention || 7),
@@ -32,7 +32,7 @@ export async function handleGetProtection(request: Request): Promise<Response> {
 }
 export async function handleSaveProtection(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const parsed = settingsSchema.safeParse(await request.json());
     if (!parsed.success) return json({ error: "Invalid protection settings", issues: parsed.error.issues.map(i => ({ field: i.path.join("."), message: i.message })) }, 400);
     const value = parsed.data;
@@ -62,13 +62,13 @@ async function savedRecoveryKey(): Promise<string> {
 }
 export async function handleRecoveryKey(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     return json({ recovery_key: await savedRecoveryKey() });
   } catch (error) { return handleError(error); }
 }
 export async function handleBackupNow(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     if (recoveryPending()) return json({ error: "Resume panel recovery before creating a backup" }, 409);
     try { return json({ id: await requestBackup() }, 202); }
     catch { return json({ error: "Configure object storage, backup bucket, and recovery key first" }, 400); }
@@ -76,7 +76,7 @@ export async function handleBackupNow(request: Request): Promise<Response> {
 }
 export async function handleResumeRecovery(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     if (!recoveryPending()) return json({ ok: true });
     const body = await request.json() as { original_panel_stopped?: boolean; resume_saved_operations?: boolean };
     if (body.original_panel_stopped !== true || body.resume_saved_operations !== true) return json({ error: "Confirm that the original panel is stopped and saved operations may resume" }, 400);

@@ -105,8 +105,8 @@ Remote-to-local copies only are supported.
 DNS has no mutation command. The panel displays records for the operator to
 create at any DNS provider.
 
-Buckets live in the Hetzner Object Storage account configured in Admin →
-Settings (region, access key, and secret key). Bucket creation and deletion require browser approval;
+Buckets live in the Hetzner Object Storage account configured in Settings →
+Hetzner (region, access key, and secret key). Bucket creation and deletion require browser approval;
 deletion refuses non-empty buckets and never recursively removes objects.
 
 `ocd volumes` lists Hetzner volumes; local directories appear in

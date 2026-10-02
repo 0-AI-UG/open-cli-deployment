@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { enqueue } from "../ipc/enqueue.ts";
@@ -7,7 +7,7 @@ import { parsePlacement, resolvePlacement } from "../../shared/placement.ts";
 
 export async function handleGetReplicas(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "metrics.view");
+    await requireAuthenticated(request);
     const replicas = db.getReplicas(appId);
     return Response.json(replicas, { headers: corsHeaders });
   } catch (error) {
@@ -17,7 +17,7 @@ export async function handleGetReplicas(request: Request, appId: number): Promis
 
 export async function handleGetReplicaEvents(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "metrics.view");
+    await requireAuthenticated(request);
     const events = db.getReplicaEvents(appId);
     return Response.json(events, { headers: corsHeaders });
   } catch (error) {
@@ -27,7 +27,7 @@ export async function handleGetReplicaEvents(request: Request, appId: number): P
 
 export async function handleGetAppMetrics(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "metrics.view");
+    await requireAuthenticated(request);
     // Serve the reconciler's already-persisted per-replica metrics
     // (cpu_percent / memory_percent, refreshed every ≤30s tick) rather than a
     // per-request SSH `docker stats` fan-out across every replica.
@@ -40,7 +40,7 @@ export async function handleGetAppMetrics(request: Request, appId: number): Prom
 
 export async function handleGetAppMetricsHistory(request: Request, appId: number): Promise<Response> {
   try {
-    await requirePermission(request, "metrics.view");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const sinceSec = Math.max(60, Math.min(86400, parseInt(url.searchParams.get("since") || "3600", 10)));
     const samples = db.getRecentAppMetrics(appId, sinceSec);
@@ -62,7 +62,7 @@ function resolveServerRef(ref: unknown): db.ServerRow {
  * the app is placed on exactly one server. */
 export async function handleMoveApp(request: Request, appId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "scaling.migrate");
+    const payload = await requireAuthenticated(request);
     const body = await request.json().catch(() => ({})) as { to?: unknown; from?: unknown };
     const app = db.getApp(appId);
     if (!app) return Response.json({ error: "App not found" }, { status: 404, headers: corsHeaders });

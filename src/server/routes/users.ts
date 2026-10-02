@@ -1,11 +1,11 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin } from "../lib/auth.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 
 export async function handleListUsers(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const users = db.getUsers();
 
     return Response.json(
@@ -13,9 +13,7 @@ export async function handleListUsers(request: Request): Promise<Response> {
         users: users.map((u) => ({
           id: u.id,
           username: u.username,
-          isAdmin: u.is_admin === 1,
           webauthnEnabled: u.webauthn_enabled === 1,
-          permissions: u.is_admin ? db.ALL_PERMISSIONS.slice() : db.getUserPermissions(u.id),
           createdAt: u.created_at,
         })),
       },
@@ -28,8 +26,8 @@ export async function handleListUsers(request: Request): Promise<Response> {
 
 export async function handleCreateUser(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
-    const body = await request.json() as { username?: string; password?: string; permissions?: string[] };
+    await requireAuthenticated(request);
+    const body = await request.json() as { username?: string; password?: string };
 
     if (!body.username || !body.password) {
       return Response.json(
@@ -57,16 +55,10 @@ export async function handleCreateUser(request: Request): Promise<Response> {
     const passwordHash = await Bun.password.hash(body.password, "bcrypt");
     db.insertUser({ id, username: body.username, password_hash: passwordHash });
 
-    if (body.permissions?.length) {
-      db.setUserPermissions(id, validPermissions(body.permissions));
-    }
-
     return Response.json(
       {
         id,
         username: body.username,
-        isAdmin: false,
-        permissions: validPermissions(body.permissions ?? []),
         createdAt: new Date().toISOString(),
       },
       { status: 201, headers: corsHeaders },
@@ -76,17 +68,10 @@ export async function handleCreateUser(request: Request): Promise<Response> {
   }
 }
 
-function validPermissions(permissions: string[]): string[] {
-  return permissions.filter((p) => (db.ALL_PERMISSIONS as readonly string[]).includes(p));
-}
-
 export async function handleUpdateUser(request: Request, userId: string): Promise<Response> {
   try {
-    await requireAdmin(request);
-    const body = await request.json() as {
-      password?: string;
-      permissions?: string[];
-    };
+    await requireAuthenticated(request);
+    const body = await request.json() as { password?: string };
 
     const user = db.getUserById(userId);
     if (!user) {
@@ -107,10 +92,6 @@ export async function handleUpdateUser(request: Request, userId: string): Promis
       db.updateUserPassword(userId, hash);
     }
 
-    if (!user.is_admin && Array.isArray(body.permissions)) {
-      db.setUserPermissions(userId, validPermissions(body.permissions));
-    }
-
     return Response.json({ success: true }, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
@@ -119,9 +100,9 @@ export async function handleUpdateUser(request: Request, userId: string): Promis
 
 export async function handleDeleteUser(request: Request, targetId: string): Promise<Response> {
   try {
-    const { userId: adminId } = await requireAdmin(request);
+    const { userId: actorId } = await requireAuthenticated(request);
 
-    if (targetId === adminId) {
+    if (targetId === actorId) {
       return Response.json(
         { error: "Cannot delete your own account" },
         { status: 400, headers: corsHeaders },
@@ -138,29 +119,6 @@ export async function handleDeleteUser(request: Request, targetId: string): Prom
 
     db.deleteUser(targetId);
     return Response.json({ success: true }, { headers: corsHeaders });
-  } catch (error) {
-    return handleError(error);
-  }
-}
-
-export async function handleGetUserPermissions(request: Request, userId: string): Promise<Response> {
-  try {
-    await requireAdmin(request);
-    const user = db.getUserById(userId);
-    if (!user) {
-      return Response.json(
-        { error: "User not found" },
-        { status: 404, headers: corsHeaders },
-      );
-    }
-
-    return Response.json(
-      {
-        permissions: user.is_admin ? db.ALL_PERMISSIONS.slice() : db.getUserPermissions(userId),
-        allPermissions: db.ALL_PERMISSIONS,
-      },
-      { headers: corsHeaders },
-    );
   } catch (error) {
     return handleError(error);
   }

@@ -1,14 +1,14 @@
-import { useTempDataDir, seedTestAdmin } from "../../shared/test-helpers.ts";
+import { useTempDataDir, seedTestUser } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { expect, test } from "bun:test";
-import db, { saveSetting, insertApp, insertUser, setUserPermissions } from "../../shared/db.ts";
+import db, { saveSetting, insertApp, insertUser } from "../../shared/db.ts";
 import { alertTick, reconcileIncidents } from "../../engine/panel-protection/alerts.ts";
 import { createToken } from "../lib/auth.ts";
 import { handleListIncidents, handleGetIncident, handleResolveIncident } from "./incidents.ts";
 
 test("incidents open and resolve without ntfy, remain in history", async () => {
-  const userId = seedTestAdmin();
+  const userId = seedTestUser();
   saveSetting("panel_backup_enabled", "1");
   saveSetting("panel_backup_enabled_at", "1");
   await alertTick();
@@ -18,7 +18,7 @@ test("incidents open and resolve without ntfy, remain in history", async () => {
 
   saveSetting("panel_backup_enabled", "0");
   await alertTick();
-  const token = await createToken({ userId, username: "admin" });
+  const token = await createToken({ userId, username: "test-user" });
   const headers = { authorization: `Bearer ${token}` };
   const list = await handleListIncidents(new Request("http://localhost/api/incidents?status=resolved", { headers }));
   expect(list.status).toBe(200);
@@ -30,31 +30,30 @@ test("incidents open and resolve without ntfy, remain in history", async () => {
 
 });
 
-test("app-scoped users see only their incidents", async () => {
+test("every signed-in user sees and resolves every incident", async () => {
   const app = insertApp({ name: "incident-test-app", domain: "incident-test.example.com", image_ref: `example/app@sha256:${"a".repeat(64)}`, container_port: 8080, env_vars: "{}" });
-  insertUser({ id: "incident-viewer", username: "incident-viewer", password_hash: "unused", is_admin: false });
-  db.query("INSERT INTO user_permissions(user_id,permission,scope_type,scope_id) VALUES (?,?,?,?)").run("incident-viewer", "apps.view", "app", String(app.id));
+  insertUser({ id: "incident-viewer", username: "incident-viewer", password_hash: "unused" });
   reconcileIncidents([
     { key: `app:${app.id}`, title: "App unhealthy", path: `/apps/${app.id}` },
-    { key: "backup:failed", title: "Panel backup failed", path: "/admin" },
+    { key: "backup:failed", title: "Panel backup failed", path: "/settings?section=panel" },
   ], Date.now());
   const token = await createToken({ userId: "incident-viewer", username: "incident-viewer" });
   const headers = { authorization: `Bearer ${token}` };
   const response = await handleListIncidents(new Request("http://localhost/api/incidents", { headers }));
   expect(response.status).toBe(200);
   const body = await response.json() as { incidents: Array<{ key: string }> };
-  expect(body.incidents.map(item => item.key)).toEqual([`app:${app.id}`]);
+  expect(body.incidents.map(item => item.key)).toEqual(expect.arrayContaining([`app:${app.id}`, "backup:failed"]));
   const backup = db.query("SELECT incident_id FROM panel_incident_history WHERE key='backup:failed'").get() as { incident_id: string };
-  const denied = await handleGetIncident(new Request(`http://localhost/api/incidents/${backup.incident_id}`, { headers }));
-  expect(denied.status).toBe(403);
+  expect((await handleGetIncident(new Request(`http://localhost/api/incidents/${backup.incident_id}`, { headers }))).status).toBe(200);
+  expect((await handleResolveIncident(new Request(`http://localhost/api/incidents/${backup.incident_id}/resolve`, { method: "POST", headers }))).status).toBe(200);
 });
 
-test("pagination and counts use only visible incidents and filters reject invalid input", async () => {
-  const userId = seedTestAdmin();
+test("pagination and counts cover all incidents and filters reject invalid input", async () => {
+  const userId = seedTestUser();
   db.query("DELETE FROM panel_incident_history").run();
-  const insert = db.query("INSERT INTO panel_incident_history VALUES (?, 'backup:failed', 'Backup failed', '/admin', ?, ?, ?)");
+  const insert = db.query("INSERT INTO panel_incident_history VALUES (?, 'backup:failed', 'Backup failed', '/settings?section=panel', ?, ?, ?)");
   for (let i = 0; i < 55; i++) insert.run(`page-${i}`, i, i, i < 3 ? i + 1 : null);
-  const token = await createToken({ userId, username: "admin" });
+  const token = await createToken({ userId, username: "test-user" });
   const headers = { authorization: `Bearer ${token}` };
   const list = async (query: string) => handleListIncidents(new Request(`http://localhost/api/incidents?${query}`, { headers }));
   const first = await (await list("status=active")).json();
@@ -71,9 +70,9 @@ test("pagination and counts use only visible incidents and filters reject invali
 });
 
 test("manual resolution persists across monitoring, is idempotent, and allows later recurrences", async () => {
-  const userId = seedTestAdmin();
-  const headers = { authorization: `Bearer ${await createToken({ userId, username: "admin" })}` };
-  const condition = { key: "backup:manual-test", title: "Backup failed", path: "/admin" };
+  const userId = seedTestUser();
+  const headers = { authorization: `Bearer ${await createToken({ userId, username: "test-user" })}` };
+  const condition = { key: "backup:manual-test", title: "Backup failed", path: "/settings?section=panel" };
   const now = Date.now();
   reconcileIncidents([condition], now);
   const original = db.query("SELECT * FROM panel_incident_history WHERE key=?").get(condition.key) as { incident_id: string };
@@ -95,25 +94,6 @@ test("manual resolution persists across monitoring, is idempotent, and allows la
   expect(occurrences[1]!.incident_id).not.toBe(original.incident_id);
   expect(occurrences[1]!.resolved_at).toBeNull();
   expect((await handleResolveIncident(new Request("http://localhost/api/incidents/missing/resolve", { method: "POST", headers }))).status).toBe(404);
-});
-
-test("manual resolution requires app write access or admin access", async () => {
-  const app = insertApp({ name: "manual-resolution", domain: "manual-resolution.example.com", image_ref: `example/app@sha256:${"a".repeat(64)}`, container_port: 8080, env_vars: "{}" });
-  const userId = "incident-resolver";
-  insertUser({ id: userId, username: userId, password_hash: "unused", is_admin: false });
-  setUserPermissions(userId, ["apps.view"]);
-  reconcileIncidents([{ key: `app:${app.id}`, title: "Unhealthy", path: `/apps/${app.id}` }, { key: "backup:restricted", title: "Backup failed", path: "/admin" }]);
-  const headers = { authorization: `Bearer ${await createToken({ userId, username: userId })}` };
-  const row = db.query("SELECT incident_id FROM panel_incident_history WHERE key=?").get(`app:${app.id}`) as { incident_id: string };
-  const request = () => new Request(`http://localhost/api/incidents/${row.incident_id}/resolve`, { method: "POST", headers });
-  const detail = () => handleGetIncident(new Request(`http://localhost/api/incidents/${row.incident_id}`, { headers }));
-  expect((await (await detail()).json()).canResolve).toBe(false);
-  expect((await handleResolveIncident(request())).status).toBe(403);
-  setUserPermissions(userId, ["apps.view", "apps.restart"]);
-  expect((await (await detail()).json()).canResolve).toBe(true);
-  expect((await handleResolveIncident(request())).status).toBe(200);
-  const backup = db.query("SELECT incident_id FROM panel_incident_history WHERE key='backup:restricted'").get() as { incident_id: string };
-  expect((await handleResolveIncident(new Request(`http://localhost/api/incidents/${backup.incident_id}/resolve`, { method: "POST", headers }))).status).toBe(403);
 });
 
 test("incident endpoints require authentication", async () => {

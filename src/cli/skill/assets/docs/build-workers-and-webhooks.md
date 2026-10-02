@@ -66,7 +66,7 @@ OCD holds two distinct encrypted connections:
 - `ocd source login`: host-scoped read access to private source repositories.
 - `ocd registry login`: repository-namespace-scoped push/pull access.
 
-The same actions are available as connection cards in Admin. Credentials are
+The same actions are available as connection cards in Settings → Build. Credentials are
 never forwarded to an unrelated Git host or sibling OCI namespace.
 
 Use the least privilege available. Never commit either credential.

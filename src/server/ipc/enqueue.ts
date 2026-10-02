@@ -7,7 +7,7 @@ import type { EnqueueInput } from "../../shared/db/operations.ts";
 import { withOwningStackKeys } from "../lib/stack-operations.ts";
 
 export function enqueue(args: EnqueueInput): { opId: number } {
-  if (recoveryPending()) throw new Error("Panel recovery is paused; verify and resume in Admin → Panel first");
+  if (recoveryPending()) throw new Error("Panel recovery is paused; verify and resume in Settings → Panel first");
   const row = enqueueOperation(withOwningStackKeys(args));
   return { opId: row.id };
 }

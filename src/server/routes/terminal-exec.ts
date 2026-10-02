@@ -75,16 +75,6 @@ export async function handleTerminalExec(request: Request): Promise<Response> {
   const resolved = resolveTerminalTarget(target.kind, target.id);
   if ("error" in resolved) return Response.json({ error: resolved.error }, { status: 404 });
 
-  // A shell inside a container and a shell on the host are very different
-  // grants: the latter is root-equivalent over every workload on that machine.
-  // Pick the permission from what the target actually resolved to.
-  if (!user.is_admin) {
-    const permission = resolved.container ? "terminal.container" : "terminal.host";
-    if (!db.hasPermission(auth.userId, permission)) {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
-    }
-  }
-
   log("exec", `user=${auth.userId} target=${target.kind}:${target.id} ip=${resolved.ip} bytes=${body.command.length}`);
 
   const remoteCommand = buildRemoteCommand(body.command, resolved.container);

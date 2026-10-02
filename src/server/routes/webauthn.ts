@@ -79,13 +79,10 @@ function credentialTransports(c: db.WebAuthnCredential): AuthenticatorTransportF
 
 /** Build the user response object consistently */
 function userResponse(user: db.UserRow) {
-  const permissions = user.is_admin ? db.ALL_PERMISSIONS.slice() : db.getUserPermissions(user.id);
   return {
     id: user.id,
     username: user.username,
-    isAdmin: user.is_admin === 1,
     webauthnEnabled: user.webauthn_enabled === 1,
-    permissions,
   };
 }
 
@@ -558,7 +555,7 @@ export async function handleWebAuthnDelete(request: Request): Promise<Response> 
     const credCount = db.getWebAuthnCredentialCount(userId);
     const wouldHave2FA = credCount > 1;
     const require2fa = (db.getSettings().require_2fa ?? "1") === "1";
-    if (!wouldHave2FA && (user.is_admin || require2fa)) {
+    if (!wouldHave2FA && require2fa) {
       return Response.json(
         { error: "Cannot remove last passkey: at least one 2FA method is required" },
         { status: 403, headers: corsHeaders },

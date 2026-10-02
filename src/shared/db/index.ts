@@ -173,10 +173,8 @@ export {
 export type {
   UserRow,
   WebAuthnCredential,
-  Permission,
 } from "./users.ts";
 export {
-  ALL_PERMISSIONS,
   getUserCount,
   getUserByUsername,
   getUserById,
@@ -192,9 +190,6 @@ export {
   enableWebAuthn,
   disableWebAuthn,
   getWebAuthnCredentialCount,
-  getUserPermissions,
-  hasPermission,
-  setUserPermissions,
   incrementTokenVersion,
 } from "./users.ts";
 export { getSettings, saveSetting } from "./settings.ts";

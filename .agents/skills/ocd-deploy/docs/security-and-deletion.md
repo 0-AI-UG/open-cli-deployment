@@ -3,8 +3,7 @@
 ## Contents
 
 - [Authentication and CLI access](#authentication-and-cli-access)
-- [Permission model](#permission-model)
-- [Sensitive permissions](#sensitive-permissions)
+- [Sensitive capabilities](#sensitive-capabilities)
 - [Confirmation model](#confirmation-model)
 - [Deletion matrix](#deletion-matrix)
 - [App deletion](#app-deletion)
@@ -15,57 +14,25 @@
 
 ## Authentication and CLI access
 
-The browser login/device flow issues a token marked with client type. Every
-CLI-minted token additionally requires `cli.access`; revoking it disables CLI
-use without removing the user's web grants.
+The browser login/device flow issues a token marked with client type. There
+are no roles or per-user permissions: every signed-in user can do everything,
+including inviting new users and resetting or deleting other users' accounts
+(a user cannot delete their own account). Only invite people you would trust
+with the whole fleet.
 
-Admins bypass ordinary permission checks. Non-admins require the exact
-permission. Permissions are global grants; there are no per-app,
-per-environment, or per-stack scopes.
+The one channel rule that remains: manifest-driven desired state (deploys,
+stack applies, and manifest-owned resources) is accepted only from CLI-minted
+tokens. Browser sessions can operate resources but cannot apply manifests.
 
-## Permission model
+## Sensitive capabilities
 
-Read permissions:
+Every user has all of these, so treat each account as fleet-wide access:
 
-- `fleet.view`, `apps.view`, `environments.view`,
-  `metrics.view`, `operations.view`, `deployments.view`.
-
-App permissions:
-
-- `apps.deploy`, `apps.restart`, `apps.pause`, `apps.destroy`,
-  `apps.logs`, `apps.storage.bind`, `apps.notifications.bind`.
-
-Stack/environment:
-
-- `stacks.view`, `stacks.deploy`, `stacks.destroy`;
-- `environments.manage`, `environments.secrets`.
-
-Scaling/infrastructure:
-
-- `scaling.migrate` (`ocd move`);
-- `servers.create`, `servers.manage`, `servers.delete`;
-- `volumes.delete`, `volumes.files.read`;
-- `resources.view`, `resources.delete`;
-- `operations.cancel`, `operations.manage`;
-- `terminal.container`, `terminal.host`.
-
-`environments.manage` does not grant access to variable values.
-`environments.secrets` is separately required to read/write them.
-
-## Sensitive permissions
-
-- Desired app settings, ingress, public ports, image releases, and scaling policy all
-  use `apps.deploy`, and deployment endpoints additionally require a CLI token.
-- Manifest storage and notification bindings additionally require
-  `apps.storage.bind` and `apps.notifications.bind`, respectively.
-- `operations.manage` permits cross-user cancellation, retry, and finalization
-  when combined with `operations.cancel`.
-- `volumes.files.read` grants application-data access.
-- `terminal.host` is effectively root-equivalent infrastructure access.
-- `resources.delete`, `servers.delete`, and `volumes.delete` can remove
-  Hetzner resources/data.
-
-Apply least privilege: grant only the permissions a user needs.
+- Reading/writing environment variable values (secrets).
+- Browsing volume files and bucket objects (application data).
+- Opening a host terminal, which is root-equivalent infrastructure access.
+- Cancelling, retrying, or finalizing any user's operations.
+- Deleting servers, volumes, and other Hetzner resources/data.
 
 ## Confirmation model
 
@@ -143,12 +110,11 @@ Confirmation text explicitly states environment and volume retention.
 
 Environment retirement:
 
-1. requires `environments.manage`;
-2. requires web UI confirmation;
-3. verifies the exact environment still exists;
-4. lists attached apps;
-5. refuses deletion when any are attached;
-6. records deletion and seven-day recovery timestamps only on explicit
+1. requires web UI confirmation;
+2. verifies the exact environment still exists;
+3. lists attached apps;
+4. refuses deletion when any are attached;
+5. records deletion and seven-day recovery timestamps only on explicit
    confirmed request.
 
 There is no force flag.
@@ -164,7 +130,7 @@ afterward purge is still a browser-confirmed action.
 
 Detachment/retention and Hetzner volume deletion are different operations. App/stack
 destroy performs the former. A later explicit volume delete can destroy data
-and requires the corresponding global permission, a single-use resource-bound
+and requires a single-use resource-bound
 browser approval, and the exact Hetzner volume ID typed into the approval page.
 
 Before Hetzner volume deletion, verify:

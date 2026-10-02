@@ -1,8 +1,6 @@
 import { corsHeaders } from "../lib/cors.ts";
 import { handleError } from "../lib/utils.ts";
-import { requirePermission } from "../lib/permissions.ts";
-import { getUserById, hasPermission } from "../../shared/db.ts";
-import { PermissionError } from "../lib/errors.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import {
   getOperation,
   getSteps,
@@ -122,7 +120,7 @@ function mapStep(s: ReturnType<typeof getSteps>[number]) {
 
 export async function handleListOperations(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "operations.view");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const requestedLimit = Number(url.searchParams.get("limit"));
     const recentLimit = Number.isInteger(requestedLimit) && requestedLimit > 0
@@ -164,7 +162,7 @@ export async function handleListOperations(request: Request): Promise<Response> 
 
 export async function handleGetOperation(request: Request, id: number): Promise<Response> {
   try {
-    await requirePermission(request, "operations.view");
+    await requireAuthenticated(request);
     const op = getOperation(id);
     if (!op) return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
     const steps = getSteps(id, 0).map(mapStep);
@@ -192,7 +190,7 @@ export async function handleGetOperation(request: Request, id: number): Promise<
 
 export async function handleOperationEvents(request: Request, id: number): Promise<Response> {
   try {
-    await requirePermission(request, "operations.view");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const since = parseInt(url.searchParams.get("since") || "0", 10);
     const knownDetail = url.searchParams.get("detail");
@@ -253,7 +251,7 @@ export async function handleOperationEvents(request: Request, id: number): Promi
 
 export async function handleGetOperationLogs(request: Request, id: number): Promise<Response> {
   try {
-    await requirePermission(request, "operations.view");
+    await requireAuthenticated(request);
     const op = getOperation(id);
     if (!op) return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
     const url = new URL(request.url);
@@ -336,15 +334,9 @@ export async function handleGetOperationLogs(request: Request, id: number): Prom
 
 export async function handleCancelOperation(request: Request, id: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "operations.cancel");
-    const user = getUserById(payload.userId);
-    if (!user) throw new PermissionError("Unauthorized");
+    const payload = await requireAuthenticated(request);
     const op = getOperation(id);
     if (!op) return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
-    // Cross-user intervention has a separate fleet-wide grant.
-    if (!user.is_admin && op.triggered_by !== payload.userId && !hasPermission(payload.userId, "operations.manage")) {
-      throw new PermissionError("Cannot cancel another user's operation");
-    }
     // Pending operations have not run a side effect and requestCancel performs
     // a plain queue removal. Once forward work started, cancellation invokes
     // compensation and is therefore a destructive action.
@@ -358,18 +350,6 @@ export async function handleCancelOperation(request: Request, id: number): Promi
   }
 }
 
-async function requireOperationRecoveryAccess(request: Request, id: number) {
-  const payload = await requirePermission(request, "operations.cancel");
-  const user = getUserById(payload.userId);
-  if (!user) throw new PermissionError("Unauthorized");
-  const op = getOperation(id);
-  if (!op) return { payload, user, op: null };
-  if (!user.is_admin && op.triggered_by !== payload.userId && !hasPermission(payload.userId, "operations.manage")) {
-    throw new PermissionError("Cannot recover another user's operation");
-  }
-  return { payload, user, op };
-}
-
 function opIsHeld(op: NonNullable<ReturnType<typeof getOperation>>): boolean {
   const keys = safeParse<string[]>(op.resource_keys, []);
   return keys.some((key) => currentHolder(key)?.opId === op.id);
@@ -377,7 +357,8 @@ function opIsHeld(op: NonNullable<ReturnType<typeof getOperation>>): boolean {
 
 export async function handleRetryOperation(request: Request, id: number): Promise<Response> {
   try {
-    const { payload, op } = await requireOperationRecoveryAccess(request, id);
+    const payload = await requireAuthenticated(request);
+    const op = getOperation(id);
     if (!op) return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
     if (op.status === "done") {
       return Response.json({ error: "A successful operation does not need retrying" }, { status: 409, headers: corsHeaders });
@@ -416,7 +397,8 @@ export async function handleRetryOperation(request: Request, id: number): Promis
 
 export async function handleFinalizeOperation(request: Request, id: number): Promise<Response> {
   try {
-    const { op } = await requireOperationRecoveryAccess(request, id);
+    await requireAuthenticated(request);
+    const op = getOperation(id);
     if (!op) return Response.json({ error: "Not found" }, { status: 404, headers: corsHeaders });
     if (opIsHeld(op)) {
       return Response.json({ error: "Operation is still executing and cannot be finalized" }, { status: 409, headers: corsHeaders });

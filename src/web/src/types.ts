@@ -160,10 +160,6 @@ export type ServiceData = {
     database?: string;
     domain?: string;
     url?: string;
-    admin_username?: string;
-    admin_email?: string;
-    admin_password?: string;
-    admin_token?: string;
   };
   dns_instruction?: DnsInstruction;
 };
@@ -272,22 +268,6 @@ export type StackDetail = {
   last_operation_children?: Array<{ id: number; kind: string; status: string }>;
   resource_status_reason?: string;
   apps: StackMemberApp[];
-};
-
-export type AdminUser = {
-  id: string;
-  username: string;
-  isAdmin: boolean;
-  webauthnEnabled: boolean;
-  /** Global permissions only. */
-  permissions: string[];
-  createdAt: string;
-};
-
-/** GET /api/admin/users/:id/permissions */
-export type UserPermissionsResponse = {
-  permissions: string[];
-  allPermissions: string[];
 };
 
 export type PanelApp = {

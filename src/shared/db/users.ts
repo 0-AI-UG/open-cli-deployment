@@ -4,7 +4,6 @@ export type UserRow = {
   id: string;
   username: string;
   password_hash: string;
-  is_admin: number;
   webauthn_enabled: number;
   created_at: string;
   token_version: number;
@@ -22,78 +21,6 @@ export type WebAuthnCredential = {
   created_at: string;
 };
 
-export const ALL_PERMISSIONS = [
-  // --- Client access ---------------------------------------------------
-  /** Use the `ocd` CLI at all. Enforced on every CLI-minted token (client:"cli"),
-   *  so revoking it locks a user to the web UI without touching their other grants. */
-  "cli.access",
-
-  // --- Read ------------------------------------------------------------
-  "fleet.view",
-  "apps.view",
-  "environments.view",
-  "metrics.view",
-  "operations.view",
-  "deployments.view",
-
-  // --- Apps ------------------------------------------------------------
-  "apps.deploy",
-  /** Authorize manifest-owned access to shared object storage. */
-  "apps.storage.bind",
-  /** Authorize manifest-owned access to shared notification topics. */
-  "apps.notifications.bind",
-  "apps.restart",
-  "apps.pause",
-  "apps.destroy",
-  "apps.logs",
-
-  // --- Stacks ----------------------------------------------------------
-  "stacks.view",
-  "stacks.deploy",
-  "stacks.destroy",
-
-  // --- Environments ----------------------------------------------------
-  "environments.manage",
-  /** Reading/writing env var values, which are secrets. Separate from the
-   *  environment lifecycle grant so credentials can be restricted. */
-  "environments.secrets",
-
-  // --- Scaling ---------------------------------------------------------
-  "scaling.migrate",
-
-  // --- Servers ---------------------------------------------------------
-  "servers.create",
-  "servers.manage",
-  "servers.delete",
-
-  // --- Volumes ---------------------------------------------------------
-  "volumes.delete",
-  /** Browsing and reading file contents off a volume — i.e. application data. */
-  "volumes.files.read",
-
-  // --- Object storage -------------------------------------------------
-  "buckets.create",
-  "buckets.delete",
-  /** Browsing object keys and reading object contents — i.e. application data. */
-  "buckets.objects.read",
-
-  // --- Other cloud resources ------------------------------------------
-  "resources.view",
-  "resources.delete",
-
-  // --- Operations ------------------------------------------------------
-  "operations.cancel",
-  /** Cancel, retry, or finalize operations started by another user. */
-  "operations.manage",
-
-  // --- Terminal --------------------------------------------------------
-  "terminal.container",
-  /** Shell on a fleet host. Root-equivalent; effectively an admin grant. */
-  "terminal.host",
-] as const;
-
-export type Permission = typeof ALL_PERMISSIONS[number];
-
 export function getUserCount(): number {
   const row = db.query("SELECT COUNT(*) as count FROM users").get() as { count: number } | null;
   return row?.count ?? 0;
@@ -108,12 +35,12 @@ export function getUserById(id: string): UserRow | null {
 }
 
 export function getUsers(): UserRow[] {
-  return db.query("SELECT id, username, is_admin, webauthn_enabled, created_at FROM users ORDER BY created_at").all() as UserRow[];
+  return db.query("SELECT id, username, webauthn_enabled, created_at FROM users ORDER BY created_at").all() as UserRow[];
 }
 
-export function insertUser(user: { id: string; username: string; password_hash: string; is_admin?: boolean }): void {
-  db.query("INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, ?)").run(
-    user.id, user.username, user.password_hash, user.is_admin ? 1 : 0,
+export function insertUser(user: { id: string; username: string; password_hash: string }): void {
+  db.query("INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)").run(
+    user.id, user.username, user.password_hash,
   );
 }
 
@@ -177,30 +104,6 @@ export function disableWebAuthn(userId: string): void {
 export function getWebAuthnCredentialCount(userId: string): number {
   const row = db.query("SELECT COUNT(*) as count FROM webauthn_credentials WHERE user_id = ?").get(userId) as { count: number } | null;
   return row?.count ?? 0;
-}
-
-/** The user's global permission grants. */
-export function getUserPermissions(userId: string): string[] {
-  const rows = db
-    .query("SELECT permission FROM user_permissions WHERE user_id = ?")
-    .all(userId) as Array<{ permission: string }>;
-  return rows.map((r) => r.permission);
-}
-
-export function hasPermission(userId: string, permission: string): boolean {
-  const user = getUserById(userId);
-  if (!user) return false;
-  if (user.is_admin) return true;
-  return !!db
-    .query("SELECT 1 FROM user_permissions WHERE user_id = ? AND permission = ?")
-    .get(userId, permission);
-}
-
-/** Replace a user's grants wholesale. */
-export function setUserPermissions(userId: string, permissions: string[]): void {
-  db.query("DELETE FROM user_permissions WHERE user_id = ?").run(userId);
-  const stmt = db.prepare("INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)");
-  for (const permission of new Set(permissions)) stmt.run(userId, permission);
 }
 
 export function incrementTokenVersion(userId: string): void {

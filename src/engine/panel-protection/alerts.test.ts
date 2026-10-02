@@ -1,5 +1,5 @@
 import { test, expect, beforeEach } from "bun:test";
-import db, { saveSetting, insertUser, insertServer, insertServerMetricSample } from "../../shared/db.ts";
+import db, { saveSetting, insertUser, insertServer, insertServerMetricSample, getApp } from "../../shared/db.ts";
 import { NtfySettingsSchema } from "../../shared/ntfy-schema.ts";
 import { reconcileIncidents, alertTick, collectConditions } from "./alerts.ts";
 
@@ -13,8 +13,10 @@ beforeEach(() => {
 
 function enable() {
   saveSetting("ntfy_settings", JSON.stringify(NtfySettingsSchema.parse({ enabled: true, alerts: true, apps: true })));
-  insertUser({ id: "recipient", username: "recipient", password_hash: "unused", is_admin: true });
+  insertUser({ id: "recipient", username: "recipient", password_hash: "unused" });
   saveSetting("ntfy_user.recipient", JSON.stringify({ enabled: true, events: ["app", "backup", "disk", "delivery"], recovery: true }));
+  // App alerts are only delivered while the app exists.
+  if (!getApp(1)) db.query("INSERT INTO apps (id, name, domain, image_ref) VALUES (1, 'alert-app', '', ?)").run(`example/app@sha256:${"a".repeat(64)}`);
 }
 const count = () => (db.query("SELECT count(*) AS n FROM ntfy_outbox").get() as { n: number }).n;
 test("grace period, deduplication and recovery survive repeated evaluations", () => {

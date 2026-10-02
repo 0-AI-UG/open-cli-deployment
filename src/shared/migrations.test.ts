@@ -76,7 +76,7 @@ describe("runMigrations", () => {
 
   test("migration 112 removes empty managed-service tables and retired grants", () => {
     const db = freshDb();
-    runMigrationsWithImageCutover(db);
+    runMigrationsWithImageCutover(db, 112);
 
     for (const table of ["services", "service_instances", "service_links"]) {
       expect(db.query(
@@ -209,6 +209,28 @@ describe("runMigrations", () => {
     expect(db.query("SELECT username FROM users").get()).toEqual({ username: "ops" });
     expect(db.query("SELECT permission FROM user_permissions").all()).toEqual([{ permission: "apps.deploy" }]);
     expect(db.query("SELECT 1 FROM settings WHERE key = 'github_oauth_client_id'").get()).toBeNull();
+  });
+
+  test("migration 127 drops user permissions and the admin role", () => {
+    const db = freshDb();
+    runMigrationsWithImageCutover(db, 126);
+    db.run("INSERT INTO users (id, username, password_hash, is_admin) VALUES ('u1', 'ops', 'x', 1), ('u2', 'dev', 'y', 0)");
+    db.run("INSERT INTO user_permissions (user_id, permission) VALUES ('u2', 'apps.deploy')");
+    db.run(`INSERT INTO panel_incident_history (incident_id, key, title, path, first_seen, opened_at)
+      VALUES ('i1', 'backup:failed', 'Backup failed', '/admin', 1, 1), ('i2', 'app:1', 'Down', '/apps/1', 1, 1)`);
+    db.run("INSERT INTO panel_deployments (image_tag, source) VALUES ('a', 'admin-main-release'), ('b', 'manual')");
+
+    migrations.find((m) => m.version === 127)!.up(db);
+
+    const columns = (db.query("PRAGMA table_info(users)").all() as Array<{ name: string }>).map((c) => c.name);
+    expect(columns).not.toContain("is_admin");
+    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'user_permissions'").get()).toBeNull();
+    expect(db.query("SELECT id, username FROM users ORDER BY id").all())
+      .toEqual([{ id: "u1", username: "ops" }, { id: "u2", username: "dev" }]);
+    expect(db.query("SELECT path FROM panel_incident_history ORDER BY incident_id").all())
+      .toEqual([{ path: "/settings?section=panel" }, { path: "/apps/1" }]);
+    expect(db.query("SELECT source FROM panel_deployments ORDER BY image_tag").all())
+      .toEqual([{ source: "main-release" }, { source: "manual" }]);
   });
 
   test("migration 125 drops removed-feature columns and keeps everything else", () => {

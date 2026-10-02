@@ -19,17 +19,6 @@ function checkBackendVersion(res: Response): void {
   );
 }
 
-/** Shown whenever the panel refuses a CLI token for want of `cli.access`. */
-export const CLI_ACCESS_DENIED_MESSAGE =
-  `${YELLOW}This account is not allowed to use the ocd CLI.${RESET} ` +
-  `${DIM}Ask an admin to grant it the "cli.access" permission.${RESET}`;
-
-/** Does this server error message mean "your account may not use the CLI"?
- *  Matched on the message because the panel returns a plain 403 with no code. */
-export function isCliAccessDenied(serverError: string | undefined | null): boolean {
-  return !!serverError && /cli access/i.test(serverError);
-}
-
 export async function get<T>(path: string): Promise<T> {
   return apiRequest<T>("GET", path);
 }
@@ -303,14 +292,6 @@ export async function apiRequest<T>(
         return null;
       }
     })();
-
-    // The server rejects every CLI-minted token whose user lacks `cli.access`.
-    // That is an account-configuration problem, not a bad request, so print the
-    // fix instead of an HTTP dump the user can do nothing with.
-    if (res.status === 403 && isCliAccessDenied(err?.error)) {
-      console.error(CLI_ACCESS_DENIED_MESSAGE);
-      process.exit(1);
-    }
 
     const server = err?.error ? `: ${err.error}` : "";
     throw new ApiError(

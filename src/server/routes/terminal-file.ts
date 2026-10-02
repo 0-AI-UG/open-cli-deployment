@@ -38,12 +38,6 @@ export async function handleTerminalFile(request: Request): Promise<Response> {
   }
   const resolved = resolveTerminalTarget(target.kind, target.id);
   if ("error" in resolved) return Response.json({ error: resolved.error }, { status: 404 });
-  if (!user.is_admin) {
-    const permission = resolved.container ? "terminal.container" : "terminal.host";
-    if (!db.hasPermission(auth.userId, permission)) {
-      return Response.json({ error: "Forbidden" }, { status: 403 });
-    }
-  }
 
   const sizeResult = await sshExec(
     resolved.ip,

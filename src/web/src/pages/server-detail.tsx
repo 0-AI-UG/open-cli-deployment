@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { get } from "../api/client.ts";
 import { Card, CardHeader, Btn, CopyButton, DataRow, EmptyState, Stat, StatusBadge, PageShell, PageHeader, PageState } from "../components/ui.tsx";
 import { Boxes, Server, RefreshCw, Terminal, FileWarning, Network } from "lucide-react";
-import { PermissionGate } from "../components/permission-gate.tsx";
 import { Sparkline } from "./app-detail/shared.tsx";
 import { ReplicasTable } from "../components/replicas-table.tsx";
 import type { ServerMetricSample } from "../types.ts";
@@ -179,11 +178,9 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
           {detail.ipv4 && <span className="font-mono text-xs">{detail.ipv4}</span>}
         </>}
         actions={<>
-          <PermissionGate permission="terminal.host">
-            <Btn onClick={() => { window.location.hash = `#/terminal/server/${detail.id}`; }}>
-              <Terminal size={14} /> Shell
-            </Btn>
-          </PermissionGate>
+          <Btn onClick={() => { window.location.hash = `#/terminal/server/${detail.id}`; }}>
+            <Terminal size={14} /> Shell
+          </Btn>
           <Btn onClick={() => { setLoading(true); load(); }}>
             <RefreshCw size={14} /> Refresh
           </Btn>

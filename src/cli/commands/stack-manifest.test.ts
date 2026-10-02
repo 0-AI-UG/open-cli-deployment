@@ -46,11 +46,11 @@ describe("partial stack selection", () => {
   const apps = {
     api: { manifest: "apps/api/.ocd-deploy.json" },
     worker: { manifest: "apps/worker/.ocd-deploy.json", needs: ["api"] },
-    admin: { manifest: "apps/admin/.ocd-deploy.json", needs: ["api"] },
+    console: { manifest: "apps/console/.ocd-deploy.json", needs: ["api"] },
   };
 
   test("expands downstream dependents transitively", () => {
-    expect([...expandAppDependents(["api"], apps)].sort()).toEqual(["admin", "api", "worker"]);
+    expect([...expandAppDependents(["api"], apps)].sort()).toEqual(["api", "console", "worker"]);
     expect([...expandAppDependents(["worker"], apps)]).toEqual(["worker"]);
   });
 

@@ -37,21 +37,6 @@ async function authFromQuery(req: Request): Promise<{ userId: string } | null> {
   }
 }
 
-/** A shell on a fleet host is root-equivalent and is gated separately from a
- *  shell inside a container. The container case is scoped to the app that owns
- *  the replica, so a per-app grant reaches only its own containers. */
-function checkPermission(userId: string, target: TerminalWsData["target"]): boolean {
-  const user = db.getUserById(userId);
-  if (!user) return false;
-  if (user.is_admin) return true;
-
-  if (target.kind === "server") return db.hasPermission(userId, "terminal.host");
-  if (target.kind === "replica") {
-    return db.hasPermission(userId, "terminal.container");
-  }
-  return false;
-}
-
 /**
  * Parse `/api/terminal/ws?target=server:123` or `replica:45`.
  */
@@ -65,7 +50,7 @@ function parseTarget(req: Request): { kind: "server" | "replica"; id: number } |
 
 /**
  * Called from the server fetch fallback. Returns:
- *   - Response on rejection (401/403/404/400)
+ *   - Response on rejection (401/404/400)
  *   - null if the upgrade succeeded (caller should return undefined)
  *   - null if the path is not the terminal path (caller continues routing)
  */
@@ -75,14 +60,10 @@ export async function tryTerminalUpgrade(req: Request, server: Bun.Server<Termin
 
   if (recoveryPending()) return new Response("Panel recovery is paused", { status: 409 });
   const auth = await authFromQuery(req);
-  if (!auth) return new Response("unauthorized", { status: 401 });
+  if (!auth || !db.getUserById(auth.userId)) return new Response("unauthorized", { status: 401 });
 
   const target = parseTarget(req);
   if (!target) return new Response("bad target", { status: 400 });
-
-  if (!checkPermission(auth.userId, target)) {
-    return new Response("forbidden", { status: 403 });
-  }
 
   const active = sessionsByUser.get(auth.userId) ?? 0;
   if (active >= MAX_SESSIONS_PER_USER) {

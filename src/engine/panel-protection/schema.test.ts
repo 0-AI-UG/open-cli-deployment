@@ -42,6 +42,8 @@ test("upgrading removes retired incident agent records and its stored credential
   try {
     initializeCurrentSchema(db);
     db.run("UPDATE schema_version SET version=119");
+    // Grants were dropped in 127; migrations 120-126 still expect the table.
+    db.run("CREATE TABLE user_permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, permission TEXT NOT NULL, scope_type TEXT NOT NULL DEFAULT 'global', scope_id TEXT, UNIQUE(user_id, permission, scope_type, scope_id))");
     db.run("CREATE TABLE incident_agent_runs (id TEXT PRIMARY KEY, incident_id TEXT NOT NULL)");
     db.run("INSERT INTO incident_agent_runs VALUES ('run-1', 'incident-1')");
     db.run("INSERT INTO encrypted_secrets (key, encrypted_value, iv) VALUES ('deepseek_api_key', 'old-ciphertext', 'old-iv'), ('other', 'keep', 'iv')");

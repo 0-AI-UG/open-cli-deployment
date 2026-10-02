@@ -5,7 +5,7 @@ import { Badge, Btn, Card, CardHeader, Hero, Stat, StatRow, StatusBadge, Logo } 
 // primitives as the real dashboard. The setup page feeds it the domain suffix
 // being typed, which shows up in the app addresses in view. Only values that
 // land in the visible, uncropped area are wired up, so typing never shifts
-// layout the admin can't see. It renders at desktop width,
+// layout the user can't see. It renders at desktop width,
 // scaled down, and is meant to run off the right and bottom edges of its
 // container (which clips it), like a window peeking into the page.
 
@@ -32,7 +32,7 @@ const APPS: PreviewApp[] = [
   { name: "mailer", internal: "mailer.ocd.internal", status: "running", private: true },
 ];
 
-const NAV = ["Overview", "Environments", "Resources", "Incidents", "Operations", "Admin"];
+const NAV = ["Overview", "Environments", "Resources", "Incidents", "Operations", "Settings"];
 
 export function DashboardPreview({ domainSuffix, scale = 0.8 }: { domainSuffix: string; scale?: number }) {
   const suffix = domainSuffix.trim().replace(/^\.+|\.+$/g, "") || "apps.example.com";
@@ -63,8 +63,8 @@ export function DashboardPreview({ domainSuffix, scale = 0.8 }: { domainSuffix: 
             <span className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong bg-surface px-3.5 text-sm font-medium text-fg"><TerminalSquare size={14} /> Install CLI</span>
             <span className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-line-strong bg-surface px-3.5 text-sm font-medium text-fg"><Sparkles size={14} /> Agent skill</span>
             <span className="inline-flex h-9 max-w-56 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-surface pl-1 pr-2.5 text-sm font-medium">
-              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">A</span>
-              <span className="truncate text-fg">admin</span>
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">Y</span>
+              <span className="truncate text-fg">you</span>
               <ChevronDown size={14} className="shrink-0 text-muted" />
             </span>
           </div>

@@ -29,7 +29,6 @@ type Menu = {
   key: string;
   label: string;
   match: RegExp;
-  adminOnly?: boolean;
   // Plain links have no panel.
   href?: string;
   width?: number;
@@ -81,20 +80,19 @@ const MENUS: Menu[] = [
   {
     key: "settings",
     label: "Settings",
-    match: /^#\/admin/,
-    adminOnly: true,
+    match: /^#\/settings/,
     width: 760,
     columns: [
       { links: [
-        { label: "Hetzner and domain", description: "API token, Object Storage and app domain", href: "#/admin", icon: HetznerIcon },
-        { label: "Build", description: "Git connections, registries and workers", href: "#/admin?section=build", icon: Boxes },
+        { label: "Hetzner and domain", description: "API token, Object Storage and app domain", href: "#/settings", icon: HetznerIcon },
+        { label: "Build", description: "Git connections, registries and workers", href: "#/settings?section=build", icon: Boxes },
       ] },
       { links: [
-        { label: "Panel", description: "The self-hosted panel and its updates", href: "#/admin?section=panel", icon: PanelsTopLeft },
-        { label: "Users", description: "Accounts, permissions and 2FA", href: "#/admin?section=users", icon: ShieldCheck },
+        { label: "Panel", description: "The self-hosted panel and its updates", href: "#/settings?section=panel", icon: PanelsTopLeft },
+        { label: "Users", description: "Accounts, invites and 2FA", href: "#/settings?section=users", icon: ShieldCheck },
       ] },
     ],
-    footer: { label: "Open settings", href: "#/admin" },
+    footer: { label: "Open settings", href: "#/settings" },
     related: [{ label: "Account", href: "#/account" }],
   },
 ];
@@ -105,8 +103,7 @@ const COLUMN_ICONS: Record<string, LucideIcon> = { Compute: Server, Storage: Har
 
 const CLOSE_DELAY = 160;
 
-export function DesktopMenuNav({ hash, isAdmin }: { hash: string; isAdmin: boolean }) {
-  const menus = MENUS.filter((menu) => !menu.adminOnly || isAdmin);
+export function DesktopMenuNav({ hash }: { hash: string }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   // The panel keeps showing the last menu while it fades out.
   const [shownKey, setShownKey] = useState<string | null>(null);
@@ -122,8 +119,8 @@ export function DesktopMenuNav({ hash, isAdmin }: { hash: string; isAdmin: boole
     if (openKey === key) return;
     if (openKey) {
       // Switching menus: morph the open panel toward the new one.
-      const from = menus.findIndex((menu) => menu.key === openKey);
-      const to = menus.findIndex((menu) => menu.key === key);
+      const from = MENUS.findIndex((menu) => menu.key === openKey);
+      const to = MENUS.findIndex((menu) => menu.key === key);
       setDirection(to > from ? "right" : "left");
       setAnimateSize(true);
     } else {
@@ -192,7 +189,7 @@ export function DesktopMenuNav({ hash, isAdmin }: { hash: string; isAdmin: boole
     requestAnimationFrame(() => contentRef.current?.querySelector<HTMLAnchorElement>("a")?.focus());
   };
 
-  const shown = menus.find((menu) => menu.key === shownKey);
+  const shown = MENUS.find((menu) => menu.key === shownKey);
   const isOpen = openKey !== null;
 
   return (
@@ -204,7 +201,7 @@ export function DesktopMenuNav({ hash, isAdmin }: { hash: string; isAdmin: boole
       }}
     >
       <nav className="flex min-w-0 items-center gap-0.5" aria-label="Primary navigation" onPointerLeave={scheduleClose} onPointerEnter={cancelClose}>
-        {menus.map((menu) => {
+        {MENUS.map((menu) => {
           const active = menu.match.test(hash);
           const expanded = openKey === menu.key;
           const base = "inline-flex h-9 shrink-0 items-center gap-1 rounded-full px-3.5 text-sm font-medium transition-[color,background-color,box-shadow] duration-150";

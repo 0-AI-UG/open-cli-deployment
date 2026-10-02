@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import db, { getSettings, saveSetting, getApp, getUserById, hasPermission } from "./db.ts";
+import db, { getSettings, saveSetting, getApp, getUserById } from "./db.ts";
 import { encryptValue, decryptValue } from "./secret-store.ts";
 import { NtfyBindingsSchema, type NtfyBindings, type NtfyPreferences, type NtfySettings } from "./ntfy-schema.ts";
 export const NTFY_IMAGE = "docker.io/binwiederhier/ntfy:v2.28.0";
@@ -7,7 +7,7 @@ export const ntfySettings = (): NtfySettings | null => JSON.parse(getSettings().
 export const ntfyApp = () => { const id = ntfySettings()?.app_id; return id ? getApp(id) : null; };
 export function ntfyUrl(): string {
   const app = ntfyApp();
-  if (!app?.domain) throw new Error("Select an ntfy app with an HTTPS domain in Admin");
+  if (!app?.domain) throw new Error("Select an ntfy app with an HTTPS domain in Settings → Panel");
   return `https://${app.domain}`;
 }
 export const ntfyPreferences = (id: string): NtfyPreferences => JSON.parse(getSettings()[`ntfy_user.${id}`] || '{"enabled":false,"events":["app","delivery","disk","backup"],"recovery":true}');
@@ -35,7 +35,7 @@ export function normalizeNtfyBindings(value: NtfyBindings = {}): NtfyBindings {
 export async function prepareNtfyBindings(appId: number, bindings: NtfyBindings): Promise<void> {
   if (!Object.keys(bindings).length) return;
   const settings = ntfySettings();
-  if (!settings?.enabled || !settings.apps || !ntfyApp()) throw new Error("Select the ntfy app and enable app access in Admin first");
+  if (!settings?.enabled || !settings.apps || !ntfyApp()) throw new Error("Select the ntfy app and enable app access in Settings → Panel first");
   if (settings.app_id === appId) throw new Error("The ntfy server cannot depend on its own notification binding");
   for (const [name, spec] of Object.entries(bindings)) await ensureNtfyCredential("app", String(appId), name, spec.generation, ntfyAccess(spec));
 }
@@ -69,20 +69,15 @@ export async function appNtfyEnv(appId: number, bindings = getAppNtfy(appId)): P
   }
   return result;
 }
-/** Recheck at delivery time; a queued message must not bypass a revoked grant. */
+/** Recheck at delivery time; a queued message must not reach a deleted user,
+ *  changed preferences, or an app that no longer exists. */
 export function canReceiveNtfy(userId: string, key: string, recovered: boolean): boolean {
   const user = getUserById(userId);
   const prefs = ntfyPreferences(userId);
   const category = key.split(":")[0] as NtfyPreferences["events"][number];
   if (!user || !prefs.enabled || !prefs.events.includes(category) || (recovered && !prefs.recovery)) return false;
-  if (user.is_admin) return true;
-  if (category === "app") {
-    const appId = Number(key.slice(4));
-    return !!getApp(appId) && hasPermission(userId, "apps.view");
-  }
-  // Delivery targets may include several resources. Until each target is resolved,
-  // fleet and backup incidents are admin-only rather than leaking operation names.
-  return false;
+  if (category === "app") return !!getApp(Number(key.slice(4)));
+  return true;
 }
 
 export function ntfyAccess(spec: NtfyBindings[string]): string {

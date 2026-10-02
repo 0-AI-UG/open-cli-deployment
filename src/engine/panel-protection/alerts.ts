@@ -54,9 +54,9 @@ export function collectConditions(now = Date.now()): Condition[] {
   const settings = getSettings();
   {
     const latest = db.query("SELECT status FROM panel_backups WHERE status IN ('complete','failed') ORDER BY created_at DESC, rowid DESC LIMIT 1").get() as { status: string } | null;
-    if (latest?.status === "failed") result.push({ key: "backup:failed", title: "Panel backup failed", path: "/admin" });
+    if (latest?.status === "failed") result.push({ key: "backup:failed", title: "Panel backup failed", path: "/settings?section=panel" });
     const last = Number(settings.panel_backup_last_success || settings.panel_backup_enabled_at || now);
-    if (settings.panel_backup_enabled === "1" && now - last > 26 * 3600_000) result.push({ key: "backup:overdue", title: "Panel backup is overdue", path: "/admin" });
+    if (settings.panel_backup_enabled === "1" && now - last > 26 * 3600_000) result.push({ key: "backup:overdue", title: "Panel backup is overdue", path: "/settings?section=panel" });
   }
   // One incident per deployment target, resolved by a later successful delivery.
   const since = settings.incident_tracking_enabled_at || String(now);

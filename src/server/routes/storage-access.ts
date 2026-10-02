@@ -2,7 +2,7 @@ import { getStorageGrants, saveStorageGrants, type StorageGrant } from "../../sh
 import { createHash, randomBytes } from "node:crypto";
 import { getS3Credentials, listBuckets, validateBucketName } from "../../engine/object-storage/s3.ts";
 import { presignObject, validObjectKey } from "../../engine/object-storage/presign.ts";
-import { requireAdmin } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 
 type Method = "GET" | "HEAD" | "PUT" | "DELETE" | "LIST";
@@ -68,7 +68,7 @@ export async function handleStorageAuthorize(request: Request): Promise<Response
 /** External readers are deliberately separate from manifest-owned app bindings. */
 export async function handleStorageReaders(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     if (request.method === "GET") return reply(grants().filter(g => !g.appId && g.reader && readOnly(g)).map(publicReader));
     const body = await request.json() as Record<string, unknown> | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) return reply({ error: "Invalid request" }, 400);

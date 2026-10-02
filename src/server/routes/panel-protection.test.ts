@@ -1,13 +1,11 @@
-import { test, expect, mock, beforeEach } from "bun:test";
+import { test, expect, mock } from "bun:test";
 import db, { saveSetting } from "../../shared/db.ts";
 import { secretStore } from "../../shared/secret-store.ts";
 const realPermissions = await import("../lib/permissions.ts");
-let allowed = true;
-mock.module("../lib/permissions.ts", () => ({ ...realPermissions, requireAdmin: async () => { if (!allowed) { const e = new Error("Admin required"); Object.defineProperty(e, "constructor", { value: { name: "ForbiddenError" } }); throw e; } return { userId: "admin" }; } }));
+mock.module("../lib/permissions.ts", () => ({ ...realPermissions, requireAuthenticated: async () => ({ userId: "test-user" }) }));
 const { handleSaveProtection, handleGetProtection, handleRecoveryKey } = await import("./panel-protection.ts");
-const request = (body?: unknown) => new Request("https://panel.example/api/admin/protection", { method: "POST", ...(body ? { body: JSON.stringify(body), headers: { "content-type": "application/json" } } : {}) });
+const request = (body?: unknown) => new Request("https://panel.example/api/protection", { method: "POST", ...(body ? { body: JSON.stringify(body), headers: { "content-type": "application/json" } } : {}) });
 const config = { backup_enabled: false, backup_bucket: "", backup_prefix: "ocd-panel", backup_retention: 7 };
-beforeEach(() => { allowed = true; });
 test("protection settings configure backups without an email channel", async () => {
   expect((await handleSaveProtection(request(config))).status).toBe(200);
   const body = await (await handleGetProtection(request())).json();
@@ -22,11 +20,7 @@ test("validation is atomic and requires prerequisites", async () => {
   expect((await handleSaveProtection(request({ ...config, backup_enabled: true }))).status).toBe(400);
   expect((await handleSaveProtection(request({ ...config, unexpected: "x" }))).status).toBe(400);
 });
-test("key retrieval is admin only and stable", async () => {
-  allowed = false;
-  expect((await handleGetProtection(request())).status).toBe(403);
-  expect((await handleRecoveryKey(request())).status).toBe(403);
-  allowed = true;
+test("key retrieval is stable", async () => {
   const first = await (await handleRecoveryKey(request())).json();
   const again = await (await handleRecoveryKey(request())).json();
   expect(first.recovery_key).toMatch(/^[a-f0-9]{64}$/);

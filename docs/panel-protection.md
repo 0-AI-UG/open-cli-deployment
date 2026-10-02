@@ -1,7 +1,7 @@
 # Panel backups and notifications
 
-Open **Admin → Panel** for panel releases, backups, recovery, and shared
-notification settings. Only administrators can manage the panel itself.
+Open **Settings → Panel** for panel releases, backups, recovery, and shared
+notification settings. Every signed-in user can manage the panel itself.
 
 The **Manual panel redeploy** card resolves the current `main` commit to its
 published, immutable GHCR image and lets an operator redeploy it with one
@@ -15,7 +15,7 @@ scheduling; OCD does not back up application data or schedule application jobs.
 
 ## Enable backups
 
-1. Configure Hetzner Object Storage in **Admin → Hetzner**.
+1. Configure Hetzner Object Storage in **Settings → Hetzner**.
 2. Enter an existing bucket in **Panel backups**. Use a dedicated prefix per panel
    (default `ocd-panel`). The credentials need GetObject, PutObject, and DeleteObject
    access to that prefix. Bucket creation remains in the object-storage controls.
@@ -39,7 +39,7 @@ not included. Keep the panel image available in your registry.
 
 The archive is gzip-compressed and authenticated/encrypted with AES-256-GCM using
 a separate random recovery key. The key is encrypted in the panel's secret store
-and can be shown again to an administrator. S3 receives only encrypted bytes.
+and can be shown again to any signed-in user. S3 receives only encrypted bytes.
 OCD downloads each upload and checks its checksum before declaring success or
 applying retention. Retention deletes only exact object keys recorded by this
 panel. Failed deletions remain visible and are retried after subsequent backups.
@@ -104,7 +104,7 @@ than silently making credentials unreadable. All restored private files are
 mode 0600, inside restricted directories.
 
 The panel starts with **automation paused**. Sign in using the restored account,
-open **Admin → Panel**, confirm that the original panel is stopped, and choose
+open **Settings → Panel**, confirm that the original panel is stopped, and choose
 **Verify servers and resume**. OCD checks pinned SSH host keys and Docker access
 to every recorded server before permitting saved operations and reconciliation
 to resume. If any check fails, it remains paused. Review the saved operation count
@@ -118,7 +118,7 @@ Pending ntfy notifications from the old snapshot are discarded to avoid replayin
 ## Notifications
 
 ntfy is OCD's only alert channel. Enable the shared service and platform alerts
-in **Admin → Panel → Shared notifications**, then configure subscriptions and
+in **Settings → Panel → Shared notifications**, then configure subscriptions and
 recovery notices in **Account → Notifications**. See [Shared ntfy notifications](notifications.md)
 for server setup, app bindings, delivery retries, and access controls.
 

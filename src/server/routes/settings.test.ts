@@ -1,18 +1,15 @@
-import { useTempDataDir, seedTestAdmin } from "../../shared/test-helpers.ts";
+import { useTempDataDir, seedTestUser } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 
-// Bypass the auth half of the permission layer, keeping the rest real.
+// Bypass authentication, keeping the rest of the module real.
 const realPermissions = await import("../lib/permissions.ts");
 mock.module("../lib/permissions.ts", () => ({
   ...realPermissions,
-  // seedTestAdmin() is idempotent and runs per request, not at module load:
-  // three other suites wipe the whole `users` table, and the row has to exist
-  // at the moment a handler calls hasPermission — file order is not ours.
-  requireAdmin: async () => ({ userId: seedTestAdmin(), username: "admin" }),
-  requirePermission: async () => ({ userId: seedTestAdmin(), username: "admin" }),
-  requireAuthenticated: async () => ({ userId: seedTestAdmin(), username: "admin" }),
+  // seedTestUser() is idempotent and runs per request, not at module load:
+  // other suites wipe the whole `users` table — file order is not ours.
+  requireAuthenticated: async () => ({ userId: seedTestUser(), username: "test-user" }),
 }));
 
 const fakeHetzner = {

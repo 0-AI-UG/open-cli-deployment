@@ -7,7 +7,7 @@ resolves either to a digest before a runtime operation. Deployment history,
 re-releases, and attestation use the digest.
 
 For private source and images, use `ocd source login` and `ocd registry login`
-(or the Admin Settings connection cards). These connections accept compatible
+(or the Settings connection cards). These connections accept compatible
 Git and OCI providers; GHCR and GitHub are options, not requirements. The Git token is used only for checkout. The
 OCI credential is scoped to its configured repository namespace
 and is used for worker pushes and runtime pulls. Never put credentials in a

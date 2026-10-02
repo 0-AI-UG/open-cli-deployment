@@ -17,8 +17,7 @@ import { VolumeDetailPage } from "./pages/volume-detail.tsx";
 import { BucketDetailPage } from "./pages/bucket-detail.tsx";
 import { ServerDetailPage } from "./pages/server-detail.tsx";
 import { AccountPage } from "./pages/account.tsx";
-import { SettingsPage } from "./pages/admin/settings.tsx";
-import { UserDetailPage } from "./pages/admin/user-detail.tsx";
+import { SettingsPage } from "./pages/settings/settings.tsx";
 import { TerminalPage } from "./pages/terminal.tsx";
 import { EnvironmentsPage } from "./pages/environments.tsx";
 import { DeviceAuthPage } from "./pages/device-auth.tsx";
@@ -65,7 +64,7 @@ export function App() {
     });
   }, []);
 
-  // Refresh user permissions from server on app load and tab focus
+  // Refresh the signed-in user from the server on app load and tab focus
   useEffect(() => {
     if (!token) return;
     const refresh = () => {
@@ -177,11 +176,8 @@ export function App() {
     content = <ResourcesPage />;
   } else if (hash === "#/account") {
     content = <AccountPage />;
-  } else if (hash === "#/admin") {
+  } else if (hash === "#/settings") {
     content = <SettingsPage />;
-  } else if (hash.startsWith("#/admin/")) {
-    const userId = hash.split("/")[2];
-    content = userId ? <UserDetailPage userId={userId} /> : <SettingsPage />;
   } else if (hash.startsWith("#/terminal/")) {
     const parts = hash.split("/");
     const kind = parts[2] as "server" | "replica";

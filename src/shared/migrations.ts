@@ -2895,6 +2895,18 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 127,
+    description: "Remove user permissions and the admin role",
+    up: (db) => {
+      db.run("DROP TABLE IF EXISTS user_permissions");
+      const existing = new Set((db.query("PRAGMA table_info(users)").all() as Array<{ name: string }>).map((c) => c.name));
+      if (existing.has("is_admin")) db.run("ALTER TABLE users DROP COLUMN is_admin");
+      // The admin section became Settings; keep stored links and labels pointing at it.
+      db.run("UPDATE panel_incident_history SET path = '/settings?section=panel' WHERE path = '/admin'");
+      db.run("UPDATE panel_deployments SET source = 'main-release' WHERE source = 'admin-main-release'");
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

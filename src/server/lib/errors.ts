@@ -4,12 +4,6 @@ export class AuthError extends Error {
   }
 }
 
-export class ForbiddenError extends Error {
-  constructor(message = "Forbidden") {
-    super(message);
-  }
-}
-
 export class PermissionError extends Error {
   constructor(message = "Insufficient permissions") {
     super(message);

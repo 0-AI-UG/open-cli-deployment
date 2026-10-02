@@ -3,9 +3,7 @@ import { useSyncExternalStore } from "react";
 export type User = {
   id: string;
   username: string;
-  isAdmin: boolean;
   webauthnEnabled?: boolean;
-  permissions: string[];
 };
 
 type AuthState = {
@@ -78,16 +76,4 @@ export function useAuth() {
     },
     () => state,
   );
-}
-
-/** Mirror of the server's rule (see shared/db/users.ts `hasPermission`).
- *  Cosmetic only: the server re-checks every request. */
-function evaluate(user: User | null, permission: string): boolean {
-  if (!user) return false;
-  return user.isAdmin || user.permissions.includes(permission);
-}
-
-export function useHasPermission(permission: string): boolean {
-  const auth = useAuth();
-  return evaluate(auth.user, permission);
 }

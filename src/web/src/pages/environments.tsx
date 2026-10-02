@@ -3,9 +3,7 @@ import { get, post, put } from "../api/client.ts";
 import { Card, CardHeader, Btn, Field, showToast, confirm, EmptyState, PageShell, PageHeader } from "../components/ui.tsx";
 import { EnvVarEditor, type EnvVarRow } from "../components/env-var-editor.tsx";
 import { trackOperationInToast, useActiveOperations } from "../hooks/useOperation.ts";
-import { useHasPermission } from "../stores/auth.ts";
 import { NeoSelect } from "../components/neo-select.tsx";
-import { PermissionGate } from "../components/permission-gate.tsx";
 import { Layers, Plus, Trash2, ChevronDown, ChevronRight, Key } from "lucide-react";
 import type { EnvironmentData } from "../types.ts";
 
@@ -19,7 +17,6 @@ export function EnvironmentsPage() {
   const [rollout, setRollout] = useState<"restart" | "none">("restart");
   const [loading, setLoading] = useState(false);
   const [attachedApps, setAttachedApps] = useState<Record<number, AttachedApp[]>>({});
-  const canEditSecrets = useHasPermission("environments.secrets");
   const ops = useActiveOperations(
     (op) => op.kind === "cascade_redeploy",
     { rehydrateToasts: true },
@@ -68,12 +65,12 @@ export function EnvironmentsPage() {
         .filter((entry) => entry.key.trim())
         .map((entry) => ({ key: entry.key.trim(), value: entry.value, secret: entry.secret }));
       if (id === "new") {
-        await post("/api/environments", { name: editName.trim(), ...(canEditSecrets ? { env_vars } : {}) });
+        await post("/api/environments", { name: editName.trim(), env_vars });
         showToast("Environment created", "success");
       } else {
         const apps = attachedApps[id] || [];
         const activeApps = apps.filter((a) => a.status !== "stopped" && a.status !== "destroying");
-        if (canEditSecrets && activeApps.length > 0 && rollout !== "none") {
+        if (activeApps.length > 0 && rollout !== "none") {
           const ok = await confirm(
             "Reload Apps",
             `Changed variables will recreate affected apps from their existing immutable images: ${activeApps.map((a) => a.name).join(", ")}`,
@@ -85,7 +82,7 @@ export function EnvironmentsPage() {
         // masked secret values unchanged.
         const result = await put(`/api/environments/${id}`, {
           name: editName.trim(),
-          ...(canEditSecrets ? { env_vars, rollout } : {}),
+          env_vars, rollout,
         }) as { op_id?: number | null };
         if (result?.op_id) {
           trackOperationInToast(result.op_id, "Roll out environment");
@@ -120,16 +117,6 @@ export function EnvironmentsPage() {
         </div>
         <div className="space-y-3 border-t px-4 py-4">
           <div className="text-sm font-medium text-fg">Variables</div>
-          {/* Env var values are credentials, so they sit behind their own grant
-              rather than the environment lifecycle one. */}
-          <PermissionGate
-            permission="environments.secrets"
-            fallback={
-              <p className="text-sm text-muted">
-                Env vars hidden — requires <code className="rounded bg-subtle px-1.5 py-0.5 font-mono text-xs text-fg">environments.secrets</code>
-              </p>
-            }
-          >
             <EnvVarEditor entries={editVars} onChange={setEditVars} />
             {typeof id === "number" && (attachedApps[id] || []).map((app) => (
               <details key={app.id} className="group mt-3 frame bg-surface">
@@ -143,9 +130,8 @@ export function EnvironmentsPage() {
                 </div>
               </details>
             ))}
-          </PermissionGate>
         </div>
-        {typeof id === "number" && canEditSecrets && (
+        {typeof id === "number" && (
           <div className="border-t px-4">
             <Field label="Apply changes" hint="Reloading recreates attached apps from their existing images.">
               <NeoSelect

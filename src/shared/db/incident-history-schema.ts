@@ -28,7 +28,7 @@ export function initializeIncidentHistorySchema(db: Database): void {
     const opId = event.title.match(/operation #(\d+)/)?.[1];
     const resourcePath = key.startsWith("app:") ? `/apps/${Number(key.slice(4))}`
       : key.startsWith("disk:") ? `/resources/servers/${Number(key.slice(5))}`
-      : opId ? `/engine/op/${opId}` : "/admin";
+      : opId ? `/engine/op/${opId}` : "/settings?section=panel";
     insert.run(id, key, event.title.replace(/^\[OCD\] (?:Recovered: )?/, ""), resourcePath, event.created_at, event.created_at, event.recovered ? event.created_at : null);
     if (event.recovered) resolve.run(event.created_at, id);
   }

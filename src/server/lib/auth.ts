@@ -1,5 +1,5 @@
 import { jwtVerify, SignJWT } from "jose";
-import { AuthError, ForbiddenError } from "./errors.ts";
+import { AuthError } from "./errors.ts";
 import { getUserById } from "../../shared/db.ts";
 import { getJwtSecret } from "../../shared/secret-store.ts";
 
@@ -75,13 +75,4 @@ export async function verifyTempToken(token: string): Promise<string> {
     if (err instanceof AuthError) throw err;
     throw new AuthError("Invalid or expired token");
   }
-}
-
-export async function requireAdmin(request: Request): Promise<TokenPayload> {
-  const payload = await authenticateRequest(request);
-  const user = getUserById(payload.userId);
-  if (!user?.is_admin) {
-    throw new ForbiddenError("Admin access required");
-  }
-  return payload;
 }

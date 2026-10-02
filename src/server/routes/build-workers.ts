@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requireCliPermission, requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated, requireCli } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import { enqueue } from "../ipc/enqueue.ts";
 import * as db from "../../shared/db.ts";
@@ -21,7 +21,7 @@ function publicWorker(worker: db.BuildWorkerRow) {
 
 export async function handleGetBuildWorkers(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const rows = await Promise.all(db.getBuildWorkers().map(async (worker) => {
       const server = db.getServer(worker.server_id);
       if (!server) return publicWorker(worker);
@@ -48,7 +48,7 @@ export async function handleInstallBuildWorker(request: Request): Promise<Respon
   let secretKey = "";
   let insertedId = 0;
   try {
-    const payload = await requirePermission(request, "servers.manage");
+    const payload = await requireAuthenticated(request);
     const body = await request.json() as { server_id?: unknown; name?: unknown; removal_token?: unknown };
     const serverId = Number(body.server_id);
     const server = Number.isInteger(serverId) ? db.getServer(serverId) : null;
@@ -99,7 +99,7 @@ export async function handleInstallBuildWorker(request: Request): Promise<Respon
 
 export async function handleRemoveBuildWorker(request: Request, workerId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "servers.manage");
+    const payload = await requireAuthenticated(request);
     const worker = db.getBuildWorker(workerId);
     if (!worker) return Response.json({ error: "Build worker not found" }, { status: 404, headers: corsHeaders });
     const { opId } = enqueue({
@@ -117,7 +117,7 @@ export async function handleRemoveBuildWorker(request: Request, workerId: number
 
 export async function handleGetBuildSources(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const panel = db.getPanel();
     const base = panel?.domain ? `https://${panel.domain}` : new URL(request.url).origin;
     const rows = await Promise.all(db.getBuildSources().map(async (source) => ({
@@ -133,7 +133,7 @@ export async function handleGetBuildSources(request: Request): Promise<Response>
 
 export async function handleRotateBuildSourceWebhook(request: Request, sourceId: number): Promise<Response> {
   try {
-    await requirePermission(request, "servers.manage");
+    await requireAuthenticated(request);
     const source = db.getBuildSource(sourceId);
     if (!source) return Response.json({ error: "Build source not found" }, { status: 404, headers: corsHeaders });
     const secret = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -149,8 +149,7 @@ export async function handleRotateBuildSourceWebhook(request: Request, sourceId:
 /** One durable release for every stack attached to a repository source. */
 export async function handleDeployBuildSource(request: Request, sourceId: number): Promise<Response> {
   try {
-    // Repository releases may add members; require the unscoped deployment grant.
-    const actor = await requireCliPermission(request, "apps.deploy");
+    const actor = await requireCli(request);
     const source = db.getBuildSource(sourceId);
     if (!source) return Response.json({ error: "Build source not found" }, { status: 404, headers: corsHeaders });
     const body = await request.json() as { commit?: unknown };

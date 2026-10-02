@@ -2,7 +2,7 @@ import { useTempDataDir, randomSuffix } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { describe, expect, mock, test } from "bun:test";
-mock.module("../lib/permissions.ts", () => ({ requirePermission: async () => ({ userId: "admin", client: "cli" }), requireCliPermission: async () => ({ userId: "admin", client: "cli" }) }));
+mock.module("../lib/permissions.ts", () => ({ requireAuthenticated: async () => ({ userId: "test-user", client: "cli" }), requireCli: async () => ({ userId: "test-user", client: "cli" }) }));
 
 import * as db from "../../shared/db.ts";
 import { getOperation } from "../../shared/db/operations.ts";

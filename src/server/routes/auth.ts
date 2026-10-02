@@ -32,13 +32,10 @@ function recordFailureKeys(keys: string[]): void {
 }
 
 function userResponse(user: db.UserRow) {
-  // Gating in the browser is cosmetic — every route re-checks server-side.
   return {
     id: user.id,
     username: user.username,
-    isAdmin: user.is_admin === 1,
     webauthnEnabled: user.webauthn_enabled === 1,
-    permissions: user.is_admin ? db.ALL_PERMISSIONS.slice() : db.getUserPermissions(user.id),
   };
 }
 
@@ -78,10 +75,9 @@ export async function handleLogin(request: Request): Promise<Response> {
         );
       }
 
-      // Passkey not set up but required (admins always require 2FA;
-      // others only when the global require_2fa setting is on)
+      // Passkey not set up but required by the global require_2fa setting
       const require2fa = (db.getSettings().require_2fa ?? "1") === "1";
-      if (user.is_admin || require2fa) {
+      if (require2fa) {
         const tempToken = await createTempToken(user.id, user.token_version);
         return Response.json(
           { requires2FASetup: true, tempToken },

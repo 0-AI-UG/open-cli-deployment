@@ -239,7 +239,7 @@ automatic historical deletion; panel-backup retention is a different feature.
 
 ## Panel backups and recovery
 
-**Admin → Panel** protects OCD's SQLite state, SSH files, and credential/JWT
+**Settings → Panel** protects OCD's SQLite state, SSH files, and credential/JWT
 secret, not application databases, app volumes, images, or DNS. Select an
 existing Hetzner Object Storage bucket and prefix, create/download the recovery key,
 and keep the key and independent storage credentials outside the panel.
@@ -269,7 +269,7 @@ directory as the matching panel's `/app/data` and start that release with
 for the complete procedure. Omit `JWT_SECRET` to load the
 recovered secret, or supply the identical original value.
 
-Automation starts paused. In **Admin → Panel**, confirm the original panel is
+Automation starts paused. In **Settings → Panel**, confirm the original panel is
 stopped, review saved operations, and use **Verify servers and resume**. OCD
 checks pinned host keys and Docker access; this does not prove application data
 consistency or that old pending operations should be replayed. Scheduled backups
@@ -278,7 +278,7 @@ remain disabled until explicitly re-enabled; stale queued notifications are disc
 ## Panel notifications
 
 ntfy is the only alert channel. Enable the shared service and platform alerts in
-**Admin → Panel → Shared notifications**. Each user configures their private
+**Settings → Panel → Shared notifications**. Each user configures their private
 subscription and recovery notices in **Account → Notifications**. Built-in
 incidents cover failed delivery, prolonged unhealthy apps, failed/overdue panel
 backups, and sustained server disk use of at least 90%. The durable outbox retries

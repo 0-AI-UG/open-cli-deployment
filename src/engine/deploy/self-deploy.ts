@@ -8,7 +8,7 @@
 //
 //   1. Serialize the live bootstrap DB to a byte buffer.
 //   2. Clear the users table in the snapshot (the hosted instance's setup
-//      wizard will create the real admin on first visit).
+//      wizard will create the first user on first visit).
 //   3. scp the snapshot + the SSH keypair onto the selected storage volume.
 //
 // No secret re-encryption, no synthetic history seeding, no app-status
@@ -36,7 +36,7 @@ async function buildSnapshot(): Promise<string> {
   const snap = new Database(snapshotPath);
   try {
     // The hosted instance is NOT in bootstrap mode, so its setup wizard
-    // will prompt for an admin account on first visit.
+    // will prompt for the first user account on first visit.
     snap.query("DELETE FROM users").run();
   } finally {
     snap.close();

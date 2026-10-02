@@ -3,8 +3,7 @@ useTempDataDir();
 
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 mock.module("../lib/permissions.ts", () => ({
-  requireAdmin: async () => ({ userId: "admin", client: "cli" }),
-  requirePermission: async () => ({ userId: "admin", client: "cli" }),
+  requireAuthenticated: async () => ({ userId: "test-user", client: "cli" }),
 }));
 
 import * as db from "../../shared/db.ts";
@@ -36,7 +35,7 @@ beforeEach(async () => {
 
 describe("build connections", () => {
   test("stores registry credentials encrypted and returns only a mask", async () => {
-    const response = await handlePutRegistryConnection(request("/api/admin/connections/registry", "PUT", {
+    const response = await handlePutRegistryConnection(request("/api/connections/registry", "PUT", {
       scope: "https://registry.example.com/Team/",
       username: "registry-user",
       token: "registry-secret",
@@ -45,14 +44,14 @@ describe("build connections", () => {
     expect(db.getSettings().oci_artifact_ref).toBe("registry.example.com/team");
     expect(await secretStore.get("oci_registry_password")).toBe("registry-secret");
 
-    const status = await handleGetConnections(request("/api/admin/connections", "GET"));
+    const status = await handleGetConnections(request("/api/connections", "GET"));
     const body = await status.json() as any;
     expect(body.registry.connected).toBe(true);
     expect(body.registry.token).not.toContain("registry-secret");
   });
 
   test("rejects a tagged value as a credential namespace", async () => {
-    const response = await handlePutRegistryConnection(request("/api/admin/connections/registry", "PUT", {
+    const response = await handlePutRegistryConnection(request("/api/connections/registry", "PUT", {
       scope: "registry.example.com/team/app:latest",
       username: "acme",
       token: "secret",
@@ -64,13 +63,13 @@ describe("build connections", () => {
     db.saveSetting("oci_artifact_ref", "registry.example.com/team");
     db.saveSetting("oci_registry_username", "registry-user");
     await secretStore.set("oci_registry_password", "secret");
-    expect((await handleDeleteRegistryConnection(request("/api/admin/connections/registry", "DELETE"))).status).toBe(200);
+    expect((await handleDeleteRegistryConnection(request("/api/connections/registry", "DELETE"))).status).toBe(200);
     expect(await secretStore.get("oci_registry_password")).toBeNull();
     expect(db.getSettings().oci_artifact_ref).toBe("");
   });
 
   test("stores a host-scoped private-source connection", async () => {
-    const response = await handlePutSourceConnection(request("/api/admin/connections/source", "PUT", {
+    const response = await handlePutSourceConnection(request("/api/connections/source", "PUT", {
       host: "GitLab.example.com",
       username: "git-user",
       token: "source-secret",
@@ -85,11 +84,11 @@ describe("build connections", () => {
     db.saveSetting("github_build_username", "x-access-token");
     await secretStore.set("github_build_token", "source-secret");
 
-    expect((await handleDeleteSourceConnection(request("/api/admin/connections/source", "DELETE"))).status).toBe(200);
+    expect((await handleDeleteSourceConnection(request("/api/connections/source", "DELETE"))).status).toBe(200);
     expect(await secretStore.get("github_build_token")).toBeNull();
     expect(db.getSettings().github_build_host).toBe("");
     expect(db.getSettings().github_build_username).toBe("");
-    const body = await (await handleGetConnections(request("/api/admin/connections", "GET"))).json() as any;
+    const body = await (await handleGetConnections(request("/api/connections", "GET"))).json() as any;
     expect(body.source).toMatchObject({ connected: false, host: "", username: "" });
   });
 });

@@ -38,7 +38,7 @@ export function SetupPage() {
   return (
     <AuthShell
       title="Initial setup"
-      description="Create the administrator account for this panel."
+      description="Create the first account for this panel."
       width="md"
       aside={<DashboardPreview domainSuffix={form.default_domain_suffix} />}
     >
@@ -46,7 +46,7 @@ export function SetupPage() {
         <div className="space-y-4">
           <label className="block space-y-1.5">
             <span className={fieldLabel}>Username</span>
-            <input type="text" value={form.username} onChange={set("username")} placeholder="admin" autoFocus />
+            <input type="text" value={form.username} onChange={set("username")} placeholder="username" autoFocus />
           </label>
           <label className="block space-y-1.5">
             <span className={fieldLabel}>Password</span>

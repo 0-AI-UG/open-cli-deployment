@@ -1,5 +1,5 @@
 import { handleDeployBuildSource } from "./routes/build-workers.ts";
-import { handleAdminNtfy, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
+import { handleNtfySettings, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
 import { handleListIncidents, handleGetIncident, handleResolveIncident } from "./routes/incidents.ts";
 import { handleGetProtection, handleSaveProtection, handleRecoveryKey, handleBackupNow, handleResumeRecovery } from "./routes/panel-protection.ts";
 import { recoveryPending } from "../engine/panel-protection/recovery-state.ts";
@@ -18,7 +18,7 @@ import {
   handlePasswordResetWebAuthnOptions,
   handlePasswordResetWebAuthnVerify,
 } from "./routes/webauthn.ts";
-import { handleListUsers, handleCreateUser, handleUpdateUser, handleDeleteUser, handleGetUserPermissions } from "./routes/admin.ts";
+import { handleListUsers, handleCreateUser, handleUpdateUser, handleDeleteUser } from "./routes/users.ts";
 import {
   handleGetServers,
   handleGetDashboard,
@@ -117,7 +117,7 @@ function appIdFrom(req: Request): number {
 
 function userIdFrom(req: Request): string {
   const url = new URL(req.url);
-  const match = url.pathname.match(/\/api\/admin\/users\/([^/]+)/);
+  const match = url.pathname.match(/\/api\/users\/([^/]+)/);
   return match ? match[1] : "";
 }
 
@@ -175,7 +175,7 @@ export const apiRoutes = {
   "/api/incidents/:id": { GET: handleGetIncident },
   "/api/incidents/:id/resolve": { POST: handleResolveIncident },
   "/api/storage/authorize": { POST: handleStorageAuthorize },
-  "/api/admin/storage-readers": { GET: handleStorageReaders, POST: handleStorageReaders, DELETE: handleStorageReaders },
+  "/api/storage/readers": { GET: handleStorageReaders, POST: handleStorageReaders, DELETE: handleStorageReaders },
   // --- Health probe (public, used by Docker HEALTHCHECK and reverse proxies) ---
   "/api/health": {
     GET: () =>
@@ -223,17 +223,14 @@ export const apiRoutes = {
   "/api/auth/webauthn/credentials": { GET: (req: Request) => handleWebAuthnList(req) },
   "/api/auth/webauthn/delete": { POST: (req: Request) => handleWebAuthnDelete(req) },
 
-  // --- Admin ---
-  "/api/admin/users": {
+  // --- Users ---
+  "/api/users": {
     GET: (req: Request) => handleListUsers(req),
     POST: (req: Request) => handleCreateUser(req),
   },
-  "/api/admin/users/:userId": {
+  "/api/users/:userId": {
     PUT: (req: Request) => handleUpdateUser(req, userIdFrom(req)),
     DELETE: (req: Request) => handleDeleteUser(req, userIdFrom(req)),
-  },
-  "/api/admin/users/:userId/permissions": {
-    GET: (req: Request) => handleGetUserPermissions(req, userIdFrom(req)),
   },
 
   // --- Dashboard ---
@@ -290,40 +287,40 @@ export const apiRoutes = {
     POST: (req: Request) => handlePanelReleaseWebhook(req),
   },
 
-  "/api/admin/ntfy/app": { POST: handleCreateNtfyApp },
-  "/api/admin/ntfy": { GET: handleAdminNtfy, PUT: handleAdminNtfy },
+  "/api/ntfy/app": { POST: handleCreateNtfyApp },
+  "/api/ntfy": { GET: handleNtfySettings, PUT: handleNtfySettings },
   "/api/auth/notifications": { GET: handleUserNtfy, PUT: handleUserNtfy },
   "/api/auth/notifications/credentials": { POST: handleNtfyCredentials },
   "/api/auth/notifications/test": { POST: handleNtfyTest, handleCreateNtfyApp },
-  "/api/admin/protection": { GET: handleGetProtection, PUT: handleSaveProtection },
-  "/api/admin/protection/recovery-key": { POST: handleRecoveryKey },
-  "/api/admin/protection/backup": { POST: handleBackupNow },
-  "/api/admin/protection/resume": { POST: handleResumeRecovery },
-  // --- Admin: Settings ---
-  "/api/admin/settings": {
+  "/api/protection": { GET: handleGetProtection, PUT: handleSaveProtection },
+  "/api/protection/recovery-key": { POST: handleRecoveryKey },
+  "/api/protection/backup": { POST: handleBackupNow },
+  "/api/protection/resume": { POST: handleResumeRecovery },
+  // --- Settings ---
+  "/api/settings": {
     GET: (req: Request) => handleGetSettings(req),
     PUT: (req: Request) => handleSaveSettings(req),
   },
-  "/api/admin/connections": { GET: (req: Request) => handleGetConnections(req) },
-  "/api/admin/connections/registry": {
+  "/api/connections": { GET: (req: Request) => handleGetConnections(req) },
+  "/api/connections/registry": {
     PUT: (req: Request) => handlePutRegistryConnection(req),
     DELETE: (req: Request) => handleDeleteRegistryConnection(req),
   },
-  "/api/admin/connections/source": {
+  "/api/connections/source": {
     PUT: (req: Request) => handlePutSourceConnection(req),
     DELETE: (req: Request) => handleDeleteSourceConnection(req),
   },
 
-  // --- Admin: Panel (hosted self) ---
-  "/api/admin/panel": { GET: (req: Request) => handleGetPanel(req) },
-  "/api/admin/panel/redeploy": { POST: (req: Request) => handleRedeployPanel(req) },
-  "/api/admin/panel/latest-release": { GET: (req: Request) => handleGetLatestPanelRelease(req), POST: (req: Request) => handleRedeployLatestPanel(req) },
-  "/api/admin/panel/release-webhook": {
+  // --- Panel (hosted self) ---
+  "/api/panel": { GET: (req: Request) => handleGetPanel(req) },
+  "/api/panel/redeploy": { POST: (req: Request) => handleRedeployPanel(req) },
+  "/api/panel/latest-release": { GET: (req: Request) => handleGetLatestPanelRelease(req), POST: (req: Request) => handleRedeployLatestPanel(req) },
+  "/api/panel/release-webhook": {
     GET: (req: Request) => handleGetPanelReleaseWebhook(req),
     POST: (req: Request) => handleRotatePanelReleaseWebhook(req),
   },
-  "/api/admin/panel/logs": { GET: (req: Request) => handleGetPanelLogs(req) },
-  "/api/admin/panel/deployments": { GET: (req: Request) => handleGetPanelDeployments(req) },
+  "/api/panel/logs": { GET: (req: Request) => handleGetPanelLogs(req) },
+  "/api/panel/deployments": { GET: (req: Request) => handleGetPanelDeployments(req) },
 
   // --- Resources ---
   "/api/resources": { GET: (req: Request) => handleGetResources(req) },
@@ -467,15 +464,15 @@ export const apiRoutes = {
   // --- Volumes ---
 };
 
-// Restored state may be older than the fleet. Block mutations until an admin
+// Restored state may be older than the fleet. Block mutations until a user
 // verifies it, while permitting login and recovery itself.
 for (const [route, handlers] of Object.entries(apiRoutes)) {
-  if (route.startsWith("/api/auth/") || route.startsWith("/api/webauthn/") || route.startsWith("/api/admin/protection")) continue;
+  if (route.startsWith("/api/auth/") || route.startsWith("/api/webauthn/") || route.startsWith("/api/protection")) continue;
   const methods = handlers as Record<string, (request: Request) => Response | Promise<Response>>;
   for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
     const handler = methods[method];
     if (handler) methods[method] = request => recoveryPending()
-      ? Response.json({ error: "Panel recovery is paused. Open Admin → Panel to verify and resume." }, { status: 409 })
+      ? Response.json({ error: "Panel recovery is paused. Open Settings → Panel to verify and resume." }, { status: 409 })
       : handler(request);
   }
 }

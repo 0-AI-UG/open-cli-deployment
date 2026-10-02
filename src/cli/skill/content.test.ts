@@ -142,7 +142,7 @@ describe("embedded OCD skill", () => {
     );
     const images = files["docs/immutable-images-and-health.md"];
 
-    expect(images).toContain("Admin Settings");
+    expect(images).toContain("Settings connection cards");
     expect(images).toContain("OCI credential");
     expect(images).toContain("runtime pulls");
     expect(files["docs/stack-manifest.md"]).not.toContain("staging_environment");

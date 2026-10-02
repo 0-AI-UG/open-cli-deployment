@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission, requireCliPermission } from "../lib/permissions.ts";
+import { requireAuthenticated, requireCli } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import type { StackDeployRequest } from "../../shared/rpc.ts";
@@ -52,13 +52,11 @@ function operationFields(stack: db.StackRow, fallback: ReturnType<typeof deriveS
 
 export async function handleDeployStack(request: Request): Promise<Response> {
   try {
-    const payload = await requireCliPermission(request, "stacks.deploy");
+    const payload = await requireCli(request);
     const req: StackDeployRequest = await request.json();
     for (const field of ["env_vars", "staging_env_vars", "staging_env_keys"]) {
       if (field in req) return Response.json({ ok: false, error: `${field} is not supported; configure environments separately` }, { status: 400, headers: corsHeaders });
     }
-    if (req.apps?.some(app => app.storage && Object.keys(app.storage).length)) await requirePermission(request, "apps.storage.bind");
-    if (req.apps?.some(app => app.notifications && Object.keys(app.notifications).length)) await requirePermission(request, "apps.notifications.bind");
     if (!req?.name || typeof req.name !== "string") {
       return Response.json({ ok: false, error: "name is required" }, { status: 400, headers: corsHeaders });
     }
@@ -171,7 +169,7 @@ export async function handleDeployStack(request: Request): Promise<Response> {
 
 export async function handleGetStacks(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "stacks.view");
+    await requireAuthenticated(request);
     const stacks = db.getStacks();
     const result = stacks.map((s) => {
       const apps = db.getAppsByStackId(s.id);
@@ -194,7 +192,7 @@ export async function handleGetStacks(request: Request): Promise<Response> {
 
 export async function handleGetStack(request: Request, stackId: number): Promise<Response> {
   try {
-    await requirePermission(request, "stacks.view");
+    await requireAuthenticated(request);
     const stack = db.getStack(stackId);
     if (!stack) {
       return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
@@ -260,7 +258,7 @@ export async function handleGetStack(request: Request, stackId: number): Promise
 
 export async function handleGetStackLog(request: Request, stackId: number): Promise<Response> {
   try {
-    await requirePermission(request, "stacks.view");
+    await requireAuthenticated(request);
     return Response.json({ log: db.getStackLog(stackId) }, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
@@ -277,25 +275,17 @@ export async function handleGetStackLog(request: Request, stackId: number): Prom
  * timestamped lines, and hand the client one block per member. Interleaving and
  * per-member filtering happen client-side so toggling a member off is instant
  * and doesn't re-run N ssh calls.
- *
- * Gated on `apps.logs` on top of `stacks.view`: this returns container output,
- * which is strictly more than the stack metadata `stacks.view` covers. Because
- * the response is already a per-member list that tolerates missing blocks, the
- * `apps.logs` check is applied per member and members the caller may not read
- * are simply omitted, rather than failing the whole request.
  */
 export async function handleGetStackMemberLogs(request: Request, stackId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "stacks.view");
+    await requireAuthenticated(request);
     const stack = db.getStack(stackId);
     if (!stack) {
       return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
     }
     const tail = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get("tail") || "100", 10) || 100, 1), 1000);
 
-    // Container output additionally needs `apps.logs`; without it the stack
-    // view still loads, just with no member output.
-    const apps = db.hasPermission(payload.userId, "apps.logs") ? db.getAppsByStackId(stackId) : [];
+    const apps = db.getAppsByStackId(stackId);
 
     const fetchApp = async (app: { id: number; name: string }) => {
       const replicas = db.getReplicas(app.id);
@@ -328,7 +318,7 @@ export async function handleGetStackMemberLogs(request: Request, stackId: number
 
 export async function handleDestroyStack(request: Request, stackId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "stacks.destroy");
+    const payload = await requireAuthenticated(request);
     await enforceConfirmation(request, payload, "delete_stack", "stack", String(stackId));
     const stack = db.getStack(stackId);
     if (!stack) {

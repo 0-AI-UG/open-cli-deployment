@@ -126,7 +126,6 @@ function UserMenu({ hash }: { hash: string }) {
           <div className="border border-line bg-surface p-1">
           <div className="px-2.5 pb-2 pt-1.5">
             <div className="truncate text-sm font-medium text-fg">{user?.username}</div>
-            <div className="text-xs text-muted">{user?.isAdmin ? "Administrator" : "Member"}</div>
           </div>
           <div className="my-1 border-t" />
           <a href="#/account" role="menuitem" className={itemClass}><User size={15} /> Account</a>
@@ -145,15 +144,13 @@ function UserMenu({ hash }: { hash: string }) {
 }
 
 function DesktopNav({ hash }: { hash: string }) {
-  const { user } = useAuth();
-
   return (
     <header className="rule-dashed sticky top-0 z-50 bg-canvas/90 backdrop-blur-md">
       <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-4 px-6">
         <a href="#/" className="flex h-10 shrink-0 items-center gap-2 justify-self-start rounded-md text-fg" aria-label="OCD overview">
           <span className="text-brand"><Logo size={28} mono /></span>
         </a>
-        <DesktopMenuNav hash={hash} isAdmin={!!user?.isAdmin} />
+        <DesktopMenuNav hash={hash} />
         <div className="flex shrink-0 items-center gap-1 justify-self-end">
           <CliCopyButton />
           <SkillInstallMenu />
@@ -173,7 +170,7 @@ function MobileNav({ hash }: { hash: string }) {
   useEffect(() => setMoreOpen(false), [hash]);
 
   const primaryItems = navItems.map((item) => ({ ...item, label: item.hash === "#/resources" ? "Infra" : item.label, active: item.match.test(hash) }));
-  const moreActive = moreOpen || ["#/environments", "#/admin", "#/account"].some((prefix) => hash.startsWith(prefix));
+  const moreActive = moreOpen || ["#/environments", "#/settings", "#/account"].some((prefix) => hash.startsWith(prefix));
 
   return (
     <>
@@ -213,7 +210,7 @@ function MobileNav({ hash }: { hash: string }) {
 
       <MobileActionSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Menu" subtitle={user?.username}>
         <MobileSheetAction icon={<Layers size={19} />} label="Environments" detail="Variables, secrets, and rollout behavior" onClick={() => { window.location.hash = "#/environments"; }} />
-        {user?.isAdmin && <MobileSheetAction icon={<Settings size={19} />} label="Settings" detail="Hetzner, build, panel, and users" onClick={() => { window.location.hash = "#/admin"; }} />}
+        <MobileSheetAction icon={<Settings size={19} />} label="Settings" detail="Hetzner, build, panel, and users" onClick={() => { window.location.hash = "#/settings"; }} />
         <MobileSheetAction icon={<User size={19} />} label="Account" detail="Security and profile" onClick={() => { window.location.hash = "#/account"; }} />
         <MobileSheetAction icon={copied ? <Check size={19} /> : <TerminalSquare size={19} />} label={copied ? "Copied install command" : "Copy CLI install command"} onClick={copy} />
         <div className="frame flex items-center justify-between bg-surface px-4 py-2.5">

@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { serverGcProtections } from "../../shared/gc-protection.ts";
@@ -19,7 +19,7 @@ function selectedServers(request: Request) {
 /** Dry-run inventory. This endpoint never deletes assets. */
 export async function handleGcInventory(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "fleet.view");
+    await requireAuthenticated(request);
     const inventories = [];
     for (const server of selectedServers(request)) {
       inventories.push({
@@ -40,7 +40,7 @@ export async function handleGcInventory(request: Request): Promise<Response> {
  * while preserving every container ancestor and protected deployment artifact. */
 export async function handleGcExecute(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "servers.manage");
+    await requireAuthenticated(request);
     const inventories = [];
     for (const server of selectedServers(request)) {
       inventories.push({

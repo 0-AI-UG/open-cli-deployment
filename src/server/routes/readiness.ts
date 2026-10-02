@@ -1,14 +1,14 @@
 import { inspectDeployReadiness } from "../../engine/readiness.ts";
 import { normalizeRegistryScope } from "../../engine/registry-config.ts";
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin, requirePermission } from "../lib/permissions.ts";
+import { requireAuthenticated } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { maskToken, secretStore } from "../../shared/secret-store.ts";
 
 export async function handleGetReadiness(request: Request): Promise<Response> {
   try {
-    await requirePermission(request, "apps.deploy");
+    await requireAuthenticated(request);
     const url = new URL(request.url);
     const readiness = await inspectDeployReadiness({
       repository: url.searchParams.get("repository") || undefined,
@@ -22,7 +22,7 @@ export async function handleGetReadiness(request: Request): Promise<Response> {
 
 export async function handleGetConnections(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const settings = db.getSettings();
     const registryToken = await secretStore.get("oci_registry_password");
     const sourceToken = await secretStore.get("github_build_token");
@@ -47,7 +47,7 @@ export async function handleGetConnections(request: Request): Promise<Response> 
 
 export async function handlePutRegistryConnection(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const body = await request.json() as { scope?: unknown; username?: unknown; token?: unknown };
     const scope = normalizeRegistryScope(String(body.scope ?? ""));
     const username = String(body.username ?? "").trim();
@@ -72,7 +72,7 @@ export async function handlePutRegistryConnection(request: Request): Promise<Res
 
 export async function handleDeleteRegistryConnection(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     db.saveSetting("oci_artifact_ref", "");
     db.saveSetting("oci_registry_username", "");
     await secretStore.delete("oci_registry_password");
@@ -84,7 +84,7 @@ export async function handleDeleteRegistryConnection(request: Request): Promise<
 
 export async function handlePutSourceConnection(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     const body = await request.json() as { host?: unknown; username?: unknown; token?: unknown };
     const host = String(body.host ?? "").trim().toLowerCase();
     const username = String(body.username ?? "").trim();
@@ -109,7 +109,7 @@ export async function handlePutSourceConnection(request: Request): Promise<Respo
 
 export async function handleDeleteSourceConnection(request: Request): Promise<Response> {
   try {
-    await requireAdmin(request);
+    await requireAuthenticated(request);
     db.saveSetting("github_build_host", "");
     db.saveSetting("github_build_username", "");
     await secretStore.delete("github_build_token");

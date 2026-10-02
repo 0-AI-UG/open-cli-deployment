@@ -133,15 +133,15 @@ export async function runAutoDeploy(
     if (result.internalTls) {
       log("  This domain uses a self-signed certificate (.nip.io) — your");
       log("  browser will warn on first visit; that's expected.");
-      log(`  Open https://${result.domain} and finish setup to create your admin account.`);
+      log(`  Open https://${result.domain} and finish setup to create the first user account.`);
     } else if (result.dnsResolved) {
-      log(`  Open https://${result.domain} and finish setup to create your admin account.`);
+      log(`  Open https://${result.domain} and finish setup to create the first user account.`);
     } else {
       log("  ⚠ DNS is not pointing at the server yet, so the site won't load");
       log("    and no TLS certificate can be issued until you fix that.");
       log(`      Create a DNS A record:  ${result.domain}  →  ${result.serverIp}`);
       log("    TLS is then issued automatically once DNS propagates (usually");
-      log(`    a few minutes). Then open https://${result.domain} to create your admin account.`);
+      log(`    a few minutes). Then open https://${result.domain} to create the first user account.`);
     }
   } else {
     log(`✗ Bootstrap failed: ${result.error}`);

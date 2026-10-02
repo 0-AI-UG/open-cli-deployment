@@ -2,7 +2,7 @@
 // web UI can be previewed locally without real infrastructure.
 //
 //   bun run dev:demo        → seed .demo-data/ and start the panel on :3002
-//   login: admin / 12345678
+//   login: demo / 12345678
 //
 // Runs against OCD_DATA_DIR (defaults to ./.demo-data) and wipes it first, so
 // it never touches a real panel's data dir.
@@ -24,9 +24,8 @@ const digest = (seed: string) =>
 // ── User ──
 db.insertUser({
   id: crypto.randomUUID(),
-  username: "admin",
+  username: "demo",
   password_hash: await Bun.password.hash("12345678", "bcrypt"),
-  is_admin: true,
 });
 db.saveSetting("default_domain_suffix", "demo.local");
 
@@ -144,4 +143,4 @@ for (const server of servers) {
 }
 
 console.log(`[seed-demo] Demo data written to ${dataDir}`);
-console.log("[seed-demo] Login: admin / 12345678");
+console.log("[seed-demo] Login: demo / 12345678");

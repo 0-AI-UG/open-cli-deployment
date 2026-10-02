@@ -1,4 +1,4 @@
-import { useTempDataDir, seedTestAdmin } from "../../shared/test-helpers.ts";
+import { useTempDataDir, seedTestUser } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { describe, test, expect, mock } from "bun:test";
@@ -6,22 +6,20 @@ import { describe, test, expect, mock } from "bun:test";
 const realPermissions = await import("../lib/permissions.ts");
 const { PermissionError } = await import("../lib/errors.ts");
 const testPayload = (request: Request) => ({
-  userId: seedTestAdmin(),
-  username: "admin",
+  userId: seedTestUser(),
+  username: "test-user",
   ...(request.headers.get("x-test-client") === "browser" ? {} : { client: "cli" as const }),
 });
 mock.module("../lib/permissions.ts", () => ({
   ...realPermissions,
-  requireAdmin: async () => ({ userId: seedTestAdmin(), username: "admin" }),
-  requirePermission: async (request: Request) => testPayload(request),
-  requireCliPermission: async (request: Request) => {
+  requireAuthenticated: async (request: Request) => testPayload(request),
+  requireCli: async (request: Request) => {
     const payload = testPayload(request);
     if (payload.client !== "cli") {
       throw new PermissionError("This action is only available through the ocd CLI");
     }
     return payload;
   },
-  requireAuthenticated: async () => ({ userId: seedTestAdmin(), username: "admin" }),
 }));
 
 mock.module("../../engine/scale/traefik-manager.ts", () => ({
