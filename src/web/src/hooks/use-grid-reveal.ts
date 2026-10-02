@@ -15,9 +15,9 @@ import { useLayoutEffect, type RefObject } from "react";
 
 // Time for the grid to grow one viewport height. The whole entrance settles
 // within this plus FADE_MS.
-const GROW_MS = 330;
-const FADE_MS = 220;
-const BAR_FADE_MS = 140;
+const GROW_MS = 160;
+const FADE_MS = 140;
+const BAR_FADE_MS = 90;
 const MAX_BARS = 300;
 // Traced as solid blocks; text inside them is not traced separately.
 const BOX = "button, input, select, textarea, img, svg, [role='switch']";

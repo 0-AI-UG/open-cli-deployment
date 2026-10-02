@@ -473,10 +473,10 @@ body {
   animation: gridGrowY var(--grow-ms, 0ms) linear var(--grow-at, 0ms) backwards;
 }
 .page-wrap[data-grow] .section-divider::before {
-  animation: gridGrowX .26s cubic-bezier(0.16, 1, 0.3, 1) var(--grow-at, 0ms) backwards;
+  animation: gridGrowX .16s cubic-bezier(0.16, 1, 0.3, 1) var(--grow-at, 0ms) backwards;
 }
 .page-wrap[data-grow] .section-divider .node {
-  animation: gridNode .2s ease-out var(--grow-at, 0ms) backwards;
+  animation: gridNode .12s ease-out var(--grow-at, 0ms) backwards;
 }
 @keyframes gridGrowY { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
 @keyframes gridGrowX { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
