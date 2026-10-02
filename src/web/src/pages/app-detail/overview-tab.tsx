@@ -125,7 +125,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
           </div>
         </Card>
 
-        <Card className="min-w-0 self-start overflow-hidden">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader title="Connection" icon={<Globe size={15} />} />
           <div>
             {app.domain && app.public ? (
@@ -177,8 +177,8 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
               return (
                 <tr key={r.id}>
                   <td className="font-mono text-xs font-medium text-fg">#{r.id}</td>
-                  <td className="max-w-[220px] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
-                  <td className="whitespace-nowrap text-fg-dim">{srv?.name || `srv#${r.server_id}`}</td>
+                  <td className="max-w-[180px] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
+                  <td className="max-w-[180px] truncate text-fg-dim" title={srv?.name}>{srv?.name || `srv#${r.server_id}`}</td>
                   <td className="font-mono text-xs text-fg-dim">{r.host_port}</td>
                   <td><StatusBadge status={r.status} /></td>
                   <td className="text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
@@ -202,8 +202,9 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
 
       {(app.storage_bindings || []).length > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {(app.storage_bindings || []).map(binding => (
-            <Card key={binding.name} className="min-w-0 overflow-hidden">
+          {(app.storage_bindings || []).map((binding, index, all) => (
+            // An odd one out spans the row rather than leaving half of it empty.
+            <Card key={binding.name} className={`min-w-0 overflow-hidden ${all.length % 2 === 1 && index === all.length - 1 ? "lg:col-span-2" : ""}`}>
               <CardHeader
                 title={<>Object storage · <span className="font-mono text-xs">{binding.name}</span></>}
                 icon={<Database size={15} />}
@@ -240,13 +241,13 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {storage ? <div className="min-w-0"><StorageMounts mounts={storage.mounts} /></div> : (
+        {storage ? <div className="min-w-0 [&>*]:h-full"><StorageMounts mounts={storage.mounts} /></div> : (
           <Card className="min-w-0 overflow-hidden">
             <CardHeader title="Storage" icon={<HardDrive size={15} />} />
             <p className="px-4 py-3 text-sm text-muted">Storage inventory unavailable</p>
           </Card>
         )}
-        <Card className="min-w-0 self-start overflow-hidden">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader title="Image storage" icon={<Layers size={15} />} />
           {storage ? (
             <>
