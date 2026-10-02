@@ -57,7 +57,7 @@ export function DashboardPage() {
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   // Cards or list for the applications section, remembered per browser.
   const [appView, setAppView] = useState<AppView>(() => {
-    try { return localStorage.getItem(APP_VIEW_KEY) === "list" ? "list" : "cards"; } catch { return "cards"; }
+    try { return localStorage.getItem(APP_VIEW_KEY) === "cards" ? "cards" : "list"; } catch { return "list"; }
   });
   const changeAppView = (view: AppView) => {
     setAppView(view);
