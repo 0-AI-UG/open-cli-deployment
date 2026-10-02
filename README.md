@@ -20,11 +20,12 @@ recovery operations in one place.
 
 - **Your Hetzner account:** OCD provisions and manages servers, the private
   network, firewall, volumes, and object storage in your Hetzner Cloud project.
-- **Immutable releases:** deployments and rollbacks use digest-qualified images.
+- **Immutable releases:** deployments and re-releases use digest-qualified images.
 - **Git-based configuration:** keep single-app or multi-app manifests beside the
   code they deploy.
 - **Operational controls:** inspect logs, open a shell, copy files, pause, move,
-  roll back, and recover failed operations from the CLI.
+  and recover failed operations from the CLI. The panel is for reading and
+  configuration; operations run through the CLI.
 - **Portable integrations:** use HTTPS Git hosts and OCI registries rather
   than a closed hosting ecosystem.
 

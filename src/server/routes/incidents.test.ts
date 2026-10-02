@@ -2,7 +2,7 @@ import { useTempDataDir, seedTestAdmin } from "../../shared/test-helpers.ts";
 useTempDataDir();
 
 import { expect, test } from "bun:test";
-import db, { saveSetting, insertApp, insertUser } from "../../shared/db.ts";
+import db, { saveSetting, insertApp, insertUser, setUserPermissions } from "../../shared/db.ts";
 import { alertTick, reconcileIncidents } from "../../engine/panel-protection/alerts.ts";
 import { createToken } from "../lib/auth.ts";
 import { handleListIncidents, handleGetIncident, handleResolveIncident } from "./incidents.ts";
@@ -101,7 +101,7 @@ test("manual resolution requires app write access or admin access", async () => 
   const app = insertApp({ name: "manual-resolution", domain: "manual-resolution.example.com", image_ref: `example/app@sha256:${"a".repeat(64)}`, container_port: 8080, env_vars: "{}" });
   const userId = "incident-resolver";
   insertUser({ id: userId, username: userId, password_hash: "unused", is_admin: false });
-  db.query("INSERT INTO user_permissions(user_id,permission,scope_type,scope_id) VALUES (?,?,?,?)").run(userId, "apps.view", "app", String(app.id));
+  setUserPermissions(userId, ["apps.view"]);
   reconcileIncidents([{ key: `app:${app.id}`, title: "Unhealthy", path: `/apps/${app.id}` }, { key: "backup:restricted", title: "Backup failed", path: "/admin" }]);
   const headers = { authorization: `Bearer ${await createToken({ userId, username: userId })}` };
   const row = db.query("SELECT incident_id FROM panel_incident_history WHERE key=?").get(`app:${app.id}`) as { incident_id: string };
@@ -109,9 +109,7 @@ test("manual resolution requires app write access or admin access", async () => 
   const detail = () => handleGetIncident(new Request(`http://localhost/api/incidents/${row.incident_id}`, { headers }));
   expect((await (await detail()).json()).canResolve).toBe(false);
   expect((await handleResolveIncident(request())).status).toBe(403);
-  db.query("INSERT INTO user_permissions(user_id,permission,scope_type,scope_id) VALUES (?,?,?,?)").run(userId, "apps.restart", "app", String(app.id + 1));
-  expect((await handleResolveIncident(request())).status).toBe(403);
-  db.query("INSERT INTO user_permissions(user_id,permission,scope_type,scope_id) VALUES (?,?,?,?)").run(userId, "apps.restart", "app", String(app.id));
+  setUserPermissions(userId, ["apps.view", "apps.restart"]);
   expect((await (await detail()).json()).canResolve).toBe(true);
   expect((await handleResolveIncident(request())).status).toBe(200);
   const backup = db.query("SELECT incident_id FROM panel_incident_history WHERE key='backup:restricted'").get() as { incident_id: string };

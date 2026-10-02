@@ -1,12 +1,11 @@
 import { StorageMounts } from "../../components/storage-mounts.tsx";
 import type { StorageMount } from "../../../../shared/storage-display.ts";
-import { useState, useEffect } from "react";
 import { get } from "../../api/client.ts";
-import { Badge, Card, CardHeader, DataRow, EmptyState, Stat, Btn, StatusBadge, showToast, Table, CopyButton } from "../../components/ui.tsx";
-import { PermissionGate } from "../../components/permission-gate.tsx";
-import { RefreshCw, ExternalLink, Server as ServerIcon, Terminal, Settings2, Globe, Database, Bell, HardDrive, Layers } from "lucide-react";
-import { Sparkline, InfoTip, CpuUsage, MemUsage } from "./shared.tsx";
-import type { AppData, ReplicaData, MetricSample, ServerData } from "../../types.ts";
+import { Badge, Card, CardHeader, DataRow, EmptyState, Btn, showToast, Table, CopyButton } from "../../components/ui.tsx";
+import { RefreshCw, ExternalLink, Server as ServerIcon, Settings2, Globe, Database, Bell, HardDrive, Layers, MapPin } from "lucide-react";
+import { InfoTip } from "./shared.tsx";
+import { ReplicasTable } from "../../components/replicas-table.tsx";
+import type { AppData, ReplicaData, MetricSample } from "../../types.ts";
 import { DnsInstructionView } from "../../components/dns-instruction.tsx";
 
 interface OverviewTabProps {
@@ -15,65 +14,30 @@ interface OverviewTabProps {
   storage: AppStorageData | null;
   replicas: ReplicaData[];
   metricsHistory: MetricSample[];
-  allServers: ServerData[];
   setReplicas: (r: ReplicaData[]) => void;
 }
 
 export type AppStorageData = {
   mounts: StorageMount[];
   current: { image_size_bytes?: number } | null;
-  rollback: { image_size_bytes?: number } | null;
   reclaimable_image_bytes_upper_bound: number;
   caveat: string;
 };
 
-export function OverviewTab({ app, appId, storage, replicas, metricsHistory, allServers, setReplicas }: OverviewTabProps) {
+export function OverviewTab({ app, appId, storage, replicas, metricsHistory, setReplicas }: OverviewTabProps) {
   const internalUrl = app.internal_protocol === "tcp"
     ? `tcp://${app.name}.ocd.internal:${app.container_port}`
     : `http://${app.name}.ocd.internal`;
-  const [availability, setAvailability] = useState<{ uptimePct: number | null; mttrSeconds: number | null; sampleCount: number; current: { running: number; desired: number; meetsTarget: boolean } } | null>(null);
-  useEffect(() => {
-    get(`/api/apps/${appId}/availability?window=86400`)
-      .then(setAvailability)
-      .catch(() => setAvailability(null));
-  }, [appId]);
-
   const bytes = (value?: number | null) => typeof value === "number" && value > 0
     ? `${(value / 1024 / 1024).toFixed(1)} MiB`
     : "—";
 
   const manifestDiffers = (app.last_manifest_config_revision ?? 0) !== (app.config_revision ?? 1);
-  const meetsTarget = availability?.current.meetsTarget ?? true;
+  const placement = app.placement ?? [];
+  const serverName = (id: number) => placement.find((entry) => entry.server_id === id)?.server_name ?? `srv#${id}`;
 
   return (
     <div className="space-y-6">
-      <div className="frame bg-surface"><div className="cells grid grid-cols-2 sm:grid-cols-4">
-        <Stat
-          className="bg-surface px-4 py-3.5"
-          label="Uptime · 24h"
-          value={availability?.uptimePct == null ? "—" : `${availability.uptimePct.toFixed(3)}%`}
-          hint={availability ? `${availability.sampleCount} samples` : "Availability data unavailable"}
-        />
-        <Stat
-          className="bg-surface px-4 py-3.5"
-          label="Mean recovery · 24h"
-          value={availability?.mttrSeconds == null ? "—" : `${Math.round(availability.mttrSeconds)}s`}
-        />
-        <Stat
-          className="bg-surface px-4 py-3.5"
-          label="Placement now"
-          value={availability ? `${availability.current.running}/${availability.current.desired}` : "—"}
-          tone={availability && !meetsTarget ? "danger" : undefined}
-          hint={availability ? "running / declared replicas" : undefined}
-        />
-        <Stat
-          className="bg-surface px-4 py-3.5"
-          label="Configuration"
-          value={`r${app.config_revision ?? 1}`}
-          hint={app.deployed_by_username ? `Deployed by ${app.deployed_by_username}` : "OCD revision"}
-        />
-      </div></div>
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="min-w-0 overflow-hidden">
           <CardHeader title="Configuration" icon={<Settings2 size={15} />} />
@@ -90,11 +54,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
               </DataRow>
             )}
             <DataRow label="Container port" mono>{app.container_port}</DataRow>
-            <DataRow label="Placement">
-              {(app.placement ?? []).length > 0
-                ? <span className="flex flex-wrap justify-end gap-1">{app.placement!.map((entry) => <Badge key={entry.server_id}>{entry.server_name} × {entry.replicas}</Badge>)}</span>
-                : <span className="text-muted">not declared</span>}
-            </DataRow>
             <DataRow label="Readiness">
               <span className="truncate" title={app.health_check_command || app.health_check_file}>
                 {app.health_check_mode || (app.health_check ? "http" : "container")}
@@ -150,8 +109,25 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
       </div>
 
       <Card className="overflow-hidden">
+        <CardHeader title="Placement" icon={<MapPin size={15} />} description="Declared in the manifest; change it with ocd deploy or ocd move" />
+        {placement.length === 0 ? (
+          <EmptyState message="No placement declared" icon={MapPin} className="!py-10" />
+        ) : (
+          <Table headers={["Server", "Declared", "Running"]}>
+            {placement.map((entry) => (
+              <tr key={entry.server_id}>
+                <td><a href={`#/resources/servers/${entry.server_id}`} className="text-fg hover:underline">{entry.server_name}</a></td>
+                <td className="tabular-nums text-fg-dim">{entry.replicas}</td>
+                <td className="tabular-nums text-fg-dim">{replicas.filter((replica) => replica.server_id === entry.server_id && replica.status === "running").length}</td>
+              </tr>
+            ))}
+          </Table>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden">
         <CardHeader
-          title="Active replicas"
+          title="Replicas"
           icon={<ServerIcon size={15} />}
           description={replicas.length > 0 ? `${replicas.length} replica${replicas.length === 1 ? "" : "s"} · CPU sparkline covers the last hour` : undefined}
           actions={
@@ -168,35 +144,11 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
         {replicas.length === 0 ? (
           <EmptyState message="No replicas yet" icon={ServerIcon} className="!py-10" />
         ) : (
-          <Table headers={["ID", "Container", "Server", "Port", "Status", "CPU", "Memory", "CPU (1h)", ""]}>
-            {replicas.map((r) => {
-              const series = metricsHistory
-                .filter((s) => s.replica_id === r.id)
-                .map((s) => s.cpu_percent);
-              const srv = allServers.find((s) => s.id === r.server_id);
-              return (
-                <tr key={r.id}>
-                  <td className="font-mono text-xs font-medium text-fg">#{r.id}</td>
-                  <td className="max-w-[180px] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
-                  <td className="max-w-[180px] truncate text-fg-dim" title={srv?.name}>{srv?.name || `srv#${r.server_id}`}</td>
-                  <td className="font-mono text-xs text-fg-dim">{r.host_port}</td>
-                  <td><StatusBadge status={r.status} /></td>
-                  <td className="text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
-                  <td className="text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
-                  <td><Sparkline values={series} /></td>
-                  <td className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <PermissionGate permission="terminal.container" appId={appId} environmentId={app.environment_id}>
-                        <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
-                          <Terminal size={12} /> Shell
-                        </Btn>
-                      </PermissionGate>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </Table>
+          <ReplicasTable
+            context="app"
+            replicas={replicas.map((r) => ({ ...r, server: { id: r.server_id, name: serverName(r.server_id) } }))}
+            cpuSeries={(id) => metricsHistory.filter((s) => s.replica_id === id).map((s) => s.cpu_percent)}
+          />
         )}
       </Card>
 
@@ -253,7 +205,6 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, all
             <>
               <div>
                 <DataRow label="Current artifact" mono>{bytes(storage.current?.image_size_bytes)}</DataRow>
-                <DataRow label="Rollback artifact" mono>{bytes(storage.rollback?.image_size_bytes)}</DataRow>
                 <DataRow label="Reclaimable upper bound" mono>{bytes(storage.reclaimable_image_bytes_upper_bound)}</DataRow>
               </div>
               <p className="border-t bg-subtle/40 px-4 py-2.5 text-xs text-muted">{storage.caveat}</p>

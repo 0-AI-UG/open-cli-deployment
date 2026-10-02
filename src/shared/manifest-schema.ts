@@ -299,10 +299,6 @@ export const DeployManifestSchema = z
       }),
       { error: "expected an array of Linux capability names" },
     ).optional(),
-    /** Idempotent command executed inside the healthy container after rollout. */
-    post_start: z.object({
-      command: nonEmptyString("expected a non-empty command"),
-    }, { error: "expected object { command }" }).strict().optional(),
     health_check: healthCheckSchema.optional(),
     /** Internal routing protocol (independent of health_check.enabled); omit → "http".
      *  Raw-TCP apps (e.g. databases) must set "tcp". */

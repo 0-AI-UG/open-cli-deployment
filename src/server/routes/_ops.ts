@@ -1,6 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
 import { requirePermission } from "../lib/permissions.ts";
-import type { PermissionScope } from "../../shared/db.ts";
 import { handleError } from "../lib/utils.ts";
 import { enqueue } from "../ipc/enqueue.ts";
 
@@ -11,9 +10,6 @@ export async function enqueueOp(
   request: Request,
   opts: {
     permission: string;
-    /** Resource the permission is checked against, so environment- and
-     *  app-scoped grants apply. Omit only for genuinely fleet-wide ops. */
-    scope?: PermissionScope;
     kind: string;
     resourceKeys: string[];
     input: unknown;
@@ -21,7 +17,7 @@ export async function enqueueOp(
   },
 ): Promise<Response> {
   try {
-    const payload = await requirePermission(request, opts.permission, opts.scope);
+    const payload = await requirePermission(request, opts.permission);
     const { opId } = enqueue({
       kind: opts.kind,
       resourceKeys: opts.resourceKeys,

@@ -60,7 +60,7 @@ export function collectConditions(now = Date.now()): Condition[] {
   }
   // One incident per deployment target, resolved by a later successful delivery.
   const since = settings.incident_tracking_enabled_at || String(now);
-  const operations = db.query(`SELECT id, kind, status, resource_keys FROM operations WHERE parent_id IS NULL AND kind IN ('deploy','deploy_stack','redeploy','build_app_delivery','build_stack_delivery','webhook_build_source','apply_manifest','rollback') AND finished_at IS NOT NULL AND julianday(finished_at) >= julianday(?, 'unixepoch') ORDER BY id`).all(Number(since) / 1000) as { id: number; kind: string; status: string; resource_keys: string }[];
+  const operations = db.query(`SELECT id, kind, status, resource_keys FROM operations WHERE parent_id IS NULL AND kind IN ('deploy','deploy_stack','redeploy','build_app_delivery','build_stack_delivery','webhook_build_source','apply_manifest') AND finished_at IS NOT NULL AND julianday(finished_at) >= julianday(?, 'unixepoch') ORDER BY id`).all(Number(since) / 1000) as { id: number; kind: string; status: string; resource_keys: string }[];
   const latest = new Map<string, typeof operations[number]>();
   for (const op of operations) if (op.status !== "cancelled") latest.set(op.resource_keys, op);
   for (const [target, op] of latest) {

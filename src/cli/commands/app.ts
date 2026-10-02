@@ -119,7 +119,6 @@ async function showApp(args: string[]): Promise<void> {
     const storage = await get<{
       mounts?: StorageMount[];
       current: { image_size_bytes: number; archive_size_bytes: number; transfer_size_bytes: number } | null;
-      rollback: { image_size_bytes: number; archive_size_bytes: number; transfer_size_bytes: number } | null;
       reclaimable_image_bytes_upper_bound: number;
       caveat: string;
     }>(`/api/apps/${app.id}/storage`);
@@ -131,7 +130,6 @@ async function showApp(args: string[]): Promise<void> {
     console.log(`\n${BOLD}Image storage${RESET}`);
     table(["Asset", "Expanded", "Compressed archive", "Transferred"], [
       ["Current", size(storage.current?.image_size_bytes), size(storage.current?.archive_size_bytes), size(storage.current?.transfer_size_bytes)],
-      ["Rollback", size(storage.rollback?.image_size_bytes), size(storage.rollback?.archive_size_bytes), size(storage.rollback?.transfer_size_bytes)],
       ["Reclaimable (upper bound)", size(storage.reclaimable_image_bytes_upper_bound), "-", "-"],
     ]);
     console.log(`${DIM}${storage.caveat}${RESET}`);

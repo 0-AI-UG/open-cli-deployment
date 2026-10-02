@@ -20,7 +20,7 @@ For each build OCD:
    cache stays warm until worker disk free space falls below 16 GiB, when it is
    trimmed to 4 GiB.
 
-The immutable digest remains the deployment-history, rollback, and
+The immutable digest remains the deployment-history, re-release, and
 runtime-attestation boundary.
 
 Worker installation provisions a dedicated `ocd-worker` BuildKit container
@@ -69,8 +69,7 @@ OCD holds two distinct encrypted connections:
 The same actions are available as connection cards in Admin. Credentials are
 never forwarded to an unrelated Git host or sibling OCI namespace.
 
-Use the least privilege available. Never commit either credential. GitHub OAuth
-login credentials are unrelated and are not reused for builds.
+Use the least privilege available. Never commit either credential.
 
 ## Configure a push webhook
 

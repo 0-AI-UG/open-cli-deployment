@@ -1,4 +1,4 @@
-# Releases and Rollback
+# Releases
 
 Normal delivery is `ocd deploy`, which reconciles either a Git build or a
 prebuilt image declared in the manifest. Build manifests may additionally use
@@ -20,12 +20,15 @@ mappings, ingress, health, storage, resources, or stack relationships may
 have changed. It remains useful for importing a trusted externally produced
 artifact or retrying an already synchronized configuration.
 
-## Rollback
+## Returning to a previous version
+
+There is no rollback command. To return to an earlier version, either deploy
+the previous commit with `ocd deploy` (preferred when configuration may also
+have changed), or re-release a previous digest:
 
 ```bash
 ocd app deployments api
-ocd rollback api --deployment=<id>
+ocd release api --image registry.example.com/team/api@sha256:<previous-digest>
 ```
 
-Rollback pulls the historical digest and applies its recorded deployment
-identity. Registry retention must keep the supported rollback window.
+Registry retention must keep the digests you may want to return to.

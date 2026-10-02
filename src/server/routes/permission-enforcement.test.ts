@@ -100,7 +100,7 @@ afterAll(() => {
 });
 
 import * as db from "../../shared/db.ts";
-import { ALL_PERMISSIONS, type PermissionGrant } from "../../shared/db/users.ts";
+import { ALL_PERMISSIONS } from "../../shared/db/users.ts";
 import { enqueueOperation, getOperation } from "../../shared/db/operations.ts";
 import { createToken } from "../lib/auth.ts";
 import { createConfirmation, resolveConfirmation } from "../lib/action-confirm.ts";
@@ -112,7 +112,6 @@ import {
   handleDestroyApp,
   handleRestartApp,
   handlePauseApp,
-  handleRollbackApp,
   handleGetContainerLogs,
   handleGetDeployments,
   handleGetDeployLog,
@@ -160,7 +159,7 @@ import {
 } from "./confirmations.ts";
 import { handleListOperations, handleCancelOperation, handleRetryOperation, handleFinalizeOperation } from "./operations.ts";
 import { handleGetPanel, handleRedeployPanel, handleGetLatestPanelRelease, handleRedeployLatestPanel, handleGetPanelLogs, handleGetPanelDeployments } from "./panel.ts";
-import { handleGetServerTypes, handleGetSettings } from "./settings.ts";
+import { handleGetSettings } from "./settings.ts";
 import {
   handleGetPanelReleaseWebhook,
   handleRotatePanelReleaseWebhook,
@@ -177,16 +176,16 @@ const uid = () => `pe-${Date.now()}-${seq++}-${Math.random().toString(36).slice(
 type Ctx = { token: string; userId: string };
 
 async function userWith(
-  grants: ReadonlyArray<string | PermissionGrant>,
-  opts: { admin?: boolean; cli?: boolean; uiCli?: boolean } = {},
+  grants: readonly string[],
+  opts: { admin?: boolean; cli?: boolean } = {},
 ): Promise<Ctx> {
   const id = uid();
   db.insertUser({ id, username: id, password_hash: "x", is_admin: opts.admin });
-  db.setUserPermissions(id, grants as Array<string | PermissionGrant>);
+  db.setUserPermissions(id, [...grants]);
   const token = await createToken({
     userId: id,
     username: id,
-    ...(opts.cli ? { client: "cli" as const } : opts.uiCli ? { client: "ui-cli" as const } : {}),
+    ...(opts.cli ? { client: "cli" as const } : {}),
   });
   return { token, userId: id };
 }
@@ -211,16 +210,6 @@ function req(
     ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
   });
 }
-
-const grant = (
-  permission: string,
-  scopeType: "global" | "app" | "environment",
-  scopeId?: number,
-): PermissionGrant => ({
-  permission,
-  scopeType,
-  scopeId: scopeId == null ? null : String(scopeId),
-});
 
 function confirmedHeader(
   c: { userId: string },
@@ -247,7 +236,6 @@ let appB = 0; // in envB, no replicas
 let serverS = 0;
 let replicaR = 0;
 let stackA = 0; // every member in envA
-let stackX = 0; // members split across envA/envB -> no scoped grant can satisfy
 
 function seedFleet(): void {
   envA = db.insertEnvironment(`perm-envA-${uid()}`, "{}").id;
@@ -287,10 +275,6 @@ function seedFleet(): void {
   stackA = db.insertStack({ name: `perm-stack-a-${uid()}`, environment_id: envA }).id;
   db.setAppStack(mkApp(envA), stackA);
 
-  stackX = db.insertStack({ name: `perm-stack-x-${uid()}`, environment_id: envA }).id;
-  db.setAppStack(mkApp(envA), stackX);
-  db.setAppStack(mkApp(envB), stackX);
-
 }
 
 /** Every id the case table dereferences must still resolve; if any was wiped we
@@ -303,8 +287,7 @@ function fixturesIntact(): boolean {
     envB && db.getEnvironment(envB) &&
     serverS && db.getServer(serverS) &&
     replicaR && db.getReplica(replicaR) &&
-    stackA && db.getStack(stackA) &&
-    stackX && db.getStack(stackX),
+    stackA && db.getStack(stackA),
   );
 }
 
@@ -428,12 +411,6 @@ const CASES: Case[] = [
     name: "apps: handlePauseApp",
     permission: "apps.pause",
     call: (c) => handlePauseApp(req(`/api/apps/${appA}/pause`, { body: {}, token: c.token }), appA),
-  },
-  {
-    name: "apps: handleRollbackApp",
-    permission: "apps.rollback",
-    call: (c) =>
-      handleRollbackApp(req(`/api/apps/${appA}/rollback`, { body: {}, token: c.token }), appA),
   },
   {
     name: "apps: handleGetContainerLogs",
@@ -891,76 +868,13 @@ test("panel maintenance stays admin-only even with every OCD permission", async 
 });
 
 // ---------------------------------------------------------------------------
-// Scope semantics, end to end
+// Environment updates
 // ---------------------------------------------------------------------------
 
-describe("scope semantics through the real routes", () => {
-  test("an app-scoped grant acts on THAT app and is refused on another", async () => {
-    const ctx = await userWith([grant("apps.restart", "app", appA)]);
-
-    const ok = await handleRestartApp(
-      req(`/api/apps/${appA}/restart`, { body: {}, token: ctx.token }),
-      appA,
-    );
-    expect(ok.status).not.toBe(403);
-
-    const denied = await handleRestartApp(
-      req(`/api/apps/${appB}/restart`, { body: {}, token: ctx.token }),
-      appB,
-    );
-    expect(denied.status).toBe(403);
-  });
-
-  test("an environment-scoped grant covers apps inside it and nothing outside", async () => {
-    const ctx = await userWith([grant("apps.restart", "environment", envA)]);
-
-    const ok = await handleRestartApp(
-      req(`/api/apps/${appA}/restart`, { body: {}, token: ctx.token }),
-      appA,
-    );
-    expect(ok.status).not.toBe(403);
-
-    const denied = await handleRestartApp(
-      req(`/api/apps/${appB}/restart`, { body: {}, token: ctx.token }),
-      appB,
-    );
-    expect(denied.status).toBe(403);
-  });
-
-  test("an app-scoped grant does NOT satisfy a route that checks unscoped", async () => {
-    const ctx = await userWith([grant("apps.view", "app", appA)]);
-    const res = await handleGetApps(req("/api/apps", { token: ctx.token }));
-    expect(res.status).toBe(403);
-  });
-
-  test("an environment-scoped grant satisfies a stack whose members share it", async () => {
-    const ctx = await userWith([grant("stacks.view", "environment", envA)]);
-    const res = await handleGetStack(req(`/api/stacks/${stackA}`, { token: ctx.token }), stackA);
-    expect(res.status).not.toBe(403);
-  });
-
-  test("an environment-scoped grant is refused on a stack that spans two environments", async () => {
-    const ctx = await userWith([grant("stacks.view", "environment", envA)]);
-    const res = await handleGetStack(req(`/api/stacks/${stackX}`, { token: ctx.token }), stackX);
-    expect(res.status).toBe(403);
-  });
-
-  test("an environment-scoped secrets grant is refused on a different environment", async () => {
-    const ctx = await userWith([grant("environments.secrets", "environment", envA)]);
-    const res = await handleUpdateEnvironment(
-      req(`/api/environments/${envB}`, {
-        method: "PUT",
-        body: { env_vars: [{ key: "A", value: "1" }] },
-        token: ctx.token,
-      }),
-      envB,
-    );
-    expect(res.status).toBe(403);
-  });
-
+describe("environment updates", () => {
   test("environment dry-run reports stale consumers before mutating desired state", async () => {
     db.updateAppEnvVars(appA, JSON.stringify({ env: { PREVIEW_ONLY: { from: "environment.PREVIEW_ONLY" } }, outputs: {} }));
-    const ctx = await userWith([grant("environments.secrets", "environment", envA)]);
+    const ctx = await userWith(["environments.secrets"]);
     const before = db.getEnvironment(envA)!.env_vars;
     const res = await handleUpdateEnvironment(
       req(`/api/environments/${envA}`, {
@@ -987,13 +901,6 @@ describe("scope semantics through the real routes", () => {
 // ---------------------------------------------------------------------------
 
 describe("operational permissions beyond ordinary deployment", () => {
-  test("server creation grant can load the server-type choices", async () => {
-    const without = await userWith([]);
-    const withGrant = await userWith(["servers.create"]);
-    expect((await handleGetServerTypes(req("/api/admin/settings/server-types", { token: without.token }))).status).toBe(403);
-    expect((await handleGetServerTypes(req("/api/admin/settings/server-types", { token: withGrant.token }))).status).not.toBe(403);
-  });
-
   test("all operational grants do not open Admin settings", async () => {
     const full = await userWith(ALL_PERMISSIONS);
     expect((await handleGetSettings(req("/api/admin/settings", { token: full.token }))).status).toBe(403);

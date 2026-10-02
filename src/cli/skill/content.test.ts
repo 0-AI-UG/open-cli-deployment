@@ -88,7 +88,7 @@ describe("embedded OCD skill", () => {
     );
     const cli = files["docs/cli-reference.md"];
     for (const command of [
-      "deploy", "release", "apps", "logs", "restart", "rollback", "pause",
+      "deploy", "release", "apps", "logs", "restart", "pause",
       "unpause", "envs", "stack", "ops", "servers",
       "ssh", "app", "move", "resources", "volumes", "buckets", "runners",
     ]) {
@@ -106,12 +106,11 @@ describe("embedded OCD skill", () => {
       "ocd app webhook set", "ocd app webhook disable",
       "ocd webhook plan", "ocd deploy --image", "--image=MEMBER",
       "ocd service", "managed service", "ocd promote", "ocd app staging", "staging_environment",
-      "--auth-password-env",
+      "--auth-password-env", "ocd rollback",
     ]) {
       expect(cli).not.toContain(removed);
     }
     expect(cli).toContain("ocd release <app> --image <repository@sha256:digest>");
-    expect(cli).toContain("ocd rollback <app> [--deployment=<id>]");
     expect(cli).toContain("ocd runners webhook-secret <source-id>");
     expect(cli).toContain("ocd app redeploy <app>");
     expect(files["docs/app-manifest.md"]).toContain("`image_repository`");
@@ -125,7 +124,7 @@ describe("embedded OCD skill", () => {
       .map((file) => file.contents)
       .join("\n");
 
-    for (const removed of ["cache_ref", "git_branch", "wait_for_ci", "runs-on: [self-hosted"] ) {
+    for (const removed of ["cache_ref", "git_branch", "wait_for_ci", "runs-on: [self-hosted", "post_start", "ocd rollback", "releases-and-rollback"]) {
       expect(manual.toLowerCase()).not.toContain(removed.toLowerCase());
     }
     expect(manual).toContain("repository@sha256:<digest>");

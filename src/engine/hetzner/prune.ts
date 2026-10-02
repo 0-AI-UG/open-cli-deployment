@@ -30,12 +30,12 @@ export async function ensureHostLogPolicy(ip: string, hostKey?: string): Promise
 
 // Never use `docker image prune -a` here. It removes tagged but currently
 // unreferenced images, which includes the desired image during a container
-// replacement and the last-known-good rollback image. Per-app cleanup below
+// replacement and the previous image a failed redeploy restores. Per-app cleanup below
 // removes superseded commit tags explicitly; the periodic sweep only removes
 // dangling layers.
 /**
  * Periodic disk cleanup removes unused image data while preserving running,
- * stopped, current, and rollback images.
+ * stopped, current, and protected images.
  *
  * NOTE: the container prune always excludes OCD-managed containers
  * (label!=ocd.managed=true). A paused app keeps its containers *stopped* so
@@ -62,7 +62,7 @@ export type GcImageCategory =
   | "running"
   | "stopped"
   | "current"
-  | "rollback"
+  | "protected"
   | "reclaimable-ocd"
   | "reclaimable-foreign";
 
@@ -120,7 +120,7 @@ export function parseDockerSize(value: string): number | null {
 /**
  * Build one fail-closed host transaction. Docker's own metadata is treated as
  * authoritative: every image inspect must succeed, and execution revalidates
- * container ancestry plus current/rollback refs immediately before removal.
+ * container ancestry plus current/protected refs immediately before removal.
  * The exclusive OCD lock prevents deploy/build races for the whole inventory
  * and removal pass; Docker itself rejects removal of an externally-raced image.
  */
@@ -167,9 +167,8 @@ export function buildServerGcScript(opts: GcRunOptions): string {
     "  category=reclaimable-foreign",
     `  printf '%b\\n' "$running_images" | grep -Fxq "$id" && category=running`,
     `  if [ "$category" = reclaimable-foreign ] && printf '%b\\n' "$stopped_images" | grep -Fxq "$id"; then category=stopped; fi`,
-    `  if [ "$category" = reclaimable-foreign ] && printf '%b\\n' "$protected_images" | grep -Fxq "$id"; then category=rollback; fi`,
+    `  if [ "$category" = reclaimable-foreign ] && printf '%b\\n' "$protected_images" | grep -Fxq "$id"; then category=protected; fi`,
     `  if [ "$category" = reclaimable-foreign ] && printf '%s' "$refs" | grep -Eq "\\\"($active_pattern):latest\\\""; then category=current; fi`,
-    `  if [ "$category" = reclaimable-foreign ] && printf '%s' "$refs" | grep -Eq "\\\"($active_pattern):rollback\\\""; then category=rollback; fi`,
     `  if [ "$category" = reclaimable-foreign ] && [ "$managed" = true ]; then category=reclaimable-ocd; fi`,
     `  printf 'OCD_GC\\t%s\\t%s\\t%s\\t%s\\n' "$category" "$id" "$size" "$refs"`,
     `  case "$category" in reclaimable-ocd|reclaimable-foreign) reclaimable_ids="$reclaimable_ids $id" ;; esac`,
@@ -183,7 +182,7 @@ export function buildServerGcScript(opts: GcRunOptions): string {
       `  if docker ps -aq --filter ancestor="$id" | grep -q .; then printf 'OCD_SKIPPED\\t%s\\n' "$id"; continue; fi`,
       `  refs=$(docker image inspect --format '{{json .RepoTags}}' "$id" 2>/dev/null) || { printf 'OCD_SKIPPED\\t%s\\n' "$id"; continue; }`,
       `  if printf '%b\\n' "$protected_images" | grep -Fxq "$id"; then printf 'OCD_SKIPPED\\t%s\\n' "$id"; continue; fi`,
-      `  if printf '%s' "$refs" | grep -Eq "\\\"($active_pattern):(latest|rollback)\\\""; then printf 'OCD_SKIPPED\\t%s\\n' "$id"; continue; fi`,
+      `  if printf '%s' "$refs" | grep -Eq "\\\"($active_pattern):latest\\\""; then printf 'OCD_SKIPPED\\t%s\\n' "$id"; continue; fi`,
       `  tag_list=$(docker image inspect --format '{{range .RepoTags}}{{println .}}{{end}}' "$id" 2>/dev/null) || { printf 'OCD_SKIPPED\\t%s\\n' "$id"; continue; }`,
       `  removal_ok=true; for ref in $tag_list; do docker image rm "$ref" >/dev/null 2>&1 || removal_ok=false; done`,
       `  docker image rm "$id" >/dev/null 2>&1 || { docker image inspect "$id" >/dev/null 2>&1 && removal_ok=false || true; }`,
@@ -224,7 +223,7 @@ async function runServerGc(ip: string, hostKey: string | undefined, opts: GcRunO
   let freeAfter = 0;
   let sawSpace = false;
   const categories = new Set<GcImageCategory>([
-    "running", "stopped", "current", "rollback", "reclaimable-ocd", "reclaimable-foreign",
+    "running", "stopped", "current", "protected", "reclaimable-ocd", "reclaimable-foreign",
   ]);
   for (const line of result.stdout.split("\n")) {
     if (line.startsWith("OCD_GC\t")) {
@@ -299,7 +298,7 @@ export async function inspectServerGc(
 
 /** Remove every inventory-proven unused image (OCD and foreign/unlabelled),
  * equivalent to Docker's `image prune -a` eligibility, while retaining every
- * container ancestor and OCD current/rollback asset; then trim build cache. */
+ * container ancestor and OCD current/protected asset; then trim build cache. */
 export async function garbageCollectServer(
   ip: string,
   hostKey?: string,
@@ -373,7 +372,7 @@ export function buildServerPruneSteps(opts: PruneServerOptions = {}): string[] {
       `for ref in $(docker images --filter label=${OCD_IMAGE_LABEL} --format '{{.Repository}}:{{.Tag}}'); do ` +
         `repo=${"${ref%:*}"}; tag=${"${ref##*:}"}; ` +
         `case "$repo" in ${active}) ` +
-        `case "$tag" in latest|rollback) ;; *) ` +
+        `case "$tag" in latest) ;; *) ` +
         `docker ps -aq --filter ancestor="$ref" | grep -q . || docker image rm "$ref" >/dev/null 2>&1 || true ;; esac ` +
         `;; *) docker image rm "$ref" >/dev/null 2>&1 || true ;; esac; done`,
     );

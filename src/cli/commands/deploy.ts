@@ -139,7 +139,6 @@ ${BOLD}Options:${RESET}
     cpu_limit: manifest.cpu_limit ?? 0,
     command: manifest.command ?? [],
     cap_add: manifest.cap_add ?? [],
-    post_start_command: manifest.post_start?.command ?? "",
     health_check: healthMode === "http",
     health_check_mode: healthMode,
     health_check_path: healthMode === "http" ? (manifest.health_check?.path ?? "") : "",

@@ -322,27 +322,6 @@ d(
       12 * 60_000,
     );
 
-    // ---- 12. rollback -------------------------------------------------------
-    appTest(
-      "13. rollback: rolls back to a prior deployment",
-      async () => {
-        expect(ctx).not.toBeNull();
-        const db = await import("../shared/db.ts");
-
-        const deployments = db.getDeployments(ctx!.appId);
-        expect(deployments.length).toBeGreaterThanOrEqual(2);
-        const target = deployments[deployments.length - 1];
-
-        const result = await enqueueAndWait(
-          "rollback",
-          { appId: ctx!.appId, deploymentId: target.id },
-          { timeoutMs: 10 * 60_000 },
-        );
-        expect(result.status).toBe("done");
-      },
-      10 * 60_000,
-    );
-
     // ---- 14. move -----------------------------------------------------------
     appTest(
       "14. move: fails cleanly when source == target server (no second server available)",

@@ -15,7 +15,7 @@ immutable runtime digest. Signed push webhooks apply only to build sources.
 | Reconcile a stack from member sources | `ocd deploy stack` |
 | Apply config with current digest | `ocd deploy --config-only` |
 | Advanced artifact-only rollout | `ocd release <app> --image <repository@sha256:digest>` |
-| Roll back exact history | `ocd rollback <app>` |
+| Return to a previous version | `ocd deploy` of the previous commit, or `ocd release <app> --image <previous digest>` |
 
 Build repositories use temporary tags only for publication. Prebuilt image
 tags are resolved before deployment. Runtime desired state and deployment

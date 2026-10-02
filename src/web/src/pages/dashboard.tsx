@@ -1,25 +1,18 @@
 import { useState, useEffect, useRef } from "react";
 import { get } from "../api/client.ts";
-import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
-import { Badge, Card, CardHeader, StatusBadge, Stat, Btn, EmptyState, SegmentedControl, showToast, confirm, CopyButton, PageShell, PageSection, PageHeader, PageState, statusTone } from "../components/ui.tsx";
-import { PermissionGate } from "../components/permission-gate.tsx";
+import { Badge, Card, CardHeader, StatusBadge, Stat, Btn, EmptyState, SegmentedControl, showToast, CopyButton, PageShell, PageSection, PageHeader, PageState, statusTone } from "../components/ui.tsx";
 import { useActiveOperations } from "../hooks/useOperation.ts";
-import { RefreshCw, Server, LayoutGrid, List, Play, Pause, RotateCcw, Trash2, ExternalLink, Check, Box, Boxes, ChevronDown, MoreHorizontal, Settings2 } from "lucide-react";
+import { RefreshCw, Server, LayoutGrid, List, ExternalLink, Box, Boxes, ChevronDown } from "lucide-react";
 import { useMobileLayout } from "../hooks/use-mobile-layout.ts";
-import { MobileActionSheet, MobileSheetAction } from "../components/mobile-action-sheet.tsx";
-import { ContextActionItem, ContextActionMenu } from "../components/context-action-menu.tsx";
 
 type AppData = {
   id: number; name: string; domain: string; image_ref?: string; status: string;
   container_port: number;
-  placement?: Array<{ server_id: number; server_name: string; replicas: number }>; volume_id: string;
-  public: number; health_check: number;
+  placement?: Array<{ server_id: number; server_name: string; replicas: number }>;
+  public: number;
   internal_protocol?: string;
   stack_id?: number | null;
   environment_stale?: number;
-  // Carried purely so per-app controls can be gated against an
-  // environment-scoped grant as well as an app-scoped one.
-  environment_id?: number | null;
 };
 type StackData = {
   id: number; name: string; status: string; created_at: string;
@@ -34,18 +27,12 @@ type AppView = "cards" | "list";
 const APP_VIEW_KEY = "ocd.dashboard.appView";
 
 const APP_OP_KINDS = new Set([
-  "restart_app", "pause_app", "unpause_app", "redeploy", "destroy_app",
+  "restart_app", "pause_app", "unpause_app", "redeploy", "destroy_app", "move",
 ]);
 const STACK_OP_KINDS = new Set([
   "deploy_stack", "destroy_stack", "cascade_redeploy",
 ]);
 
-const APP_ACTION_TO_KIND: Record<string, string> = {
-  restart: "restart_app",
-  pause: "pause_app",
-  unpause: "unpause_app",
-  delete: "destroy_app",
-};
 export function DashboardPage() {
   const isMobile = useMobileLayout();
   const [data, setData] = useState<DashboardData>({ apps: [] });
@@ -68,30 +55,9 @@ export function DashboardPage() {
   const [openStack, setOpenStack] = useState<number | null>(null);
   const seenStacks = useRef<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [confirmKey, setConfirmKey] = useState<string | null>(null);
-  const confirmTimeoutRef = useRef<number | null>(null);
-  const [mobileSelection, setMobileSelection] = useState<
-    { kind: "app" | "stack"; id: number } | null
-  >(null);
 
-  const ops = useActiveOperations(
-    (op) => APP_OP_KINDS.has(op.kind) || STACK_OP_KINDS.has(op.kind),
-    { rehydrateToasts: true },
-  );
-
-  const armOrRun = (key: string, run: () => void, close?: () => void) => {
-    if (confirmKey === key) {
-      if (confirmTimeoutRef.current) window.clearTimeout(confirmTimeoutRef.current);
-      setConfirmKey(null);
-      close?.();
-      run();
-    } else {
-      if (confirmTimeoutRef.current) window.clearTimeout(confirmTimeoutRef.current);
-      setConfirmKey(key);
-      confirmTimeoutRef.current = window.setTimeout(() => setConfirmKey(null), 3000);
-    }
-  };
+  // Watch CLI-initiated work so the list refreshes as it lands.
+  const ops = useActiveOperations((op) => APP_OP_KINDS.has(op.kind) || STACK_OP_KINDS.has(op.kind));
 
   const load = async () => {
     try {
@@ -134,59 +100,8 @@ export function DashboardPage() {
     if (!loading) load();
   }, [activeSig]);
 
-  const appAction = async (action: string, appId: number) => {
-    const key = `${action}-${appId}`;
-    setActionLoading(key);
-    try {
-      if (action === "delete") {
-        await runConfirmedCliAction(
-          "app.delete",
-          { app: String(appId) },
-          { action: "delete_app", resourceType: "app", resourceId: appId },
-        );
-      } else {
-        await runCliAction(`app.${action}`, { app: String(appId) });
-      }
-      showToast(`${action} successful`, "success");
-      load();
-    } catch (err: any) {
-      showToast(err.message, "error");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-
-  const stackDestroy = async (stack: StackData) => {
-    if (!(await confirm(
-      "Destroy Stack",
-      `Permanently destroy "${stack.name}" and all ${stack.app_count} app(s)? Containers and routing are removed; environments are retained, and managed volumes are detached for recovery.`,
-      true,
-    ))) return;
-    const key = `stack-delete-${stack.id}`;
-    setActionLoading(key);
-    try {
-      await runConfirmedCliAction(
-        "stacks.delete",
-        { stack: String(stack.id) },
-        { action: "delete_stack", resourceType: "stack", resourceId: stack.id },
-      );
-      showToast(`Destroyed stack ${stack.name}`, "success");
-      load();
-    } catch (err: any) {
-      showToast(err.message, "error");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
   const appBusyKind = (appId: number) => ops.byResourceKey(`app:${appId}`)?.kind;
   const stackBusyKind = (stackId: number) => ops.byResourceKey(`stack:${stackId}`)?.kind;
-
-  const isAppActionLoading = (appId: number, action: string) => {
-    const k = `${action}-${appId}`;
-    return actionLoading === k || appBusyKind(appId) === APP_ACTION_TO_KIND[action];
-  };
 
   const toggleStack = (id: number) => {
     setExpanded((prev) => {
@@ -204,57 +119,6 @@ export function DashboardPage() {
     const copy = app.internal_protocol === "tcp" ? `tcp://${host}` : `http://${host}`;
     return { label: host, href: undefined, copy, private: !app.public };
   };
-
-  // One action menu for an app, shared by the list rows and the cards.
-  const appMenu = (app: AppData, disableRow: boolean) => (
-    <ContextActionMenu label={`Actions for ${app.name}`}>
-      {(close) => <>
-        <PermissionGate permission="apps.logs" appId={app.id} environmentId={app.environment_id}>
-          <ContextActionItem icon={<Settings2 size={14} />} label="Open app" onClick={() => { close(); window.location.hash = `#/apps/${app.id}`; }} />
-        </PermissionGate>
-        <PermissionGate permission="apps.restart" appId={app.id} environmentId={app.environment_id}>
-        {(() => {
-          const k = `restart-${app.id}`;
-          const armed = confirmKey === k;
-          return (
-            <ContextActionItem icon={armed ? <Check size={14} className="text-info" /> : <RotateCcw size={14} />} label={armed ? "Confirm restart" : "Restart"} loading={isAppActionLoading(app.id, "restart")} disabled={disableRow && !armed} onClick={() => armOrRun(k, () => appAction("restart", app.id), close)} />
-          );
-        })()}
-        </PermissionGate>
-        <PermissionGate permission="apps.pause" appId={app.id} environmentId={app.environment_id}>
-        {app.status === "paused" ? (() => {
-          const k = `unpause-${app.id}`;
-          const armed = confirmKey === k;
-          return (
-            <ContextActionItem icon={armed ? <Check size={14} className="text-info" /> : <Play size={14} />} label={armed ? "Confirm unpause" : "Unpause"} loading={isAppActionLoading(app.id, "unpause")} disabled={disableRow && !armed} onClick={() => armOrRun(k, () => appAction("unpause", app.id), close)} />
-          );
-        })() : (() => {
-          const k = `pause-${app.id}`;
-          const armed = confirmKey === k;
-          return (
-            <ContextActionItem icon={armed ? <Check size={14} className="text-info" /> : <Pause size={14} />} label={armed ? "Confirm pause" : "Pause"} loading={isAppActionLoading(app.id, "pause")} disabled={disableRow && !armed} onClick={() => armOrRun(k, () => appAction("pause", app.id), close)} />
-          );
-        })()}
-        </PermissionGate>
-        <PermissionGate permission="apps.destroy" appId={app.id} environmentId={app.environment_id}>
-        <div className="my-1 border-t" />
-        <ContextActionItem
-          icon={<Trash2 size={14} />}
-          label="Destroy app"
-          danger
-          loading={isAppActionLoading(app.id, "delete")}
-          disabled={disableRow}
-          onClick={async () => {
-            close();
-            if (await confirm("Destroy app", `Permanently destroy "${app.name}"? This removes all containers. DNS remains unchanged and must be cleaned up manually.`, true)) {
-              appAction("delete", app.id);
-            }
-          }}
-        />
-        </PermissionGate>
-      </>}
-    </ContextActionMenu>
-  );
 
   const renderAppRow = (app: AppData, opts?: { nested?: boolean }) => {
     const nested = opts?.nested ?? false;
@@ -298,7 +162,6 @@ export function DashboardPage() {
             status={app.status}
             subLabel={app.environment_stale ? "stale environment" : undefined}
           />
-          {appMenu(app, disableRow)}
         </div>
       </div>
     );
@@ -333,7 +196,6 @@ export function DashboardPage() {
               </span>
             </div>
           </div>
-          {appMenu(app, busy)}
         </div>
         <div className="mt-auto flex flex-wrap items-center gap-1.5">
           <StatusBadge status={app.status} subLabel={app.environment_stale ? "stale environment" : undefined} />
@@ -349,9 +211,6 @@ export function DashboardPage() {
   // its apps right after it in the grid; one stack is open at a time.
   const renderStackCard = (stack: StackData, members: AppData[]) => {
     const open = openStack === stack.id;
-    const kind = stackBusyKind(stack.id);
-    const busy = !!kind || members.some((a) => !!appBusyKind(a.id));
-    const destroying = actionLoading === `stack-delete-${stack.id}` || kind === "destroy_stack";
     const toggle = () => setOpenStack(open ? null : stack.id);
     return (
       <div
@@ -370,11 +229,6 @@ export function DashboardPage() {
             <div className="mt-0.5 truncate text-xs text-muted">Stack · {members.length} app{members.length === 1 ? "" : "s"}</div>
           </div>
           <div className="flex shrink-0 items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
-            <PermissionGate permission="stacks.destroy" environmentId={stack.environment_id}>
-              <Btn variant="ghost" title="Destroy stack" loading={destroying} disabled={busy} onClick={() => stackDestroy(stack)}>
-                <Trash2 size={15} />
-              </Btn>
-            </PermissionGate>
             <Btn variant="ghost" title={open ? "Close" : "Open"} onClick={toggle}>
               <ChevronDown size={15} className={`transition-transform ${open ? "rotate-180" : ""}`} />
             </Btn>
@@ -395,8 +249,6 @@ export function DashboardPage() {
     const memberBusy = memberApps.some((a) => !!appBusyKind(a.id));
     const stackKind = stackBusyKind(stack.id);
     const busy = !!stackKind || memberBusy;
-    const destroying =
-      actionLoading === `stack-delete-${stack.id}` || stackKind === "destroy_stack";
     const total = memberApps.length;
 
     return (
@@ -428,11 +280,6 @@ export function DashboardPage() {
           <div className="flex shrink-0 items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <StatusBadge status={stack.status} />
             <div className="flex items-center gap-0.5">
-              <PermissionGate permission="stacks.destroy" environmentId={stack.environment_id}>
-                <Btn variant="ghost" title="Destroy stack" loading={destroying} disabled={busy} onClick={() => stackDestroy(stack)}>
-                  <Trash2 size={15} />
-                </Btn>
-              </PermissionGate>
               <Btn variant="ghost" title={isOpen ? "Collapse" : "Expand"} onClick={() => toggleStack(stack.id)}>
                 <ChevronDown size={15} className={`transition-transform ${isOpen ? "" : "-rotate-90"}`} />
               </Btn>
@@ -566,15 +413,6 @@ export function DashboardPage() {
   );
 
   if (isMobile) {
-    const selectedApp = mobileSelection?.kind === "app" ? apps.find((app) => app.id === mobileSelection.id) : undefined;
-    const selectedStack = mobileSelection?.kind === "stack" ? stacks.find((stack) => stack.id === mobileSelection.id) : undefined;
-    const selectedTitle = selectedApp?.name ?? selectedStack?.name ?? "Actions";
-    const selectedSubtitle = selectedApp
-      ? `App · ${selectedApp.status}`
-      : selectedStack
-          ? `Stack · ${selectedStack.status}`
-          : undefined;
-
     const appCard = (app: AppData, nested = false) => {
       const busy = !!appBusyKind(app.id);
       const address = appAddress(app);
@@ -593,11 +431,6 @@ export function DashboardPage() {
             <div className="mt-0.5 truncate font-mono text-xs text-muted">{address.label}</div>
             <div className="mt-1.5"><StatusBadge status={busy ? "working" : app.status} subLabel={app.environment_stale ? "config changed" : undefined} /></div>
           </div>
-          <button
-            aria-label={`Actions for ${app.name}`}
-            onClick={(event) => { event.stopPropagation(); setMobileSelection({ kind: "app", id: app.id }); }}
-            className="-mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted active:bg-subtle"
-          ><MoreHorizontal size={20} /></button>
         </article>
       );
     };
@@ -613,7 +446,6 @@ export function DashboardPage() {
               <h3 className="truncate text-base font-medium">{stack.name}</h3>
               <div className="mt-1 flex items-center gap-2"><StatusBadge status={stack.status} /><span className="text-xs text-muted">· {memberApps.length} app{memberApps.length === 1 ? "" : "s"}</span></div>
             </div>
-            <button aria-label={`Actions for ${stack.name}`} onClick={(event) => { event.stopPropagation(); setMobileSelection({ kind: "stack", id: stack.id }); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted active:bg-subtle"><MoreHorizontal size={20} /></button>
             <ChevronDown size={18} className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} />
           </div>
           {open && (
@@ -624,11 +456,6 @@ export function DashboardPage() {
           )}
         </section>
       );
-    };
-
-    const closeAnd = (run: () => void) => {
-      setMobileSelection(null);
-      run();
     };
 
     return (
@@ -646,22 +473,6 @@ export function DashboardPage() {
           </div>
         )}
 
-        <MobileActionSheet open={mobileSelection != null} onClose={() => setMobileSelection(null)} title={selectedTitle} subtitle={selectedSubtitle}>
-          {selectedApp && (
-            <>
-              <MobileSheetAction icon={<Settings2 size={19} />} label="Open app" detail="Metrics, logs and deployments" primary onClick={() => closeAnd(() => { window.location.hash = `#/apps/${selectedApp.id}`; })} />
-              <PermissionGate permission="apps.restart" appId={selectedApp.id} environmentId={selectedApp.environment_id}><MobileSheetAction icon={<RotateCcw size={19} />} label="Restart" loading={isAppActionLoading(selectedApp.id, "restart")} disabled={!!appBusyKind(selectedApp.id)} onClick={() => closeAnd(() => appAction("restart", selectedApp.id))} /></PermissionGate>
-              <PermissionGate permission="apps.pause" appId={selectedApp.id} environmentId={selectedApp.environment_id}><MobileSheetAction icon={selectedApp.status === "paused" ? <Play size={19} /> : <Pause size={19} />} label={selectedApp.status === "paused" ? "Unpause" : "Pause"} disabled={!!appBusyKind(selectedApp.id)} onClick={() => closeAnd(() => appAction(selectedApp.status === "paused" ? "unpause" : "pause", selectedApp.id))} /></PermissionGate>
-              <PermissionGate permission="apps.destroy" appId={selectedApp.id} environmentId={selectedApp.environment_id}><MobileSheetAction icon={<Trash2 size={19} />} label="Destroy app" danger disabled={!!appBusyKind(selectedApp.id)} onClick={async () => { if (await confirm("Destroy app", `Permanently destroy "${selectedApp.name}"? This removes all containers. DNS remains unchanged and must be cleaned up manually.`, true)) closeAnd(() => appAction("delete", selectedApp.id)); }} /></PermissionGate>
-            </>
-          )}
-          {selectedStack && (
-            <>
-              <MobileSheetAction icon={<Settings2 size={19} />} label="Open stack" detail="Members, configuration and logs" primary onClick={() => closeAnd(() => { window.location.hash = `#/stacks/${selectedStack.id}`; })} />
-              <PermissionGate permission="stacks.destroy" environmentId={selectedStack.environment_id}><MobileSheetAction icon={<Trash2 size={19} />} label="Destroy stack" danger disabled={!!stackBusyKind(selectedStack.id)} onClick={() => closeAnd(() => stackDestroy(selectedStack))} /></PermissionGate>
-            </>
-          )}
-        </MobileActionSheet>
       </main>
     );
   }

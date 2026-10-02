@@ -94,7 +94,6 @@ describe("desired app configuration", () => {
       apply_mode: "manifest" as const,
       command: ["postgres"],
       cap_add: ["CHOWN", "SETUID"],
-      post_start_command: "pg_isready",
     };
 
     expect(diffAppConfig(app, req).map((c) => c.field)).toContain("image_ref");
@@ -110,7 +109,6 @@ describe("desired app configuration", () => {
     expect(JSON.parse(updated.placement!)).toEqual({ [String(SERVER.id)]: 1, [String(SECOND_SERVER.id)]: 2 });
     expect(db.parseAppCommand(updated)).toEqual(["postgres"]);
     expect(db.parseAppCapabilities(updated)).toEqual(["CHOWN", "SETUID"]);
-    expect(updated.post_start_command).toBe("pg_isready");
     expect(updated.manifest_path).toBe(".ocd-deploy.json");
     expect(updated.last_manifest_path).toBe(".ocd-deploy.json");
     expect(updated.last_manifest_hash).toBe("abc123");

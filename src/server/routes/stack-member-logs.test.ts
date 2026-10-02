@@ -3,9 +3,7 @@ useTempDataDir();
 
 import { describe, test, expect, mock, afterAll } from "bun:test";
 
-// Bypass the auth half of the permission layer, but spread the real module
-// through so the scope helpers (appScope/stackScope/...) stay real — replacing
-// it wholesale would hand routes `undefined` for those.
+// Bypass the auth half of the permission layer, keeping the rest real.
 const realPermissions = await import("../lib/permissions.ts");
 mock.module("../lib/permissions.ts", () => ({
   ...realPermissions,

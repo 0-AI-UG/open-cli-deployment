@@ -20,7 +20,7 @@ describe("buildServerGcScript", () => {
     expect(script).toContain('printf \'%b\\n\' "$protected_images"');
     expect(script).toContain('docker ps -aq --filter ancestor="$id"');
     expect(script).toContain('{{if .Config.Labels}}{{index .Config.Labels "ocd.managed"}}{{end}}');
-    expect(script).toContain('\\"($active_pattern):(latest|rollback)\\"');
+    expect(script).toContain('\\"($active_pattern):latest\\"');
     expect(script).toContain('docker image rm "$ref"');
     expect(script).not.toContain("docker image rm -f");
     expect(script).toContain("find /home/deploy/apps");
@@ -82,7 +82,7 @@ describe("buildServerPruneSteps", () => {
     expect(script).toContain('case "$name" in api-r2|postgres)');
     expect(script).toContain('*) docker container rm -f "$name"');
     expect(script).toContain('case "$repo" in api)');
-    expect(script).toContain('case "$tag" in latest|rollback)');
+    expect(script).toContain('case "$tag" in latest)');
     expect(script).toContain('docker ps -aq --filter ancestor="$ref"');
     expect(script).toContain("reference=ocd-managed/*:*");
     expect(script).toContain(".ocd-image-pulls");

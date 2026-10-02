@@ -2,10 +2,11 @@ import { StorageMounts } from "../components/storage-mounts.tsx";
 import type { StorageMount } from "../../../shared/storage-display.ts";
 import { useState, useEffect } from "react";
 import { get } from "../api/client.ts";
-import { Card, CardHeader, Btn, CopyButton, DataRow, EmptyState, Stat, Table, StatusBadge, PageShell, PageHeader, PageState } from "../components/ui.tsx";
+import { Card, CardHeader, Btn, CopyButton, DataRow, EmptyState, Stat, StatusBadge, PageShell, PageHeader, PageState } from "../components/ui.tsx";
 import { Boxes, Server, RefreshCw, Terminal, FileWarning, Network } from "lucide-react";
 import { PermissionGate } from "../components/permission-gate.tsx";
-import { Sparkline, CpuUsage, MemUsage } from "./app-detail/shared.tsx";
+import { Sparkline } from "./app-detail/shared.tsx";
+import { ReplicasTable } from "../components/replicas-table.tsx";
 import type { ServerMetricSample } from "../types.ts";
 
 type ServerReplica = {
@@ -72,12 +73,6 @@ type ServerDetail = {
   replica_metrics: ReplicaMetricSample[];
   host: HostProbe;
 };
-
-function statusClass(s: string): string {
-  if (s === "running") return "text-success";
-  if (s === "stopped" || s === "failed") return "text-danger";
-  return "text-fg-dim";
-}
 
 function Bar({ value, tone }: { value: number; tone: string }) {
   const v = Math.max(0, Math.min(100, value || 0));
@@ -155,7 +150,7 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
 
   if (detailErr) {
     return (
-      <PageState kind="error" title="Server unavailable" description={detailErr} action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/resources"; }}>Back to resources</Btn>} />
+      <PageState kind="error" title="Server unavailable" description={detailErr} action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/resources"; }}>Back to infrastructure</Btn>} />
     );
   }
   if (loading || !detail) return <PageState title="Loading server" />;
@@ -174,7 +169,7 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
     <PageShell>
       <PageHeader
         backHref="#/resources"
-        backLabel="Back to resources"
+        backLabel="Back to infrastructure"
         eyebrow="Server"
         title={detail.name}
         meta={<>
@@ -184,7 +179,7 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
           {detail.ipv4 && <span className="font-mono text-xs">{detail.ipv4}</span>}
         </>}
         actions={<>
-          <PermissionGate permission="terminal.access">
+          <PermissionGate permission="terminal.host">
             <Btn onClick={() => { window.location.hash = `#/terminal/server/${detail.id}`; }}>
               <Terminal size={14} /> Shell
             </Btn>
@@ -316,36 +311,11 @@ export function ServerDetailPage({ serverId }: { serverId: number }) {
           <EmptyState message="No replicas on this server" icon={Boxes} />
         ) : (
           <div className="max-md:p-3">
-          <Table headers={["ID", "Container", "App", "Port", "Status", "CPU", "Memory", "CPU (1h)", ""]}>
-            {detail.replicas.map((r) => {
-              const series = detail.replica_metrics
-                .filter((s) => s.replica_id === r.id)
-                .map((s) => s.cpu_percent);
-              return (
-                <tr key={r.id}>
-                  <td className="font-mono text-xs text-muted">#{r.id}</td>
-                  <td className="max-w-[16rem] truncate font-mono text-xs text-fg-dim" title={r.container_name}>{r.container_name}</td>
-                  <td>
-                    <a href={`#/apps/${r.app_id}`} className="font-medium text-fg hover:underline">
-                      {r.app_name}
-                    </a>
-                  </td>
-                  <td className="font-mono text-xs text-fg-dim">{r.host_port}</td>
-                  <td><StatusBadge status={r.status} /></td>
-                  <td className="whitespace-nowrap text-fg-dim"><CpuUsage cpuPercent={r.cpu_percent} limitCores={r.cpu_limit_cores} status={r.status} /></td>
-                  <td className="whitespace-nowrap text-fg-dim"><MemUsage memoryPercent={r.memory_percent} usedMb={r.memory_used_mb} limitMb={r.memory_limit_mb} status={r.status} /></td>
-                  <td className="text-info"><Sparkline values={series} color="currentColor" /></td>
-                  <td className="text-right">
-                    <PermissionGate permission="terminal.access">
-                      <Btn size="xs" variant="ghost" onClick={() => { window.location.hash = `#/terminal/replica/${r.id}`; }}>
-                        <Terminal size={13} /> Shell
-                      </Btn>
-                    </PermissionGate>
-                  </td>
-                </tr>
-              );
-            })}
-          </Table>
+            <ReplicasTable
+              context="server"
+              replicas={detail.replicas.map((r) => ({ ...r, app: { id: r.app_id, name: r.app_name } }))}
+              cpuSeries={(id) => detail.replica_metrics.filter((s) => s.replica_id === id).map((s) => s.cpu_percent)}
+            />
           </div>
         )}
       </Card>

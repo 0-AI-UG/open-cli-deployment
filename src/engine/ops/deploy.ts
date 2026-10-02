@@ -20,7 +20,6 @@ import {
   containerRunning,
   probeAppHealth,
   getContainerLogs,
-  runAppPostStartCommand,
 } from "../../shared/remote/index.ts";
 import { syncAppIngress, syncAllTraefik } from "../scale/traefik-manager.ts";
 import { replicaBindHost } from "../scale/types.ts";
@@ -406,7 +405,6 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
           desired_volume_driver: volume?.driverId ?? req.volume_driver ?? "",
           command: req.command,
           cap_add: req.cap_add,
-          post_start_command: req.post_start_command,
         },
         server.serverId,
       );
@@ -750,15 +748,6 @@ const healthCheckStep: Step<DeployInput, { healthy: boolean; statusCode?: number
       if (!attestation.ok) {
         db.updateAppStatus(appOut.appId, "unhealthy");
         throw new Error(`Replica ${replica.id} revision attestation failed: ${attestation.error}`);
-      }
-      if (app.post_start_command) {
-        await runAppPostStartCommand(
-          server.serverIp,
-          appOut.containerName,
-          app.post_start_command,
-          server.serverHostKey || undefined,
-        );
-        db.appendDeployLog(appOut.appId, "[post-start] Setup completed");
       }
       db.appendDeployLog(
         appOut.appId,

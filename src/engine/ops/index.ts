@@ -3,7 +3,6 @@ import "./configure-ntfy.ts";
 // Each op kind imports this file and self-registers via registerOp.
 import "./deploy.ts";
 import "./redeploy.ts";
-import "./rollback.ts";
 import "./destroy-app.ts";
 import "./move.ts";
 import "./provision-server.ts";

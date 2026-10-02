@@ -44,7 +44,7 @@ test("app permission revocation stops future alerts", async () => {
   db.saveSetting("ntfy_user.alice", JSON.stringify({ enabled: true, events: ["app"], recovery: true }));
   const app = db.insertApp({ name: "test-app", domain: "", image_ref: `ghcr.io/test/app@sha256:${"a".repeat(64)}`, container_port: 3000, env_vars: '{"env":{},"outputs":{}}' });
   expect(canReceiveNtfy("alice", `app:${app.id}`, false)).toBe(false);
-  db.setUserPermissions("alice", [{ permission: "apps.view", scopeType: "app", scopeId: String(app.id) }]);
+  db.setUserPermissions("alice", ["apps.view"]);
   expect(canReceiveNtfy("alice", `app:${app.id}`, false)).toBe(true);
   db.setUserPermissions("alice", []);
   expect(canReceiveNtfy("alice", `app:${app.id}`, true)).toBe(false);

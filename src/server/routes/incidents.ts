@@ -26,11 +26,11 @@ function canAccess(userId: string, found: Incident): boolean {
   if (user?.is_admin) return true;
   if (!found.key.startsWith("app:")) return false;
   const appId = Number(found.key.slice(4));
-  return !!getApp(appId) && hasPermission(userId, "apps.view", { appId });
+  return !!getApp(appId) && hasPermission(userId, "apps.view");
 }
 function canResolve(userId: string, found: Incident): boolean {
   if (getUserById(userId)?.is_admin) return true;
-  return canAccess(userId, found) && hasPermission(userId, "apps.restart", { appId: Number(found.key.slice(4)) });
+  return canAccess(userId, found) && hasPermission(userId, "apps.restart");
 }
 export async function handleGetIncident(request: Request): Promise<Response> {
   try {

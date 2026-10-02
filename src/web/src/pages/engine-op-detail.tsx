@@ -1,9 +1,6 @@
-import { useState } from "react";
-import { AlertCircle, ArrowRight, Ban, CheckCircle2, ChevronRight, Circle, GitBranch, ListChecks, Loader2, MinusCircle, RefreshCw, ScrollText, Undo2, Wrench, XCircle } from "lucide-react";
-import { useOperation, humanizeStep, TERMINAL_STATUSES, type OperationView } from "../hooks/useOperation.ts";
-import { confirm, Btn, showToast, Badge, Card, CardHeader, PageShell, PageHeader, PageState, StatusBadge, humanize, type Tone } from "../components/ui.tsx";
-import { PermissionGate } from "../components/permission-gate.tsx";
-import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
+import { AlertCircle, ArrowRight, CheckCircle2, ChevronRight, Circle, GitBranch, ListChecks, Loader2, MinusCircle, ScrollText, Undo2, XCircle } from "lucide-react";
+import { useOperation, humanizeStep, type OperationView } from "../hooks/useOperation.ts";
+import { Badge, Card, CardHeader, PageShell, PageHeader, PageState, StatusBadge, humanize, type Tone } from "../components/ui.tsx";
 
 function fmtTs(ts: string | null): string {
   if (!ts) return "—";
@@ -33,64 +30,17 @@ function stepTone(status: string): { Icon: typeof CheckCircle2; icon: string; ba
 
 export function EngineOpDetailPage({ opId }: { opId: number }) {
   const op = useOperation(opId);
-  const [actionBusy, setActionBusy] = useState<"cancel" | "retry" | "finalize" | null>(null);
 
   if (!op) {
     return <PageState title="Loading operation" />;
   }
 
-  const active = !TERMINAL_STATUSES.has(op.status);
   const forward = (op.steps || []).filter((s) => s.phase === "forward");
   const compensations = (op.steps || []).filter((s) => s.phase === "compensate");
   const failedForward = forward.filter((s) => s.status === "failed");
   const failedCompensations = compensations.filter((s) => s.status === "failed");
   const failedChildren = (op.children || []).filter((child) =>
     ["failed", "compensated", "compensation_failed", "cancelled"].includes(child.status));
-
-  async function onCancel() {
-    const ok = await confirm("Cancel operation?", "The engine will stop at the next step boundary and run compensations.", true);
-    if (!ok) return;
-    setActionBusy("cancel");
-    try {
-      await runConfirmedCliAction(
-        "ops.cancel",
-        { operation: String(opId) },
-        { action: "cancel_operation", resourceType: "operation", resourceId: opId },
-      );
-      showToast("Cancellation requested", "success");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Cancellation failed", "error");
-    } finally {
-      setActionBusy(null);
-    }
-  }
-
-  async function onRetry() {
-    if (!await confirm("Retry operation?", "Resume cleanup when possible, otherwise create a fresh retry.")) return;
-    setActionBusy("retry");
-    try {
-      await runCliAction("ops.retry", { operation: String(opId) }, { confirmed: true });
-      showToast("Operation retried", "success");
-      window.location.hash = "#/engine";
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Retry failed", "error");
-    } finally {
-      setActionBusy(null);
-    }
-  }
-
-  async function onFinalize() {
-    if (!await confirm("Finalize operation?", "Reconcile the affected resources and close this stale operation using the engine's automatic assessment.", true)) return;
-    setActionBusy("finalize");
-    try {
-      await runCliAction("ops.finalize", { operation: String(opId), status: "auto" }, { confirmed: true });
-      showToast("Operation finalized", "success");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Finalize failed", "error");
-    } finally {
-      setActionBusy(null);
-    }
-  }
 
   const hasOutcome = !!(op.error || failedForward.length > 0 || failedCompensations.length > 0 || failedChildren.length > 0);
   const outcomeWarning = op.status === "compensating" || op.status === "cancelled";
@@ -99,7 +49,7 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
     <PageShell>
       <PageHeader
         backHref="#/engine"
-        backLabel="Back to operations"
+        backLabel="Back to activity"
         eyebrow={`Operation #${op.id}`}
         title={op.label || op.kind}
         meta={<>
@@ -116,31 +66,6 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
         >
           <ScrollText size={14} /> View logs
         </a>
-        {["failed", "compensation_failed", "compensated", "cancelled"].includes(op.status) && (
-          <PermissionGate permission="operations.cancel">
-            <Btn loading={actionBusy === "retry"} disabled={actionBusy !== null} onClick={onRetry}>
-              <RefreshCw size={14} /> Retry
-            </Btn>
-          </PermissionGate>
-        )}
-        {["failed", "compensation_failed"].includes(op.status) && (
-          <PermissionGate permission="operations.cancel">
-            <Btn variant="ghost" loading={actionBusy === "finalize"} disabled={actionBusy !== null} onClick={onFinalize}>
-              <Wrench size={14} /> Finalize
-            </Btn>
-          </PermissionGate>
-        )}
-        {active && (
-          <PermissionGate permission="operations.cancel">
-          <Btn
-            onClick={onCancel}
-            loading={actionBusy === "cancel"}
-            disabled={actionBusy !== null}
-          >
-            <Ban size={14} /> Cancel
-          </Btn>
-          </PermissionGate>
-        )}
         </>}
       />
 
@@ -199,6 +124,11 @@ export function EngineOpDetailPage({ opId }: { opId: number }) {
                     ))}
                   </div>
                 </div>
+              )}
+              {["failed", "compensation_failed", "compensated", "cancelled"].includes(op.status) && (
+                <p className="text-xs text-muted">
+                  Retry or finalize from the CLI: <code className="font-mono text-fg-dim">ocd ops retry {op.id}</code> · <code className="font-mono text-fg-dim">ocd ops finalize {op.id}</code>
+                </p>
               )}
               {op.error?.superseded_by && (
                 <a href={`#/engine/op/${op.error.superseded_by}`} className="inline-flex items-center gap-1 text-sm text-fg underline decoration-line-strong underline-offset-2 hover:decoration-fg">

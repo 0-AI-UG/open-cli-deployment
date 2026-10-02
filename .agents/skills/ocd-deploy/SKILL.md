@@ -25,7 +25,7 @@ trigger integration; GitHub Actions is not part of app delivery.
   and ensure the release commit contains the features running in production.
 - For persistent data, inspect the actual driver and mount; a local directory
   is not a separately billed Hetzner volume or an enforced size reservation.
-- Do not delete, purge, rollback, migrate, or recover resources
+- Do not delete, purge, migrate, or recover resources
   without explicit user intent.
 
 ## Core model
@@ -109,7 +109,6 @@ ocd app deployments <app>
 ocd app replicas <app>
 ocd logs <app> [--tail=N]
 ocd restart <app>
-ocd rollback <app> [--deployment=<id>]
 ocd pause <app>
 ocd unpause <app>
 ocd envs <list|show|create|copy|rename|set|unset|deleted|restore|remove|purge>
@@ -140,7 +139,7 @@ OCD injects topic-scoped publish/subscribe tokens; use
 - [Stack manifest](docs/stack-manifest.md)
 - [Build workers and webhooks](docs/build-workers-and-webhooks.md)
 - [Immutable images and health](docs/immutable-images-and-health.md)
-- [Releases and rollback](docs/releases-and-rollback.md)
+- [Releases](docs/releases.md)
 - [CLI reference](docs/cli-reference.md)
 - [Environments and secrets](docs/environments-and-secrets.md)
 - [Networking and ingress](docs/networking-and-ingress.md)

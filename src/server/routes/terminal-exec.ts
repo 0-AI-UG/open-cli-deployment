@@ -2,7 +2,6 @@ import * as db from "../../shared/db.ts";
 import { sshExec } from "../../shared/remote/index.ts";
 import { authenticateRequest } from "../lib/auth.ts";
 import { AuthError } from "../lib/errors.ts";
-import { appScope } from "../lib/permissions.ts";
 
 function log(context: string, ...args: unknown[]) {
   console.log(`[${new Date().toISOString()}] [terminal-exec:${context}]`, ...args);
@@ -19,7 +18,7 @@ export function parseTarget(raw: unknown): { kind: TargetKind; id: number } | nu
   return { kind: m[1] as TargetKind, id: parseInt(m[2], 10) };
 }
 
-export function resolveTerminalTarget(kind: TargetKind, id: number): { ip: string; hostKey?: string; container?: string; appId?: number } | { error: string } {
+export function resolveTerminalTarget(kind: TargetKind, id: number): { ip: string; hostKey?: string; container?: string } | { error: string } {
   if (kind === "server") {
     const srv = db.getServer(id);
     if (!srv) return { error: "server not found" };
@@ -30,7 +29,7 @@ export function resolveTerminalTarget(kind: TargetKind, id: number): { ip: strin
     if (!replica) return { error: "replica not found" };
     const srv = db.getServer(replica.server_id);
     if (!srv) return { error: "replica's server not found" };
-    return { ip: srv.ipv4, hostKey: srv.ssh_host_key || undefined, container: replica.container_name, appId: replica.app_id };
+    return { ip: srv.ipv4, hostKey: srv.ssh_host_key || undefined, container: replica.container_name };
   }
   return { error: "bad target" };
 }
@@ -78,12 +77,10 @@ export async function handleTerminalExec(request: Request): Promise<Response> {
 
   // A shell inside a container and a shell on the host are very different
   // grants: the latter is root-equivalent over every workload on that machine.
-  // Pick the permission from what the target actually resolved to, and scope
-  // the container case to the app that owns the replica.
+  // Pick the permission from what the target actually resolved to.
   if (!user.is_admin) {
     const permission = resolved.container ? "terminal.container" : "terminal.host";
-    const scope = resolved.appId != null ? appScope(resolved.appId) : undefined;
-    if (!db.hasPermission(auth.userId, permission, scope)) {
+    if (!db.hasPermission(auth.userId, permission)) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
   }

@@ -191,6 +191,26 @@ describe("runMigrations", () => {
     expect(db.query("SELECT config_revision FROM apps WHERE id = 1").get()).toEqual({ config_revision: before + 1 });
   });
 
+  test("migration 126 drops GitHub identity, post-start, rollback, and scoped grants", () => {
+    const db = freshDb();
+    runMigrationsWithImageCutover(db, 125);
+    db.run("INSERT INTO users (id, username, password_hash, github_id, github_username) VALUES ('u1', 'ops', 'x', 42, 'octo')");
+    db.run(`INSERT INTO user_permissions (user_id, permission, scope_type, scope_id) VALUES
+      ('u1', 'apps.deploy', 'global', NULL), ('u1', 'apps.rollback', 'global', NULL), ('u1', 'apps.view', 'app', '7')`);
+    db.run("INSERT INTO settings (key, value) VALUES ('github_oauth_client_id', 'cid')");
+
+    migrations.find((m) => m.version === 126)!.up(db);
+
+    const columns = (table: string) => (db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
+    for (const column of ["github_id", "github_username", "github_avatar_url", "github_linked_at"]) {
+      expect(columns("users")).not.toContain(column);
+    }
+    expect(columns("apps")).not.toContain("post_start_command");
+    expect(db.query("SELECT username FROM users").get()).toEqual({ username: "ops" });
+    expect(db.query("SELECT permission FROM user_permissions").all()).toEqual([{ permission: "apps.deploy" }]);
+    expect(db.query("SELECT 1 FROM settings WHERE key = 'github_oauth_client_id'").get()).toBeNull();
+  });
+
   test("migration 125 drops removed-feature columns and keeps everything else", () => {
     const db = freshDb();
     runMigrationsWithImageCutover(db, 124);

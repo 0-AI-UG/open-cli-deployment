@@ -20,7 +20,8 @@ CLI-minted token additionally requires `cli.access`; revoking it disables CLI
 use without removing the user's web grants.
 
 Admins bypass ordinary permission checks. Non-admins require the exact
-permission, globally or at a supported resource scope.
+permission. Permissions are global grants; there are no per-app,
+per-environment, or per-stack scopes.
 
 ## Permission model
 
@@ -31,7 +32,7 @@ Read permissions:
 
 App permissions:
 
-- `apps.deploy`, `apps.rollback`, `apps.restart`, `apps.pause`, `apps.destroy`,
+- `apps.deploy`, `apps.restart`, `apps.pause`, `apps.destroy`,
   `apps.logs`, `apps.storage.bind`, `apps.notifications.bind`.
 
 Stack/environment:
@@ -47,15 +48,6 @@ Scaling/infrastructure:
 - `resources.view`, `resources.delete`;
 - `operations.cancel`, `operations.manage`;
 - `terminal.container`, `terminal.host`.
-
-Scopes:
-
-- app grants can cover an individual app;
-- environment grants can cover that environment and applicable linked-app
-  actions;
-- stack permissions are scoped through the stack's environment;
-- new-app deployment and infrastructure operations are global-only where no
-  resource exists to scope yet.
 
 `environments.manage` does not grant access to variable values.
 `environments.secrets` is separately required to read/write them.
@@ -73,14 +65,13 @@ Scopes:
 - `resources.delete`, `servers.delete`, and `volumes.delete` can remove
   Hetzner resources/data.
 
-Apply least privilege and prefer app/environment scopes.
+Apply least privilege: grant only the permissions a user needs.
 
 ## Confirmation model
 
 High-risk destructive actions use a server-issued, single-use,
 resource-bound confirmation. The CLI opens a web page showing an action
-summary; the normal web panel converts its destructive dialog into the same
-server-side confirmation. Approval is bound to:
+summary; the panel itself does not start operations. Approval is bound to:
 
 - user;
 - action;

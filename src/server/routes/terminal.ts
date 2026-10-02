@@ -47,8 +47,7 @@ function checkPermission(userId: string, target: TerminalWsData["target"]): bool
 
   if (target.kind === "server") return db.hasPermission(userId, "terminal.host");
   if (target.kind === "replica") {
-    const replica = db.getReplica(target.id);
-    return db.hasPermission(userId, "terminal.container", replica ? { appId: replica.app_id } : undefined);
+    return db.hasPermission(userId, "terminal.container");
   }
   return false;
 }

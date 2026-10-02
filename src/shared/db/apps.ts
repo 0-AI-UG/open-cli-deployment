@@ -62,7 +62,6 @@ export type AppRow = {
   cpu_limit: number; // per-container CPU ceiling in cores (fractional allowed); 0 = platform default
   command_json: string;
   cap_add_json: string;
-  post_start_command: string;
   health_check: number; // 1 = HTTP probe (default); 0 = only verify the container is running
   health_check_mode: string;
   health_check_command: string;
@@ -258,7 +257,6 @@ type InsertAppFields = {
   desired_volume_driver?: string;
   command?: string[];
   cap_add?: string[];
-  post_start_command?: string;
 } & AppIngressSettings;
 
 // The single apps-table INSERT, shared by insertApp and
@@ -277,7 +275,7 @@ function insertAppRow(app: InsertAppFields): AppRow {
   const internalProtocol: InternalProtocol = app.internal_protocol ?? "http";
   return db
     .query(
-      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, rate_limit_rps, health_check_path, compress, placement, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json, post_start_command) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, rate_limit_rps, health_check_path, compress, placement, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     )
     .get(
       app.name,
@@ -306,7 +304,6 @@ function insertAppRow(app: InsertAppFields): AppRow {
       app.desired_volume_driver ?? "",
       JSON.stringify(app.command ?? []),
       JSON.stringify(app.cap_add ?? []),
-      app.post_start_command ?? "",
     ) as AppRow;
 }
 
@@ -553,10 +550,10 @@ export function parseAppCapabilities(app: Pick<AppRow, "cap_add_json">): string[
 
 export function updateAppRuntimeOptions(
   id: number,
-  options: { command: string[]; capAdd: string[]; postStartCommand: string },
+  options: { command: string[]; capAdd: string[] },
 ): void {
-  db.query("UPDATE apps SET command_json = ?, cap_add_json = ?, post_start_command = ? WHERE id = ?")
-    .run(JSON.stringify(options.command), JSON.stringify(options.capAdd), options.postStartCommand, id);
+  db.query("UPDATE apps SET command_json = ?, cap_add_json = ? WHERE id = ?")
+    .run(JSON.stringify(options.command), JSON.stringify(options.capAdd), id);
 }
 
 /** Set the per-app memory ceiling in MB. 0 = use the platform default. Applied

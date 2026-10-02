@@ -266,23 +266,3 @@ export async function startAppReplicaWithSsh(
   return { containerId: result.stdout.trim() };
 }
 
-/** Run an idempotent setup command inside a healthy app container. */
-export async function runAppPostStartCommand(
-  ip: string,
-  containerName: string,
-  command: string,
-  hostKey?: string,
-): Promise<void> {
-  if (!command.trim()) return;
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(containerName)) {
-    throw new Error(`Invalid container name: ${containerName}`);
-  }
-  const result = await sshExec(
-    ip,
-    asUser(`docker exec ${containerName} sh -c ${shellSingleQuote(command)}`),
-    hostKey,
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(describeFailure("Post-start command failed", result));
-  }
-}

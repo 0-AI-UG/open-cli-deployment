@@ -274,22 +274,6 @@ export type StackDetail = {
   apps: StackMemberApp[];
 };
 
-export type ScopeType = "global" | "environment" | "app";
-
-/** One permission row. `scopeId` is null exactly when scopeType is "global";
- *  otherwise it is an app id or environment id, stringified. */
-export type PermissionGrant = {
-  permission: string;
-  scopeType: ScopeType;
-  scopeId: string | null;
-};
-
-/** What a client-side permission check is about. */
-export type PermissionScope = {
-  appId?: number | null;
-  environmentId?: number | null;
-};
-
 export type AdminUser = {
   id: string;
   username: string;
@@ -302,13 +286,8 @@ export type AdminUser = {
 
 /** GET /api/admin/users/:id/permissions */
 export type UserPermissionsResponse = {
-  grants: PermissionGrant[];
   permissions: string[];
   allPermissions: string[];
-  scopablePermissions: string[];
-  /** Per-permission scope kinds, mirroring PERMISSION_SCOPES in
-   *  shared/db/users.ts. A permission absent from this map is global-only. */
-  scopeKinds?: Record<string, Array<"environment" | "app">>;
 };
 
 export type PanelApp = {

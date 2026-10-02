@@ -13,7 +13,7 @@ require no GitHub Actions runner.
 - [Stack manifest](docs/stack-manifest.md)
 - [Build workers and webhooks](docs/build-workers-and-webhooks.md)
 - [Immutable images and health](docs/immutable-images-and-health.md)
-- [Releases and rollback](docs/releases-and-rollback.md)
+- [Releases](docs/releases.md)
 - [Environments and secrets](docs/environments-and-secrets.md)
 - [Networking and ingress](docs/networking-and-ingress.md)
 - [Hetzner infrastructure](docs/hetzner-infrastructure.md)

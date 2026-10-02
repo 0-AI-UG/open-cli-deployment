@@ -28,7 +28,6 @@ export {
   markerFreshnessHealthCheck,
   assessMarkerFreshness,
   startAppReplica,
-  runAppPostStartCommand,
   writeEnvDeployFile,
   getContainerLogs,
   restartContainer,

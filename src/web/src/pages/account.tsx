@@ -2,9 +2,9 @@ import { UserNtfySettings } from "../components/ntfy-settings.tsx";
 import { useState, useEffect } from "react";
 import { get, post } from "../api/client.ts";
 import { Badge, Card, CardHeader, Btn, Spinner, showToast, PageShell, PageHeader } from "../components/ui.tsx";
-import { User, Shield, Fingerprint, Trash2, LogOut, GitBranch, LinkIcon, Unlink, Plus } from "lucide-react";
+import { Shield, Fingerprint, Trash2, LogOut, Plus } from "lucide-react";
 import { startRegistration, browserSupportsWebAuthn } from "@simplewebauthn/browser";
-import { logout, useAuth, updateUser } from "../stores/auth.ts";
+import { logout } from "../stores/auth.ts";
 
 type PasskeyInfo = { id: string; name: string; deviceType: string; backedUp: boolean; createdAt: string };
 
@@ -120,124 +120,11 @@ function SecuritySection() {
   );
 }
 
-function GitHubSection() {
-  const { user } = useAuth();
-  const [status, setStatus] = useState<{ linked: boolean; githubUsername: string; avatarUrl: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  const refresh = () => {
-    get("/api/auth/github/status")
-      .then(setStatus)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    refresh();
-    // Check for OAuth callback result in URL
-    const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
-    if (params.get("github") === "linked") {
-      showToast("GitHub account linked", "success");
-      // Refresh user data so the auth store is up to date
-      get("/api/me").then((data: { user?: Parameters<typeof updateUser>[0] }) => { if (data.user) updateUser(data.user); }).catch(() => {});
-      // Clean URL
-      window.location.hash = "#/account";
-    } else if (params.get("github") === "error") {
-      const reason = params.get("reason") || "unknown";
-      const messages: Record<string, string> = {
-        missing_params: "GitHub did not return the expected parameters",
-        invalid_state: "Session expired. Please try again.",
-        not_configured: "GitHub OAuth is not configured by the admin",
-        token_exchange: "Failed to exchange code with GitHub",
-        user_fetch: "Failed to fetch your GitHub profile",
-        internal: "An internal error occurred",
-      };
-      showToast(messages[reason] || "Failed to link GitHub", "error");
-      window.location.hash = "#/account";
-    }
-  }, []);
-
-  const linkGitHub = async () => {
-    setBusy(true);
-    try {
-      const { url } = await get("/api/auth/github/authorize") as { url: string };
-      window.location.href = url;
-    } catch (err: any) {
-      showToast(err.message || "Failed to start GitHub OAuth", "error");
-      setBusy(false);
-    }
-  };
-
-  const unlinkGitHub = async () => {
-    setBusy(true);
-    try {
-      await post("/api/auth/github/unlink");
-      showToast("GitHub account unlinked", "success");
-      setStatus({ linked: false, githubUsername: "", avatarUrl: "" });
-      // Refresh user data
-      get("/api/me").then((data: { user?: Parameters<typeof updateUser>[0] }) => { if (data.user) updateUser(data.user); }).catch(() => {});
-    } catch (err: any) {
-      showToast(err.message || "Failed to unlink", "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (loading) return <Card className="flex justify-center p-6"><Spinner /></Card>;
-
-  const linked = status?.linked || user?.githubLinked;
-  const username = status?.githubUsername || user?.githubUsername || "";
-  const avatar = status?.avatarUrl || user?.githubAvatarUrl || "";
-
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader
-        icon={<GitBranch size={15} />}
-        title="GitHub"
-        description="Connected identity"
-        actions={linked ? <Badge tone="success">Linked</Badge> : undefined}
-      />
-      {linked ? (
-        <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            {avatar ? (
-              <img src={avatar} alt="" className="h-8 w-8 shrink-0 rounded-full border bg-subtle" />
-            ) : (
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border bg-subtle text-muted">
-                <User size={15} />
-              </span>
-            )}
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-fg">@{username}</div>
-              <p className="truncate font-mono text-xs text-muted">github.com/{username}</p>
-            </div>
-          </div>
-          <Btn loading={busy} onClick={unlinkGitHub}>
-            <Unlink size={14} /> Unlink
-          </Btn>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium text-fg">Not linked</div>
-            <p className="text-xs text-muted">Link your GitHub identity to your OCD account.</p>
-          </div>
-          <Btn loading={busy} onClick={linkGitHub}>
-            <LinkIcon size={14} /> Link GitHub
-          </Btn>
-        </div>
-      )}
-    </Card>
-  );
-}
-
 export function AccountPage() {
   return (
     <PageShell width="md">
       <PageHeader title="Account" description="Profile, connected identities, and sign-in security." />
 
-      <GitHubSection />
       <SecuritySection />
       <UserNtfySettings />
     </PageShell>

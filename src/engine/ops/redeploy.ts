@@ -8,7 +8,6 @@ import {
   pullImmutableImage,
   probeAppHealth,
   startAppReplica,
-  runAppPostStartCommand,
 } from "../../shared/remote/index.ts";
 import {
   platformEnvVars,
@@ -97,7 +96,6 @@ function candidateApp(app: AppRow, candidate: DeployRequest | null): AppRow {
     internal_protocol: candidate.internal_protocol ?? "http",
     command_json: JSON.stringify(candidate.command ?? []),
     cap_add_json: JSON.stringify(candidate.cap_add ?? []),
-    post_start_command: candidate.post_start_command ?? "",
     config_revision: app.config_revision + 1,
   };
 }
@@ -475,18 +473,6 @@ const healthCheckStep: Step<RedeployInput, HealthOut> = {
       const attestation = await attestReplica(app, replica, server, expected);
       if (!attestation.ok) throw new Error(`Replica ${replica.id} revision attestation failed: ${attestation.error}`);
       db.updateReplicaStatus(replica.id, "running");
-    }
-    if (app.post_start_command) {
-      const first = replicas[0];
-      const server = first ? db.getServer(first.server_id) : null;
-      if (!first || !server) throw new Error("Primary replica missing for post-start setup");
-      await runAppPostStartCommand(
-        server.ipv4,
-        first.container_name,
-        app.post_start_command,
-        server.ssh_host_key || undefined,
-      );
-      db.appendDeployLog(ctx.input.appId, "[post-start] Setup completed");
     }
     db.appendDeployLog(
       ctx.input.appId,

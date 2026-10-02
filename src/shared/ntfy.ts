@@ -78,7 +78,7 @@ export function canReceiveNtfy(userId: string, key: string, recovered: boolean):
   if (user.is_admin) return true;
   if (category === "app") {
     const appId = Number(key.slice(4));
-    return !!getApp(appId) && hasPermission(userId, "apps.view", { appId });
+    return !!getApp(appId) && hasPermission(userId, "apps.view");
   }
   // Delivery targets may include several resources. Until each target is resolved,
   // fleet and backup incidents are admin-only rather than leaking operation names.

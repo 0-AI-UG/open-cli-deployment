@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { get } from "../api/client.ts";
 import { Activity, Ban, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, RotateCcw, XCircle } from "lucide-react";
-import { Badge, Btn, Card, PageShell, PageHeader, PageState, Spinner, StatusBadge } from "../components/ui.tsx";
+import { Badge, Btn, Card, Spinner, StatusBadge } from "../components/ui.tsx";
 import { useHashParam } from "../hooks/use-hash-param.ts";
 import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
 import { humanizeStep, type OperationView } from "../hooks/useOperation.ts";
@@ -49,7 +49,7 @@ function heartbeatLabel(raw: string | null): { text: string; healthy: boolean } 
   return { text: `stale (${Math.round(age / 1000)}s)`, healthy: false };
 }
 
-export function EnginePage() {
+export function OperationsPanel() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [filter, setFilter] = useHashParam("filter", FILTERS.map((option) => option.value), "all");
   const [page, setPage] = useState(0);
@@ -83,7 +83,7 @@ export function EnginePage() {
     };
   }, [filter, page]);
 
-  if (!snap) return <PageState title="Loading operations" />;
+  if (!snap) return <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading operations…</Card>;
 
   const hb = heartbeatLabel(snap.engine.heartbeat);
   const historyLoading = loadedHistoryKey !== historyKey;
@@ -91,14 +91,14 @@ export function EnginePage() {
   const historyTotal = snap.recent_total ?? snap.recent.length;
 
   return (
-    <PageShell>
-      <PageHeader title="Operations" description="Queued, running, and recently completed engine work." actions={<>
-          <Badge tone={hb.healthy ? "success" : "danger"}>
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
-            Heartbeat {hb.text}
-          </Badge>
-          <Badge>Concurrency {snap.engine.concurrency}</Badge>
-      </>} />
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={hb.healthy ? "success" : "danger"}>
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+          Engine heartbeat {hb.text}
+        </Badge>
+        <Badge>Concurrency {snap.engine.concurrency}</Badge>
+      </div>
 
       <Section title="Running" count={snap.running.length}>
         {snap.running.length === 0 ? (
@@ -161,7 +161,7 @@ export function EnginePage() {
           <OpList ops={snap.recent} />
         )}
       </Section>
-    </PageShell>
+    </div>
   );
 }
 

@@ -67,7 +67,7 @@ belong in this object.
 ## Other top-level fields
 
 `$schema`, `$llm`, `name`, `description`, `icon`, `build`, `image`,
-`container_port`, `env`, `outputs`, `storage`, `command`, `cap_add`, `post_start`,
+`container_port`, `env`, `outputs`, `storage`, `command`, `cap_add`,
 `environment`, required `volume` (`null` for none),
 `suggested_app_name`, `domain`, `placement`, `public`, `memory_mb`,
 `cpu_limit`, `health_check`, `internal_protocol`, `rate_limit_rps`, and

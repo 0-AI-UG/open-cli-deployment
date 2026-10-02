@@ -72,7 +72,6 @@ export function buildStackAppSpec(
   if (cpuLimit !== undefined) spec.cpu_limit = cpuLimit;
   if (manifest.command) spec.command = manifest.command;
   if (manifest.cap_add) spec.cap_add = manifest.cap_add;
-  if (manifest.post_start?.command) spec.post_start_command = manifest.post_start.command;
   if (healthCheck?.enabled === false) spec.health_check = false;
   if (healthCheck?.mode) spec.health_check_mode = healthCheck.mode;
   if (healthCheck?.mode) spec.health_check = healthCheck.mode === "http";

@@ -192,7 +192,7 @@ async function opsShow(id: number): Promise<void> {
     console.log();
     for (const step of op.steps) {
       if (step.phase === "compensate") {
-        const label = `rollback ${step.step}`.padEnd(24);
+        const label = `compensate ${step.step}`.padEnd(24);
         console.log(`  ${RED}${label}${RESET} ${step.detail || step.status}`);
       } else {
         const label = step.step.padEnd(24);

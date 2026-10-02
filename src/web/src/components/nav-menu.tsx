@@ -7,17 +7,12 @@ import {
   Boxes,
   CheckCircle2,
   ChevronsUpDown,
-  Cloud,
-  Database,
   Gauge,
   HardDrive,
   History,
-  Network,
   PanelsTopLeft,
-  Rocket,
   Server,
   ShieldCheck,
-  Wrench,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -48,86 +43,65 @@ const MENUS: Menu[] = [
   { key: "environments", label: "Environments", href: "#/environments", match: /^#\/environments/ },
   {
     key: "resources",
-    label: "Resources",
+    label: "Infrastructure",
     match: /^#\/resources/,
-    width: 920,
+    width: 700,
     columns: [
-      { title: "Overview", links: [
-        { label: "Cost and inventory", description: "Monthly estimate and everything running", href: "#/resources" },
-      ] },
       { title: "Compute", links: [
-        { label: "Servers", description: "Hetzner machines, load and pricing", href: "#/resources?section=servers" },
+        { label: "Servers", description: "Hetzner machines, load and pricing", href: "#/resources" },
       ] },
       { title: "Storage", links: [
         { label: "Volumes", description: "Persistent disks attached to apps", href: "#/resources?section=volumes" },
         { label: "Object storage", description: "S3 buckets for files and backups", href: "#/resources?section=object-storage" },
       ] },
-      { title: "Maintenance", links: [
-        { label: "Tools", description: "Audits and cleanup for your infrastructure", href: "#/resources?section=tools" },
-      ] },
     ],
-    footer: { label: "All resources", href: "#/resources" },
-    related: [{ label: "Environments", href: "#/environments" }, { label: "Operations", href: "#/engine" }],
+    footer: { label: "All infrastructure", href: "#/resources" },
+    related: [{ label: "Environments", href: "#/environments" }, { label: "Activity", href: "#/engine" }],
   },
   {
-    key: "incidents",
-    label: "Incidents",
-    match: /^#\/incidents/,
+    key: "activity",
+    label: "Activity",
+    match: /^#\/(engine|incidents)/,
     width: 760,
     columns: [
-      { links: [{ label: "Active", description: "Conditions that need attention now", href: "#/incidents", icon: AlertTriangle }] },
-      { links: [{ label: "Resolved", description: "Recovered incidents and how they ended", href: "#/incidents?status=resolved", icon: CheckCircle2 }] },
-      { links: [{ label: "All incidents", description: "The full history, newest first", href: "#/incidents?status=all", icon: History }] },
-    ],
-    footer: { label: "Open incidents", href: "#/incidents" },
-    related: [{ label: "Operations", href: "#/engine" }],
-  },
-  {
-    key: "operations",
-    label: "Operations",
-    match: /^#\/engine/,
-    width: 760,
-    columns: [
-      { links: [
-        { label: "Activity", description: "Running and pending engine work", href: "#/engine", icon: Activity },
+      { title: "Operations", links: [
+        { label: "All operations", description: "Running, pending and recent engine work", href: "#/engine", icon: Activity },
         { label: "Needs review", description: "Finished, but something should be checked", href: "#/engine?filter=needs_attention", icon: Gauge },
-      ] },
-      { links: [
         { label: "Failures", description: "Operations that failed or were compensated", href: "#/engine?filter=failures", icon: XCircle },
         { label: "Cancelled", description: "Stopped before they finished", href: "#/engine?filter=cancelled", icon: Ban },
       ] },
+      { title: "Incidents", links: [
+        { label: "Active", description: "Conditions that need attention now", href: "#/incidents", icon: AlertTriangle },
+        { label: "Resolved", description: "Recovered incidents and how they ended", href: "#/incidents?status=resolved", icon: CheckCircle2 },
+        { label: "All incidents", description: "The full history, newest first", href: "#/incidents?status=all", icon: History },
+      ] },
     ],
-    footer: { label: "All operations", href: "#/engine" },
-    related: [{ label: "Incidents", href: "#/incidents" }],
+    footer: { label: "Open activity", href: "#/engine" },
   },
   {
-    key: "admin",
-    label: "Admin",
+    key: "settings",
+    label: "Settings",
     match: /^#\/admin/,
     adminOnly: true,
-    width: 880,
+    width: 760,
     columns: [
       { links: [
-        { label: "Overview", description: "Deploy readiness and next actions", href: "#/admin", icon: Rocket },
-        { label: "Hetzner", description: "API token, project and locations", href: "#/admin?section=hetzner", icon: HetznerIcon },
-      ] },
-      { links: [
-        { label: "Infrastructure", description: "App domain, network and defaults", href: "#/admin?section=infrastructure", icon: Network },
-        { label: "Build and registry", description: "Git connections, registries and workers", href: "#/admin?section=build", icon: Boxes },
+        { label: "Hetzner and domain", description: "API token, Object Storage and app domain", href: "#/admin", icon: HetznerIcon },
+        { label: "Build", description: "Git connections, registries and workers", href: "#/admin?section=build", icon: Boxes },
       ] },
       { links: [
         { label: "Panel", description: "The self-hosted panel and its updates", href: "#/admin?section=panel", icon: PanelsTopLeft },
-        { label: "Users and security", description: "Accounts, GitHub sign-in and 2FA", href: "#/admin?section=users", icon: ShieldCheck },
+        { label: "Users", description: "Accounts, permissions and 2FA", href: "#/admin?section=users", icon: ShieldCheck },
       ] },
     ],
-    footer: { label: "Open admin", href: "#/admin" },
+    footer: { label: "Open settings", href: "#/admin" },
     related: [{ label: "Account", href: "#/account" }],
   },
 ];
 
 // Icons for the column headings of a list-style menu, so the plain list still
 // scans like the icon menus next to it.
-const COLUMN_ICONS: Record<string, LucideIcon> = { Overview: Database, Compute: Server, Storage: HardDrive, Maintenance: Wrench };
+const COLUMN_ICONS: Record<string, LucideIcon> = { Compute: Server, Storage: HardDrive, Operations: Activity, Incidents: AlertTriangle };
 
 const CLOSE_DELAY = 160;
 

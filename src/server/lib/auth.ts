@@ -7,7 +7,7 @@ export interface TokenPayload {
   userId: string;
   username: string;
   v?: number; // token_version for session revocation (optional for backward compat)
-  client?: "cli" | "ui-cli"; // browser tokens omit this; command runners carry their origin
+  client?: "cli"; // browser tokens omit this; CLI tokens carry their origin
 }
 
 const rawSecret = new TextEncoder().encode(getJwtSecret());
@@ -44,18 +44,6 @@ export async function createToken(payload: TokenPayload): Promise<string> {
   // while retaining immediate revocation through the user's token_version.
   const expiration = payload.client === "cli" ? "365d" : "7d";
   return new SignJWT(payload as unknown as Record<string, unknown>)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(expiration)
-    .sign(JWT_SECRET);
-}
-
-/** Short-lived credential used by purpose-built UI actions executed through
- * the CLI. It deliberately does not carry the local-CLI gate: the originating
- * browser session is already authenticated and command-specific permissions
- * remain enforced by the normal API handlers. */
-export async function createUiCliToken(payload: Omit<TokenPayload, "client">, expiration = "5m"): Promise<string> {
-  return new SignJWT({ ...payload, client: "ui-cli" } as unknown as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(expiration)

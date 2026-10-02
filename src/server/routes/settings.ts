@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requireAdmin, requirePermission } from "../lib/permissions.ts";
+import { requireAdmin } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import { getHetznerToken, HETZNER_API_TOKEN, secretStore, maskToken } from "../../shared/secret-store.ts";
@@ -19,7 +19,6 @@ const isMasked = (value: string) => value === "****" || value.includes("...");
 const S3_SETTING_KEYS = new Set([HETZNER_S3_ACCESS_KEY, HETZNER_S3_SECRET_KEY, HETZNER_S3_REGION_SETTING]);
 
 const PLAIN_SETTING_KEYS = new Set([
-  "github_oauth_client_id",
   "oci_artifact_ref",
   "oci_registry_username",
   "github_build_username",
@@ -30,7 +29,6 @@ export async function handleGetSettings(request: Request): Promise<Response> {
   try {
     await requireAdmin(request);
     const s = db.getSettings();
-    const githubOauthClientSecret = await secretStore.get("github_oauth_client_secret");
     const registryPassword = await secretStore.get("oci_registry_password");
     const githubBuildToken = await secretStore.get("github_build_token");
     const hetznerToken = await getHetznerToken();
@@ -45,8 +43,6 @@ export async function handleGetSettings(request: Request): Promise<Response> {
         hetzner_s3_region: hetznerS3Region(s),
         hetzner_s3_configured: !!s3AccessKey && !!s3SecretKey,
         hetzner_s3_regions: HETZNER_S3_REGIONS,
-        github_oauth_client_id: s.github_oauth_client_id ?? "",
-        github_oauth_client_secret: maskToken(githubOauthClientSecret ?? ""),
         default_domain_suffix: s.default_domain_suffix ?? "",
         oci_artifact_ref: s.oci_artifact_ref ?? "",
         oci_registry_username: s.oci_registry_username ?? "",
@@ -58,17 +54,6 @@ export async function handleGetSettings(request: Request): Promise<Response> {
       },
       { headers: corsHeaders },
     );
-  } catch (error) {
-    return handleError(error);
-  }
-}
-
-export async function handleGetServerTypes(request: Request): Promise<Response> {
-  try {
-    await requirePermission(request, "servers.create");
-    if (!await getHetznerToken()) return Response.json({ server_types: [] }, { headers: corsHeaders });
-    const types = await hetzner.listServerTypes();
-    return Response.json({ server_types: types }, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
   }
@@ -128,13 +113,6 @@ export async function handleSaveSettings(request: Request): Promise<Response> {
           );
         }
         db.saveSetting(key, suffix);
-      } else if (key === "github_oauth_client_secret") {
-        if (value.includes("...") || value === "****") continue;
-        if (value) {
-          await secretStore.set(key, value);
-        } else {
-          await secretStore.delete(key);
-        }
       } else if (key === "oci_registry_password" || key === "github_build_token") {
         if (value.includes("...") || value === "****") continue;
         if (value) await secretStore.set(key, value);

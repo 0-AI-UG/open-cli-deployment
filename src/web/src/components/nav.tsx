@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle,
+  Activity,
   Check,
-  Cpu,
   HardDrive,
   Home,
   Layers,
@@ -10,10 +9,10 @@ import {
   Menu,
   Monitor,
   Moon,
+  Settings,
   Sun,
   TerminalSquare,
   User,
-  Users,
 } from "lucide-react";
 import { useAuth, logout } from "../stores/auth.ts";
 import { setThemePreference, useResolvedTheme, useThemePreference } from "../stores/theme.ts";
@@ -23,6 +22,11 @@ import { SkillInstallMenu } from "./skill-install-menu.tsx";
 import { DesktopMenuNav } from "./nav-menu.tsx";
 import { Logo, SegmentedControl } from "./ui.tsx";
 
+const navItems = [
+  { hash: "#/", label: "Apps", icon: Home, match: /^#\/?$|^#\/(apps|stacks)/ },
+  { hash: "#/engine", label: "Activity", icon: Activity, match: /^#\/(engine|incidents)/ },
+  { hash: "#/resources", label: "Infrastructure", icon: HardDrive, match: /^#\/resources/ },
+];
 const themeOptions = [
   { value: "system", label: <Monitor size={14} aria-label="System" /> },
   { value: "light", label: <Sun size={14} aria-label="Light" /> },
@@ -102,8 +106,6 @@ function UserMenu({ hash }: { hash: string }) {
   }, [open]);
 
   const initial = (user?.username || "?").charAt(0).toUpperCase();
-  // A blocked or broken avatar URL falls back to the initial instead of an empty ring.
-  const [avatarFailed, setAvatarFailed] = useState(false);
   const itemClass = "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-fg-dim transition-colors hover:bg-subtle hover:text-fg";
 
   return (
@@ -116,9 +118,7 @@ function UserMenu({ hash }: { hash: string }) {
         title={user?.username}
         className={`grid h-8 w-8 place-items-center rounded-full border bg-surface p-0.5 transition-colors hover:border-frame ${open ? "border-frame" : "border-line-strong"}`}
       >
-        {user?.githubAvatarUrl && !avatarFailed
-          ? <img src={user.githubAvatarUrl} alt="" onError={() => setAvatarFailed(true)} className="h-full w-full rounded-full" />
-          : <span className="grid h-full w-full place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">{initial}</span>}
+        <span className="grid h-full w-full place-items-center rounded-full bg-primary text-2xs font-semibold text-primary-fg">{initial}</span>
       </button>
 
       {open && (
@@ -130,7 +130,6 @@ function UserMenu({ hash }: { hash: string }) {
           </div>
           <div className="my-1 border-t" />
           <a href="#/account" role="menuitem" className={itemClass}><User size={15} /> Account</a>
-          {user?.isAdmin && <a href="#/admin" role="menuitem" className={itemClass}><Users size={15} /> Admin</a>}
           <div className="my-1 border-t" />
           <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
             <span className="text-sm text-fg-dim">Theme</span>
@@ -173,12 +172,8 @@ function MobileNav({ hash }: { hash: string }) {
   const { copied, copy } = useInstallCommandCopy();
   useEffect(() => setMoreOpen(false), [hash]);
 
-  const primaryItems = [
-    { hash: "#/", label: "Home", icon: Home, active: /^#\/?$/.test(hash) || /^#\/(apps|stacks)\//.test(hash) },
-    { hash: "#/resources", label: "Resources", icon: HardDrive, active: hash.startsWith("#/resources") },
-    { hash: "#/incidents", label: "Incidents", icon: AlertTriangle, active: hash.startsWith("#/incidents") },
-  ];
-  const moreActive = moreOpen || ["#/environments", "#/engine", "#/admin", "#/account"].some((prefix) => hash.startsWith(prefix));
+  const primaryItems = navItems.map((item) => ({ ...item, label: item.hash === "#/resources" ? "Infra" : item.label, active: item.match.test(hash) }));
+  const moreActive = moreOpen || ["#/environments", "#/admin", "#/account"].some((prefix) => hash.startsWith(prefix));
 
   return (
     <>
@@ -218,8 +213,7 @@ function MobileNav({ hash }: { hash: string }) {
 
       <MobileActionSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Menu" subtitle={user?.username}>
         <MobileSheetAction icon={<Layers size={19} />} label="Environments" detail="Variables, secrets, and rollout behavior" onClick={() => { window.location.hash = "#/environments"; }} />
-        <MobileSheetAction icon={<Cpu size={19} />} label="Operations" detail="Progress, logs, and recovery actions" onClick={() => { window.location.hash = "#/engine"; }} />
-        {user?.isAdmin && <MobileSheetAction icon={<Users size={19} />} label="Admin" detail="Setup, integrations, and users" onClick={() => { window.location.hash = "#/admin"; }} />}
+        {user?.isAdmin && <MobileSheetAction icon={<Settings size={19} />} label="Settings" detail="Hetzner, build, panel, and users" onClick={() => { window.location.hash = "#/admin"; }} />}
         <MobileSheetAction icon={<User size={19} />} label="Account" detail="Security and profile" onClick={() => { window.location.hash = "#/account"; }} />
         <MobileSheetAction icon={copied ? <Check size={19} /> : <TerminalSquare size={19} />} label={copied ? "Copied install command" : "Copy CLI install command"} onClick={copy} />
         <div className="frame flex items-center justify-between bg-surface px-4 py-2.5">

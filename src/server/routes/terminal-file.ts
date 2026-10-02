@@ -3,7 +3,6 @@ import * as db from "../../shared/db.ts";
 import { buildSshArgs, sshExec } from "../../shared/remote/index.ts";
 import { authenticateRequest } from "../lib/auth.ts";
 import { AuthError } from "../lib/errors.ts";
-import { appScope } from "../lib/permissions.ts";
 import { buildRemoteCommand, parseTarget, resolveTerminalTarget } from "./terminal-exec.ts";
 
 const MAX_PATH_BYTES = 16 * 1024;
@@ -41,8 +40,7 @@ export async function handleTerminalFile(request: Request): Promise<Response> {
   if ("error" in resolved) return Response.json({ error: resolved.error }, { status: 404 });
   if (!user.is_admin) {
     const permission = resolved.container ? "terminal.container" : "terminal.host";
-    const scope = resolved.appId == null ? undefined : appScope(resolved.appId);
-    if (!db.hasPermission(auth.userId, permission, scope)) {
+    if (!db.hasPermission(auth.userId, permission)) {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
   }

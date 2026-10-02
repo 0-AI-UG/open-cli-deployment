@@ -34,10 +34,10 @@ import {
   handleGetContainerLogs,
   handleGetDeployLog,
   handleGetDeployments,
-  handleRollbackApp,
+  handleGetApp,
 } from "./routes/apps.ts";
 import { handleDeleteServer, handleRefreshServers } from "./routes/servers.ts";
-import { handleGetSettings, handleSaveSettings, handleGetServerTypes } from "./routes/settings.ts";
+import { handleGetSettings, handleSaveSettings } from "./routes/settings.ts";
 import { handleGetResources, handleGetServerMetricsHistory, handleDeleteResource, handleCreateServer, handleGetVolumeDetail, handleListVolumeFiles, handleGetVolumeFile, handleGetServerDetail, handleGetVolumeDeletionAudit } from "./routes/resources.ts";
 import { handleCreateBucket, handleDeleteBucket, handleGetBucket, handleGetBucketObject, handleListBucketObjects, handleListBuckets } from "./routes/buckets.ts";
 import {
@@ -55,16 +55,9 @@ import {
   handleGetPanelLogs,
   handleGetPanelDeployments,
 } from "./routes/panel.ts";
-import {
-  handleGitHubAuthorize,
-  handleGitHubCallback,
-  handleGitHubUnlink,
-  handleGitHubStatus,
-} from "./routes/github-oauth.ts";
 import { handleDeviceCode, handleDeviceToken, handleDeviceConfirm } from "./routes/device-auth.ts";
 import { handleCreateConfirmation, handlePollConfirmation, handleLookupConfirmation, handleConfirmConfirmation, handleDenyConfirmation } from "./routes/confirmations.ts";
 import { handleCliInstallSh, handleCliDownload } from "./routes/cli.ts";
-import { handleCliActionRun } from "./routes/web-cli.ts";
 import {
   handleGetEnvironments,
   handleGetDeletedEnvironments,
@@ -192,9 +185,6 @@ export const apiRoutes = {
   "/cli/:binary": { GET: (req: Request) => handleCliDownload(req) },
   "/webhooks/github/build/:id": { POST: (req: Request) => handleGitHubBuildWebhook(req, webhookBuildSourceIdFrom(req)) },
 
-  // --- Purpose-built browser actions; executes the actual allowlisted OCD CLI ---
-  "/api/cli-actions/run": { POST: (req: Request) => handleCliActionRun(req) },
-
   // --- Setup ---
   "/api/setup/status": { GET: (req: Request) => handleSetupStatus(req) },
   "/api/setup/complete": { POST: (req: Request) => handleSetupComplete(req) },
@@ -217,12 +207,6 @@ export const apiRoutes = {
     GET: (req: Request) => handleMe(req),
     PUT: (req: Request) => handleUpdateMe(req),
   },
-
-  // --- GitHub OAuth ---
-  "/api/auth/github/authorize": { GET: (req: Request) => handleGitHubAuthorize(req) },
-  "/api/auth/github/callback": { GET: (req: Request) => handleGitHubCallback(req) },
-  "/api/auth/github/unlink": { POST: (req: Request) => handleGitHubUnlink(req) },
-  "/api/auth/github/status": { GET: (req: Request) => handleGitHubStatus(req) },
 
   // --- WebAuthn ---
   "/api/auth/webauthn/register-options": { POST: (req: Request) => handleWebAuthnRegisterOptions(req) },
@@ -273,7 +257,10 @@ export const apiRoutes = {
   "/api/apps/deploy": { POST: (req: Request) => handleDeploy(req) },
 
   // App-specific
-  "/api/apps/:appId": { DELETE: (req: Request) => handleDestroyApp(req, appIdFrom(req)) },
+  "/api/apps/:appId": {
+    GET: (req: Request) => handleGetApp(req, appIdFrom(req)),
+    DELETE: (req: Request) => handleDestroyApp(req, appIdFrom(req)),
+  },
   "/api/apps/:appId/restart": { POST: (req: Request) => handleRestartApp(req, appIdFrom(req)) },
   "/api/apps/:appId/redeploy": { POST: (req: Request) => handleRedeployApp(req, appIdFrom(req)) },
   "/api/apps/:appId/release": { POST: (req: Request) => handleReleaseApp(req, appIdFrom(req)) },
@@ -283,7 +270,6 @@ export const apiRoutes = {
   "/api/apps/:appId/logs": { GET: (req: Request) => handleGetContainerLogs(req, appIdFrom(req)) },
   "/api/apps/:appId/deploy-log": { GET: (req: Request) => handleGetDeployLog(req, appIdFrom(req)) },
   "/api/apps/:appId/deployments": { GET: (req: Request) => handleGetDeployments(req, appIdFrom(req)) },
-  "/api/apps/:appId/rollback": { POST: (req: Request) => handleRollbackApp(req, appIdFrom(req)) },
   "/api/apps/:appId/storage": { GET: (req: Request) => handleGetAppStorage(req, appIdFrom(req)) },
 
   // Scaling
@@ -313,7 +299,6 @@ export const apiRoutes = {
     GET: (req: Request) => handleGetSettings(req),
     PUT: (req: Request) => handleSaveSettings(req),
   },
-  "/api/admin/settings/server-types": { GET: (req: Request) => handleGetServerTypes(req) },
   "/api/admin/connections": { GET: (req: Request) => handleGetConnections(req) },
   "/api/admin/connections/registry": {
     PUT: (req: Request) => handlePutRegistryConnection(req),

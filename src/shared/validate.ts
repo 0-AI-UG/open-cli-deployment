@@ -358,7 +358,6 @@ export function validateDeployRequest(req: {
   compress?: boolean;
   command?: string[];
   cap_add?: string[];
-  post_start_command?: string;
 }): ValidationResult<void> {
   if (req.notifications !== undefined && !NtfyBindingsSchema.safeParse(req.notifications).success) {
     return { valid: false, error: "Invalid notification bindings" };
@@ -387,9 +386,6 @@ export function validateDeployRequest(req: {
     req.cap_add.some((cap) => typeof cap !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(cap))
   )) {
     return { valid: false, error: "Linux capabilities must use names such as CHOWN or SETUID" };
-  }
-  if (req.post_start_command !== undefined && /[\0]/.test(req.post_start_command)) {
-    return { valid: false, error: "Post-start command must not contain NUL bytes" };
   }
 
   if (req.domain) {

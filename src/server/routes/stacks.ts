@@ -1,5 +1,5 @@
 import { corsHeaders } from "../lib/cors.ts";
-import { requirePermission, requireCliPermission, appScope, stackScope } from "../lib/permissions.ts";
+import { requirePermission, requireCliPermission } from "../lib/permissions.ts";
 import { handleError } from "../lib/utils.ts";
 import * as db from "../../shared/db.ts";
 import type { StackDeployRequest } from "../../shared/rpc.ts";
@@ -194,7 +194,7 @@ export async function handleGetStacks(request: Request): Promise<Response> {
 
 export async function handleGetStack(request: Request, stackId: number): Promise<Response> {
   try {
-    await requirePermission(request, "stacks.view", stackScope(stackId));
+    await requirePermission(request, "stacks.view");
     const stack = db.getStack(stackId);
     if (!stack) {
       return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
@@ -260,7 +260,7 @@ export async function handleGetStack(request: Request, stackId: number): Promise
 
 export async function handleGetStackLog(request: Request, stackId: number): Promise<Response> {
   try {
-    await requirePermission(request, "stacks.view", stackScope(stackId));
+    await requirePermission(request, "stacks.view");
     return Response.json({ log: db.getStackLog(stackId) }, { headers: corsHeaders });
   } catch (error) {
     return handleError(error);
@@ -286,20 +286,16 @@ export async function handleGetStackLog(request: Request, stackId: number): Prom
  */
 export async function handleGetStackMemberLogs(request: Request, stackId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "stacks.view", stackScope(stackId));
+    const payload = await requirePermission(request, "stacks.view");
     const stack = db.getStack(stackId);
     if (!stack) {
       return Response.json({ error: "Stack not found" }, { status: 404, headers: corsHeaders });
     }
     const tail = Math.min(Math.max(parseInt(new URL(request.url).searchParams.get("tail") || "100", 10) || 100, 1), 1000);
 
-    // Container output is gated per member: `apps.logs` scoped to each member app.
-    // A member the caller may not read is
-    // dropped from the response instead of 403-ing the request, so a user with a
-    // narrow grant still sees the members they were given.
-    const apps = db
-      .getAppsByStackId(stackId)
-      .filter((a) => db.hasPermission(payload.userId, "apps.logs", appScope(a.id)));
+    // Container output additionally needs `apps.logs`; without it the stack
+    // view still loads, just with no member output.
+    const apps = db.hasPermission(payload.userId, "apps.logs") ? db.getAppsByStackId(stackId) : [];
 
     const fetchApp = async (app: { id: number; name: string }) => {
       const replicas = db.getReplicas(app.id);
@@ -332,7 +328,7 @@ export async function handleGetStackMemberLogs(request: Request, stackId: number
 
 export async function handleDestroyStack(request: Request, stackId: number): Promise<Response> {
   try {
-    const payload = await requirePermission(request, "stacks.destroy", stackScope(stackId));
+    const payload = await requirePermission(request, "stacks.destroy");
     await enforceConfirmation(request, payload, "delete_stack", "stack", String(stackId));
     const stack = db.getStack(stackId);
     if (!stack) {

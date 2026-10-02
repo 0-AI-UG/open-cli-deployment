@@ -22,7 +22,7 @@ const RUNTIME_CONFIG_FIELDS = new Set([
   "health_check", "health_check_mode", "health_check_command", "health_check_file",
   "health_check_max_age_seconds", "health_check_expected_statuses", "internal_protocol",
   "desired_volume_id", "desired_volume_size", "desired_volume_path", "desired_volume_driver",
-  "command", "cap_add", "post_start_command",
+  "command", "cap_add",
 ]);
 
 /** Classify the least disruptive convergence action for a desired-config diff.
@@ -168,7 +168,6 @@ export function mergeDeployRequestWithExistingApp(
     manifest_hash: supplied.manifest_hash,
     command: supplied.command ?? db.parseAppCommand(app),
     cap_add: supplied.cap_add ?? db.parseAppCapabilities(app),
-    post_start_command: supplied.post_start_command ?? app.post_start_command,
   };
   return merged;
 }
@@ -203,7 +202,6 @@ function normalizedSpec(req: DeployRequest) {
     desired_volume_driver: req.volume_driver ?? "",
     command: req.command ?? [],
     cap_add: req.cap_add ?? [],
-    post_start_command: req.post_start_command ?? "",
   };
 }
 
@@ -241,7 +239,6 @@ function comparableApp(app: AppRow) {
     desired_volume_driver: app.desired_volume_driver || "",
     command: db.parseAppCommand(app),
     cap_add: db.parseAppCapabilities(app),
-    post_start_command: app.post_start_command || "",
   };
 }
 
@@ -280,7 +277,6 @@ export function deployRequestFromApp(app: AppRow): DeployRequest {
     volume_driver: app.desired_volume_driver || undefined,
     command: current.command,
     cap_add: current.cap_add,
-    post_start_command: current.post_start_command,
   };
 }
 
@@ -390,11 +386,10 @@ export async function applyAppConfig(
       health_check: desired.health_check,
     });
   }
-  if (["command", "cap_add", "post_start_command"].some((f) => changed.has(f))) {
+  if (["command", "cap_add"].some((f) => changed.has(f))) {
     db.updateAppRuntimeOptions(app.id, {
       command: desired.command,
       capAdd: desired.cap_add,
-      postStartCommand: desired.post_start_command,
     });
   }
   if (["desired_volume_id", "desired_volume_size", "desired_volume_path", "desired_volume_driver"].some((f) => changed.has(f))) {

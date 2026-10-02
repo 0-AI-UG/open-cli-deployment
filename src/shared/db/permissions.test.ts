@@ -9,16 +9,13 @@ import path from "path";
 import * as db from "../db.ts";
 import {
   ALL_PERMISSIONS,
-  SCOPABLE_PERMISSIONS,
-  getUserGrants,
   getUserPermissions,
   hasPermission,
   setUserPermissions,
-  type PermissionGrant,
 } from "./users.ts";
 import { migrations } from "../migrations.ts";
 import { createToken, authenticateRequest } from "../../server/lib/auth.ts";
-import { appScope, envScope, assertCliAccess } from "../../server/lib/permission-scopes.ts";
+import { assertCliAccess } from "../../server/lib/permissions.ts";
 import { PermissionError } from "../../server/lib/errors.ts";
 
 let seq = 0;
@@ -28,45 +25,16 @@ function makeUser(opts: { isAdmin?: boolean } = {}): string {
   return id;
 }
 
-function makeEnv(name: string): number {
-  return db.insertEnvironment(`${name}-${seq++}`, "{}").id;
-}
-
-function makeApp(environmentId?: number): number {
-  return db.insertApp({
-    name: `app-${seq++}-${Math.random().toString(36).slice(2, 7)}`,
-    domain: "x.example.com",
-    image_ref: `ghcr.io/acme/test@sha256:${"a".repeat(64)}`,
-    container_port: 3000,
-    env_vars: "{}",
-    environment_id: environmentId,
-  }).id;
-}
-
-const grant = (permission: string, scopeType: "global" | "app" | "environment", scopeId?: number | string): PermissionGrant => ({
-  permission,
-  scopeType,
-  scopeId: scopeId == null ? null : String(scopeId),
-});
-
-describe("hasPermission: global grants", () => {
-  test("a global grant satisfies both an unscoped and a scoped check", () => {
+describe("hasPermission", () => {
+  test("a grant satisfies its permission and nothing else", () => {
     const user = makeUser();
-    const env = makeEnv("prod");
-    const app = makeApp(env);
     setUserPermissions(user, ["apps.restart"]);
-
     expect(hasPermission(user, "apps.restart")).toBe(true);
-    expect(hasPermission(user, "apps.restart", { appId: app })).toBe(true);
-    expect(hasPermission(user, "apps.restart", { environmentId: env })).toBe(true);
-    // Unrelated permission is still denied.
     expect(hasPermission(user, "apps.destroy")).toBe(false);
   });
 
   test("a user with no grants at all is denied", () => {
-    const user = makeUser();
-    expect(hasPermission(user, "apps.view")).toBe(false);
-    expect(hasPermission(user, "apps.view", { appId: makeApp() })).toBe(false);
+    expect(hasPermission(makeUser(), "apps.view")).toBe(false);
   });
 
   test("an unknown user id is denied rather than throwing", () => {
@@ -74,125 +42,21 @@ describe("hasPermission: global grants", () => {
   });
 });
 
-describe("hasPermission: app-scoped grants", () => {
-  test("satisfies a check for that app and fails for another app", () => {
+describe("setUserPermissions", () => {
+  test("replaces the previous set and ignores duplicates", () => {
     const user = makeUser();
-    const mine = makeApp();
-    const theirs = makeApp();
-    setUserPermissions(user, [grant("apps.restart", "app", mine)]);
-
-    expect(hasPermission(user, "apps.restart", { appId: mine })).toBe(true);
-    expect(hasPermission(user, "apps.restart", { appId: theirs })).toBe(false);
-  });
-
-  test("does NOT satisfy an unscoped check", () => {
-    // The key safety property: a route that forgot to resolve its scope asks
-    // the fleet-wide question, and a narrow grant must not answer it.
-    const user = makeUser();
-    const app = makeApp();
-    setUserPermissions(user, [grant("apps.destroy", "app", app)]);
-
-    expect(hasPermission(user, "apps.destroy", { appId: app })).toBe(true);
-    expect(hasPermission(user, "apps.destroy")).toBe(false);
-    expect(hasPermission(user, "apps.destroy", {})).toBe(false);
-  });
-
-  test("is invisible to getUserPermissions (global-only view) but present in getUserGrants", () => {
-    const user = makeUser();
-    const app = makeApp();
-    setUserPermissions(user, ["apps.view", grant("apps.destroy", "app", app)]);
-
-    expect(getUserPermissions(user)).toEqual(["apps.view"]);
-    expect(getUserGrants(user)).toEqual(
-      expect.arrayContaining([
-        { permission: "apps.view", scopeType: "global", scopeId: null },
-        { permission: "apps.destroy", scopeType: "app", scopeId: String(app) },
-      ]),
-    );
-    expect(getUserGrants(user)).toHaveLength(2);
-  });
-});
-
-describe("hasPermission: environment-scoped grants", () => {
-  test("covers an app belonging to that environment and not one in another", () => {
-    const user = makeUser();
-    const prod = makeEnv("prod");
-    const staging = makeEnv("staging");
-    const prodApp = makeApp(prod);
-    const stagingApp = makeApp(staging);
-    setUserPermissions(user, [grant("apps.logs", "environment", prod)]);
-
-    expect(hasPermission(user, "apps.logs", { appId: prodApp })).toBe(true);
-    expect(hasPermission(user, "apps.logs", { appId: stagingApp })).toBe(false);
-    // And directly by environment id.
-    expect(hasPermission(user, "apps.logs", { environmentId: prod })).toBe(true);
-    expect(hasPermission(user, "apps.logs", { environmentId: staging })).toBe(false);
-    // Still not a fleet-wide grant.
-    expect(hasPermission(user, "apps.logs")).toBe(false);
-  });
-
-  test("does not cover an app with no environment", () => {
-    const user = makeUser();
-    const prod = makeEnv("prod");
-    const orphan = makeApp();
-    setUserPermissions(user, [grant("apps.logs", "environment", prod)]);
-
-    expect(hasPermission(user, "apps.logs", { appId: orphan })).toBe(false);
-  });
-});
-
-describe("setUserPermissions: scopable catalogue", () => {
-  test("a scoped grant for a non-scopable permission is dropped and never matches", () => {
-    const user = makeUser();
-    const app = makeApp();
-    expect(SCOPABLE_PERMISSIONS.has("servers.delete")).toBe(false);
-
-    setUserPermissions(user, [grant("servers.delete", "app", app)]);
-
-    expect(getUserGrants(user)).toEqual([]);
-    expect(hasPermission(user, "servers.delete")).toBe(false);
-    expect(hasPermission(user, "servers.delete", { appId: app })).toBe(false);
-  });
-
-  test("a GLOBAL grant for a non-scopable permission is kept", () => {
-    const user = makeUser();
-    setUserPermissions(user, ["servers.delete"]);
-    expect(hasPermission(user, "servers.delete")).toBe(true);
-  });
-
-  test("a scoped grant with a missing scope id is dropped", () => {
-    const user = makeUser();
-    setUserPermissions(user, [
-      { permission: "apps.view", scopeType: "app", scopeId: null },
-      { permission: "apps.view", scopeType: "environment", scopeId: "" },
-    ]);
-    expect(getUserGrants(user)).toEqual([]);
-  });
-
-  test("bare strings are stored as global grants and replace the previous set", () => {
-    const user = makeUser();
-    setUserPermissions(user, ["apps.view", "apps.logs"]);
+    setUserPermissions(user, ["apps.view", "apps.logs", "apps.logs"]);
     expect(getUserPermissions(user).sort()).toEqual(["apps.logs", "apps.view"]);
     setUserPermissions(user, ["apps.view"]);
     expect(getUserPermissions(user)).toEqual(["apps.view"]);
   });
-
-  test("every scopable permission is a real permission", () => {
-    for (const p of SCOPABLE_PERMISSIONS) {
-      expect(ALL_PERMISSIONS as readonly string[]).toContain(p);
-    }
-  });
 });
 
 describe("is_admin", () => {
-  test("bypasses every permission, scoped or not, with zero grants", () => {
+  test("bypasses every permission with zero grants", () => {
     const admin = makeUser({ isAdmin: true });
-    const app = makeApp();
-    expect(getUserGrants(admin)).toEqual([]);
-    for (const p of ALL_PERMISSIONS) {
-      expect(hasPermission(admin, p)).toBe(true);
-      expect(hasPermission(admin, p, { appId: app })).toBe(true);
-    }
+    expect(getUserPermissions(admin)).toEqual([]);
+    for (const p of ALL_PERMISSIONS) expect(hasPermission(admin, p)).toBe(true);
     // Even a permission that does not exist.
     expect(hasPermission(admin, "does.not.exist")).toBe(true);
   });
@@ -208,7 +72,7 @@ test("migration 121 preserves accounts holding every previous global permission"
     ...ALL_PERMISSIONS.filter((permission) =>
       !["apps.storage.bind", "apps.notifications.bind", "operations.manage"].includes(permission)),
     // Retired after 121; still part of the catalog that migration froze.
-    "apps.promote", "stacks.promote",
+    "apps.promote", "stacks.promote", "apps.rollback",
   ];
   const insert = d.query("INSERT INTO user_permissions (user_id, permission, scope_type) VALUES (?, ?, 'global')");
   for (const permission of oldPermissions) insert.run("full", permission);
@@ -373,7 +237,7 @@ describe("migration 85", () => {
         ...(ALL_PERMISSIONS as readonly string[]),
         "services.view",
         "volumes.create", "volumes.attach", "volumes.detach", "volumes.resize",
-        "apps.promote", "stacks.promote",
+        "apps.promote", "stacks.promote", "apps.rollback",
       ]).toContain(r.permission);
     }
     // Spot-check a few of the splits.
@@ -388,10 +252,6 @@ describe("migration 85", () => {
   });
 });
 
-// These exercise the permission layer through `permission-scopes.ts` rather
-// than `permissions.ts`. Six route suites call `mock.module` on the latter to
-// bypass auth, and `mock.module` is process-wide — testing requirePermission
-// directly here would silently assert against whichever stub loaded first.
 // `assertCliAccess` is the whole of the CLI gate; requirePermission and
 // requireAuthenticated do nothing but call it.
 describe("cli.access enforcement (assertCliAccess)", () => {
@@ -442,26 +302,6 @@ describe("cli.access enforcement (assertCliAccess)", () => {
     const token = await createToken({ userId: user, username: user, client: "cli" });
     const req = new Request("http://x/api/apps", { headers: { Authorization: `Bearer ${token}` } });
     expect((await authenticateRequest(req)).client).toBe("cli");
-  });
-});
-
-describe("scope helpers", () => {
-  test("appScope lets an app-scoped grant through while the unscoped check is refused", () => {
-    const user = makeUser();
-    const app = makeApp();
-    setUserPermissions(user, [grant("apps.restart", "app", app)]);
-
-    expect(hasPermission(user, "apps.restart", appScope(app))).toBe(true);
-    expect(hasPermission(user, "apps.restart")).toBe(false);
-  });
-
-  test("envScope lets an environment-scoped grant through", () => {
-    const user = makeUser();
-    const env = makeEnv("prod");
-    setUserPermissions(user, [grant("environments.secrets", "environment", env)]);
-
-    expect(hasPermission(user, "environments.secrets", envScope(env))).toBe(true);
-    expect(hasPermission(user, "environments.secrets")).toBe(false);
   });
 });
 

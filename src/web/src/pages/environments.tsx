@@ -1,12 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import { get } from "../api/client.ts";
-import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
-import { Card, CardHeader, Btn, Field, showToast, confirm, confirmWithText, EmptyState, PageShell, PageHeader } from "../components/ui.tsx";
+import { useState, useEffect } from "react";
+import { get, post, put } from "../api/client.ts";
+import { Card, CardHeader, Btn, Field, showToast, confirm, EmptyState, PageShell, PageHeader } from "../components/ui.tsx";
 import { EnvVarEditor, type EnvVarRow } from "../components/env-var-editor.tsx";
-import { useActiveOperations } from "../hooks/useOperation.ts";
+import { trackOperationInToast, useActiveOperations } from "../hooks/useOperation.ts";
+import { useHasPermission } from "../stores/auth.ts";
 import { NeoSelect } from "../components/neo-select.tsx";
 import { PermissionGate } from "../components/permission-gate.tsx";
-import { Layers, Plus, Trash2, Copy, ChevronDown, ChevronRight, Key, RotateCcw } from "lucide-react";
+import { Layers, Plus, Trash2, ChevronDown, ChevronRight, Key } from "lucide-react";
 import type { EnvironmentData } from "../types.ts";
 
 type AttachedApp = { id: number; name: string; status: string; domain: string; runtime_env_vars?: EnvVarRow[] };
@@ -19,26 +19,7 @@ export function EnvironmentsPage() {
   const [rollout, setRollout] = useState<"restart" | "none">("restart");
   const [loading, setLoading] = useState(false);
   const [attachedApps, setAttachedApps] = useState<Record<number, AttachedApp[]>>({});
-  // Inline "copy an environment" bar (source picker + new-name input), opened
-  // from the header Copy button. null = closed.
-  const [copy, setCopy] = useState<{ sourceId: number | null; name: string } | null>(null);
-  const [copyBusy, setCopyBusy] = useState(false);
-  const copyPopoverRef = useRef<HTMLDivElement>(null);
-
-  // Close the copy popover on an outside click — but ignore clicks in the
-  // NeoSelect menu, which is portaled to document.body (outside the ref).
-  useEffect(() => {
-    if (!copy) return;
-    const onDown = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (copyPopoverRef.current && !copyPopoverRef.current.contains(target) && !target.closest("[data-neoselect-menu]")) {
-        setCopy(null);
-      }
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [copy]);
-
+  const canEditSecrets = useHasPermission("environments.secrets");
   const ops = useActiveOperations(
     (op) => op.kind === "cascade_redeploy",
     { rehydrateToasts: true },
@@ -83,46 +64,32 @@ export function EnvironmentsPage() {
   const save = async (id: number | "new") => {
     setLoading(true);
     try {
-      const rows = editVars.filter((e) => e.key.trim());
-      const vars = rows.filter((entry) => !entry.secret).map((entry) => `${entry.key.trim()}=${entry.value}`);
-      const secretVars = rows.filter((entry) => entry.secret).map((entry) => `${entry.key.trim()}=${entry.value}`);
+      const env_vars = editVars
+        .filter((entry) => entry.key.trim())
+        .map((entry) => ({ key: entry.key.trim(), value: entry.value, secret: entry.secret }));
       if (id === "new") {
-        await runCliAction("envs.create", { name: editName, vars, secretVars });
+        await post("/api/environments", { name: editName.trim(), ...(canEditSecrets ? { env_vars } : {}) });
         showToast("Environment created", "success");
       } else {
         const apps = attachedApps[id] || [];
         const activeApps = apps.filter((a) => a.status !== "stopped" && a.status !== "destroying");
-        if (activeApps.length > 0 && rollout !== "none") {
+        if (canEditSecrets && activeApps.length > 0 && rollout !== "none") {
           const ok = await confirm(
             "Reload Apps",
-            `Saving will recreate ${activeApps.length} app(s) from their existing immutable images: ${activeApps.map((a) => a.name).join(", ")}`,
+            `Changed variables will recreate affected apps from their existing immutable images: ${activeApps.map((a) => a.name).join(", ")}`,
             true,
           );
           if (!ok) { setLoading(false); return; }
         }
-        const existing = environments.find((environment) => environment.id === id);
-        if (existing && existing.name !== editName.trim()) {
-          await runCliAction("envs.rename", {
-            environment: String(id),
-            newName: editName.trim(),
-          });
-        }
-        if (rows.length > 0) {
-          await runCliAction("envs.set", {
-            environment: String(id),
-            vars,
-            secretVars,
-            replace: true,
-            rollout,
-          });
-        } else if ((existing?.env_vars.length ?? 0) > 0) {
-          await runCliAction("envs.unset", {
-            environment: String(id),
-            keys: existing!.env_vars.map((entry) => entry.key),
-            rollout,
-          });
-        } else {
-          showToast("Environment updated", "success");
+        // The server handles rename, treats omitted keys as unset, and keeps
+        // masked secret values unchanged.
+        const result = await put(`/api/environments/${id}`, {
+          name: editName.trim(),
+          ...(canEditSecrets ? { env_vars, rollout } : {}),
+        }) as { op_id?: number | null };
+        if (result?.op_id) {
+          trackOperationInToast(result.op_id, "Roll out environment");
+          ops.track(result.op_id);
         }
         showToast("Environment updated", "success");
       }
@@ -132,42 +99,6 @@ export function EnvironmentsPage() {
       showToast(err.message || "Failed to save", "error");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const startCopy = () => {
-    setExpanded(null);
-    const src = environments[0] ?? null;
-    setCopy({ sourceId: src?.id ?? null, name: src ? `${src.name}-copy` : "" });
-  };
-
-  // When the source changes, pre-fill the name with "<source>-copy" unless the
-  // user has already typed a custom name.
-  const pickCopySource = (id: number | null) => {
-    setCopy((c) => {
-      if (!c) return c;
-      const src = environments.find((e) => e.id === id);
-      const prevSrc = environments.find((e) => e.id === c.sourceId);
-      const untouched = c.name === "" || c.name === (prevSrc ? `${prevSrc.name}-copy` : "");
-      return { sourceId: id, name: untouched && src ? `${src.name}-copy` : c.name };
-    });
-  };
-
-  const doCopy = async () => {
-    if (!copy?.sourceId || !copy.name.trim()) return;
-    setCopyBusy(true);
-    try {
-      await runCliAction("envs.copy", {
-        environment: String(copy.sourceId),
-        newName: copy.name.trim(),
-      });
-      showToast("Environment duplicated", "success");
-      setCopy(null);
-      load();
-    } catch (err: any) {
-      showToast(err.message || "Failed to duplicate", "error");
-    } finally {
-      setCopyBusy(false);
     }
   };
 
@@ -193,7 +124,6 @@ export function EnvironmentsPage() {
               rather than the environment lifecycle one. */}
           <PermissionGate
             permission="environments.secrets"
-            environmentId={typeof id === "number" ? id : undefined}
             fallback={
               <p className="text-sm text-muted">
                 Env vars hidden — requires <code className="rounded bg-subtle px-1.5 py-0.5 font-mono text-xs text-fg">environments.secrets</code>
@@ -215,7 +145,7 @@ export function EnvironmentsPage() {
             ))}
           </PermissionGate>
         </div>
-        {typeof id === "number" && (
+        {typeof id === "number" && canEditSecrets && (
           <div className="border-t px-4">
             <Field label="Apply changes" hint="Reloading recreates attached apps from their existing images.">
               <NeoSelect
@@ -246,45 +176,6 @@ export function EnvironmentsPage() {
         title="Environments"
         description="Reusable variables and secrets projected into app deployments."
         actions={<>
-          {environments.length > 0 && (
-            <div className="relative" ref={copyPopoverRef}>
-              <Btn onClick={() => (copy ? setCopy(null) : startCopy())}>
-                <Copy size={14} /> Copy
-              </Btn>
-              {copy && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-72 bg-surface rounded-lg shadow-pop">
-                  <div className="border-b px-3 py-2.5">
-                    <div className="text-sm font-semibold text-fg">Duplicate environment</div>
-                    <p className="text-xs text-muted">Copies every variable into a new environment.</p>
-                  </div>
-                  <div className="space-y-2 p-3">
-                    <NeoSelect
-                      compact
-                      value={copy.sourceId != null ? String(copy.sourceId) : ""}
-                      placeholder="Environment to copy"
-                      options={environments.map((e) => ({ value: String(e.id), label: e.name }))}
-                      onChange={(v) => pickCopySource(v ? parseInt(v) : null)}
-                    />
-                    <input
-                      type="text"
-                      value={copy.name}
-                      onChange={(e) => setCopy((c) => (c ? { ...c, name: e.target.value } : c))}
-                      onKeyDown={(e) => { if (e.key === "Enter") doCopy(); if (e.key === "Escape") setCopy(null); }}
-                      placeholder="New environment name"
-                      className="w-full"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 border-t bg-subtle/40 px-3 py-2.5">
-                    <Btn size="xs" variant="ghost" onClick={() => setCopy(null)}>Cancel</Btn>
-                    <Btn size="xs" variant="primary" loading={copyBusy} disabled={!copy.sourceId || !copy.name.trim() || copyBusy} onClick={doCopy}>
-                      Duplicate
-                    </Btn>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           <Btn variant="primary" onClick={startNew}>
             <Plus size={14} /> New
           </Btn>
@@ -341,31 +232,6 @@ export function EnvironmentsPage() {
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-                      <Btn
-                        variant="ghost"
-                        title="Delete"
-                        onClick={async () => {
-                          if (apps.length > 0) {
-                            showToast(`Cannot delete: used by ${apps.map((a) => a.name).join(", ")}`, "error");
-                            return;
-                          }
-                          if (await confirm("Delete Environment", `Delete "${env.name}"?`, true)) {
-                            try {
-                              await runConfirmedCliAction(
-                                "envs.delete",
-                                { environment: String(env.id) },
-                                { action: "delete_environment", resourceType: "environment", resourceId: env.id },
-                              );
-                              showToast("Environment retained for recovery", "success");
-                              load();
-                            } catch (err: any) {
-                              showToast(err.message || "Failed to delete", "error");
-                            }
-                          }
-                        }}
-                      >
-                        <Trash2 size={15} />
-                      </Btn>
                       <Btn variant="ghost" title={isOpen ? "Collapse" : "Expand"} onClick={() => toggle(env)}>
                         <ChevronDown size={15} className={`transition-transform ${isOpen ? "" : "-rotate-90"}`} />
                       </Btn>
@@ -410,7 +276,7 @@ export function EnvironmentsPage() {
           <CardHeader
             title="Deleted environments"
             icon={<Trash2 size={15} />}
-            description="Recoverable configuration retained separately from apps and stacks."
+            description={<>Recoverable configuration. Restore with <code className="font-mono">ocd envs restore</code>.</>}
           />
           <div className="divide-y">
             {deletedEnvironments.map((environment) => (
@@ -418,55 +284,8 @@ export function EnvironmentsPage() {
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium text-fg">{environment.name}</div>
                   <div className="mt-0.5 text-xs text-muted">
-                    Recovery-protected until {environment.purge_after || "the recovery window ends"}. Purge here can override protection.
+                    Recovery-protected until {environment.purge_after || "the recovery window ends"}.
                   </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Btn
-                    size="xs"
-                    title="Restore environment"
-                    onClick={async () => {
-                      try {
-                        await runCliAction("envs.restore", { environment: String(environment.id) });
-                        showToast("Environment restored", "success");
-                        load();
-                      } catch (err: any) {
-                        showToast(err.message || "Failed to restore", "error");
-                      }
-                    }}
-                  >
-                    <RotateCcw size={13} /> Restore
-                  </Btn>
-                  <Btn
-                    size="xs"
-                    variant="ghost"
-                    onClick={async () => {
-                      if (!await confirmWithText(
-                        "Permanently Delete Environment",
-                        `Permanently delete "${environment.name}" and all its variables? This cannot be undone.`,
-                        environment.name,
-                        `Type ${environment.name} to confirm`,
-                      )) return;
-                      try {
-                        await runConfirmedCliAction(
-                          "envs.purge",
-                          { environment: String(environment.id) },
-                          {
-                            action: "purge_environment",
-                            resourceType: "environment",
-                            resourceId: environment.id,
-                            typedResource: environment.name,
-                          },
-                        );
-                        showToast("Environment permanently deleted", "success");
-                        load();
-                      } catch (err: any) {
-                        showToast(err.message || "Failed to purge", "error");
-                      }
-                    }}
-                  >
-                    <Trash2 size={13} className="text-danger" /> Purge
-                  </Btn>
                 </div>
               </div>
             ))}

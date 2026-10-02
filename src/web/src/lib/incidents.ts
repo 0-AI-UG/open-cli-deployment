@@ -25,7 +25,7 @@ export function incidentGuide(key: string) {
     condition: "A deployment operation failed. The target is awaiting a successful delivery.",
   };
   if (key.startsWith("backup:")) return {
-    category: "Panel backup", linkLabel: "Open admin → Panel",
+    category: "Panel backup", linkLabel: "Open Settings → Panel",
     condition: key === "backup:overdue" ? "No successful scheduled panel backup was recorded within the expected 26-hour window." : "The latest completed panel backup attempt failed.",
   };
   return {

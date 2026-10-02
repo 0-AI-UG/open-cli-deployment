@@ -18,7 +18,7 @@ implementation and migration notes.
 - [Build workers and webhooks](../src/cli/skill/assets/docs/build-workers-and-webhooks.md)
 - [Networking and ingress](../src/cli/skill/assets/docs/networking-and-ingress.md)
 - [Scaling, storage, and placement](../src/cli/skill/assets/docs/scaling-storage-and-placement.md)
-- [Releases and rollback](../src/cli/skill/assets/docs/releases-and-rollback.md)
+- [Releases](../src/cli/skill/assets/docs/releases.md)
 - [Operations and recovery](../src/cli/skill/assets/docs/operations-and-recovery.md)
 - [Security and deletion](../src/cli/skill/assets/docs/security-and-deletion.md)
 - [Troubleshooting](../src/cli/skill/assets/docs/troubleshooting.md)

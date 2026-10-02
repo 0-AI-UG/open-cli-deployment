@@ -2877,6 +2877,24 @@ export const migrations: Migration[] = [
         END`);
     },
   },
+  {
+    version: 126,
+    description: "Remove GitHub identity links, post-start commands, rollback grants, and scoped permissions",
+    up: (db) => {
+      db.run("DELETE FROM user_permissions WHERE scope_type != 'global' OR permission = 'apps.rollback'");
+      db.run("DELETE FROM settings WHERE key = 'github_oauth_client_id'");
+      db.run("DELETE FROM encrypted_secrets WHERE key = 'github_oauth_client_secret'");
+      db.run("DROP INDEX IF EXISTS idx_users_github_id");
+      const drops: Record<string, string[]> = {
+        users: ["github_id", "github_username", "github_avatar_url", "github_linked_at"],
+        apps: ["post_start_command"],
+      };
+      for (const [table, columns] of Object.entries(drops)) {
+        const existing = new Set((db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name));
+        for (const column of columns) if (existing.has(column)) db.run(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+      }
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

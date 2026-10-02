@@ -3,10 +3,7 @@ useTempDataDir();
 
 import { describe, test, expect, mock, beforeEach } from "bun:test";
 
-// Bypass auth for all tests.
-// Bypass the auth half of the permission layer, but spread the real module
-// through so the scope helpers (appScope/stackScope/...) stay real — replacing
-// it wholesale would hand routes `undefined` for those.
+// Bypass the auth half of the permission layer, keeping the rest real.
 const realPermissions = await import("../lib/permissions.ts");
 mock.module("../lib/permissions.ts", () => ({
   ...realPermissions,
@@ -49,7 +46,6 @@ import { secretStore } from "../../shared/secret-store.ts";
 import {
   handleGetSettings,
   handleSaveSettings,
-  handleGetServerTypes,
 } from "./settings.ts";
 
 function req(body?: unknown): Request {
@@ -64,36 +60,18 @@ beforeEach(async () => {
   await secretStore.delete("hetzner_api_token");
   await secretStore.delete("hetzner_s3_access_key");
   await secretStore.delete("hetzner_s3_secret_key");
-  await secretStore.delete("github_oauth_client_secret");
+  await secretStore.delete("github_build_token");
   await secretStore.delete("oci_registry_password");
 });
 
-describe("handleGetSettings", () => {
-  test("masks github_oauth_client_secret", async () => {
-    await secretStore.set("github_oauth_client_secret", "oauth-secret-abc123456789-zzz");
-    const r = await handleGetSettings(req());
-    const body = (await r.json()) as { github_oauth_client_secret: string };
-    expect(body.github_oauth_client_secret).not.toContain("abc123");
-    expect(body.github_oauth_client_secret).toMatch(/\.\.\./);
-  });
-});
-
-describe("handleSaveSettings: github_oauth_client_secret", () => {
-  test("persists a new secret", async () => {
-    await handleSaveSettings(req({ github_oauth_client_secret: "gh-secret-aaa" }));
-    expect(await secretStore.get("github_oauth_client_secret")).toBe("gh-secret-aaa");
-  });
-
-  test("empty value clears the secret", async () => {
-    await secretStore.set("github_oauth_client_secret", "existing");
-    await handleSaveSettings(req({ github_oauth_client_secret: "" }));
-    expect(await secretStore.get("github_oauth_client_secret")).toBeNull();
-  });
-
-  test("masked re-submission is a no-op", async () => {
-    await secretStore.set("github_oauth_client_secret", "keeper");
-    await handleSaveSettings(req({ github_oauth_client_secret: "abc...xyz" }));
-    expect(await secretStore.get("github_oauth_client_secret")).toBe("keeper");
+describe("GitHub build credentials", () => {
+  test("persists, masks, and ignores a masked re-submission of the build token", async () => {
+    await handleSaveSettings(req({ github_build_token: "ghp_buildtoken123456789" }));
+    expect(await secretStore.get("github_build_token")).toBe("ghp_buildtoken123456789");
+    const body = await (await handleGetSettings(req())).json() as Record<string, string>;
+    expect(body.github_build_token).not.toContain("buildtoken123");
+    await handleSaveSettings(req({ github_build_token: body.github_build_token }));
+    expect(await secretStore.get("github_build_token")).toBe("ghp_buildtoken123456789");
   });
 });
 
@@ -147,22 +125,6 @@ describe("handleSaveSettings: plain db settings", () => {
     expect(db.getSettings().require_2fa).toBe("0");
   });
 
-});
-
-describe("handleGetServerTypes", () => {
-  test("returns the Hetzner server types", async () => {
-    await secretStore.set("hetzner_api_token", "x".repeat(40));
-    const r = await handleGetServerTypes(req());
-    expect(r.status).toBe(200);
-    const body = (await r.json()) as { server_types: Array<{ name: string }> };
-    expect(body.server_types.map((t) => t.name)).toContain("cx22");
-  });
-
-  test("returns an empty result when Hetzner is not configured", async () => {
-    const r = await handleGetServerTypes(req());
-    expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ server_types: [] });
-  });
 });
 
 describe("Hetzner settings", () => {

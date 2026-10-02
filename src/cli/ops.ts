@@ -1,4 +1,4 @@
-import { get, post, put, resolveApp, ApiError, type App } from "./api.ts";
+import { get, post, put, resolveApp, ApiError } from "./api.ts";
 import { CYAN, DIM, GREEN, RED, RESET, YELLOW } from "./format.ts";
 
 export interface OperationEventPoll {
@@ -286,7 +286,7 @@ function printChildProgress(
 
 function printFollowEvent(event: OperationEventPoll["steps"][number]): void {
   if (event.phase === "compensate") {
-    const step = `rollback ${event.step}`.padEnd(22);
+    const step = `compensate ${event.step}`.padEnd(22);
     console.log(`  ${RED}${step}${RESET} ${event.detail || event.status}`);
   } else {
     const step = event.step.padEnd(22);
@@ -312,8 +312,6 @@ export interface RunAppOpOptions {
   done: string;
   method?: "POST" | "PUT";
   body?: unknown;
-  /** Pre-resolved app; skips the guard + resolveApp (e.g. rollback). */
-  app?: App;
   /** Optional progress line printed before the request, e.g. "Redeploying". */
   progress?: string;
   /** When true, don't poll the op; just confirm it was queued. */
@@ -326,15 +324,12 @@ export interface RunAppOpOptions {
  * that it was queued.
  */
 export async function runAppOp(opts: RunAppOpOptions): Promise<void> {
-  let app = opts.app;
-  if (!app) {
-    const appName = opts.args[0];
-    if (!appName) {
-      console.error(`Usage: ocd ${opts.command} <app>`);
-      process.exit(1);
-    }
-    app = await resolveApp(appName);
+  const appName = opts.args[0];
+  if (!appName) {
+    console.error(`Usage: ocd ${opts.command} <app>`);
+    process.exit(1);
   }
+  const app = await resolveApp(appName);
 
   if (opts.progress) {
     console.log(`${opts.progress} ${app.name}...`);

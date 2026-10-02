@@ -59,7 +59,6 @@ describe("validateDeployManifest", () => {
         URL: { template: "postgresql://postgres:{env.POSTGRES_PASSWORD}@{app.host}:{app.port}/postgres", secret: true },
       },
       cap_add: ["CHOWN", "SETUID", "SETGID"],
-      post_start: { command: "pg_isready" },
     }, ".ocd-deploy.json")).not.toThrow();
     expect(() => validateDeployManifest({
       name: "database",

@@ -17,17 +17,16 @@ import { VolumeDetailPage } from "./pages/volume-detail.tsx";
 import { BucketDetailPage } from "./pages/bucket-detail.tsx";
 import { ServerDetailPage } from "./pages/server-detail.tsx";
 import { AccountPage } from "./pages/account.tsx";
-import { UsersPage } from "./pages/admin/users.tsx";
+import { SettingsPage } from "./pages/admin/settings.tsx";
 import { UserDetailPage } from "./pages/admin/user-detail.tsx";
 import { TerminalPage } from "./pages/terminal.tsx";
 import { EnvironmentsPage } from "./pages/environments.tsx";
 import { DeviceAuthPage } from "./pages/device-auth.tsx";
 import { CliConfirmPage } from "./pages/cli-confirm.tsx";
-import { EnginePage } from "./pages/engine.tsx";
+import { ActivityPage } from "./pages/activity.tsx";
 import { EngineOpDetailPage } from "./pages/engine-op-detail.tsx";
 import { EngineOpLogsPage } from "./pages/engine-op-logs.tsx";
 import { IncidentPage } from "./pages/incident.tsx";
-import { IncidentsPage } from "./pages/incidents.tsx";
 
 // The route without its query: "?section=…" style params belong to the page
 // (see hooks/use-hash-param.ts), not to routing.
@@ -138,7 +137,7 @@ export function App() {
   if (hash === "#/" || hash === "") {
     content = <DashboardPage />;
   } else if (hash === "#/incidents") {
-    content = <IncidentsPage />;
+    content = <ActivityPage tab="incidents" />;
   } else if (hash.startsWith("#/incidents/")) {
     const id = hash.split("/")[2];
     content = id ? <IncidentPage id={decodeURIComponent(id)} /> : <DashboardPage />;
@@ -154,14 +153,14 @@ export function App() {
     const code = decodeURIComponent(hash.split("/")[3] || "");
     content = code ? <CliConfirmPage userCode={code} /> : <DashboardPage />;
   } else if (hash === "#/engine") {
-    content = <EnginePage />;
+    content = <ActivityPage tab="operations" />;
   } else if (hash.startsWith("#/engine/op/")) {
     const parts = hash.split("/");
     const opId = parseInt(parts[3], 10);
     if (opId && parts[4] === "logs") {
       content = <EngineOpLogsPage opId={opId} />;
     } else {
-      content = opId ? <EngineOpDetailPage opId={opId} /> : <EnginePage />;
+      content = opId ? <EngineOpDetailPage opId={opId} /> : <ActivityPage tab="operations" />;
     }
   } else if (hash === "#/environments") {
     content = <EnvironmentsPage />;
@@ -179,10 +178,10 @@ export function App() {
   } else if (hash === "#/account") {
     content = <AccountPage />;
   } else if (hash === "#/admin") {
-    content = <UsersPage />;
+    content = <SettingsPage />;
   } else if (hash.startsWith("#/admin/")) {
     const userId = hash.split("/")[2];
-    content = userId ? <UserDetailPage userId={userId} /> : <UsersPage />;
+    content = userId ? <UserDetailPage userId={userId} /> : <SettingsPage />;
   } else if (hash.startsWith("#/terminal/")) {
     const parts = hash.split("/");
     const kind = parts[2] as "server" | "replica";

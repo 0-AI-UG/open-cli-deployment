@@ -62,7 +62,6 @@ ocd app reload-env <app> --force
 ocd app redeploy <app>
 ocd logs <app> [--tail=N]
 ocd restart <app>
-ocd rollback <app> [--deployment=<id>]
 ocd pause <app>
 ocd unpause <app>
 ocd move <app> --to <server> [--from <server>]

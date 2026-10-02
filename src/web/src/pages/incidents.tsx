@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, BellRing, ChevronRight, RefreshCw } from "lucide-react";
 import { get } from "../api/client.ts";
-import { Badge, Btn, Card, EmptyState, InlineNotice, PageHeader, PageShell, Spinner } from "../components/ui.tsx";
+import { Badge, Btn, Card, EmptyState, InlineNotice, Spinner } from "../components/ui.tsx";
 import type { Incident as IncidentItem } from "../../../shared/incidents.ts";
 import { useHashParam } from "../hooks/use-hash-param.ts";
 import { useActiveIndicator } from "../hooks/use-active-indicator.ts";
@@ -11,7 +11,7 @@ type Filter = "all" | "active" | "resolved";
 type ResponseData = { incidents: IncidentItem[]; nextOffset: number | null; counts: Record<Filter, number> };
 const filters: Array<{ key: Filter; label: string }> = [{ key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "resolved", label: "Resolved" }];
 
-export function IncidentsPage() {
+export function IncidentsPanel() {
   const [filter, setFilter] = useHashParam("status", filters.map((item) => item.key), "active");
   const filterSlider = useActiveIndicator<HTMLDivElement>(filter);
   const [items, setItems] = useState<IncidentItem[]>([]);
@@ -38,10 +38,9 @@ export function IncidentsPage() {
   useEffect(() => { setItems([]); setNextOffset(null); void load(); return () => { request.current++; }; }, [load]);
 
   const cols = "md:grid-cols-[minmax(0,1fr)_9rem_11rem_7rem_1rem]";
-  return <PageShell>
-    <PageHeader title="Incidents" eyebrow="Operations" description="Monitor active conditions and review recovery history." actions={<Btn disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>} />
-    <div className="md:px-6">
-      <div ref={filterSlider.containerRef} className="relative inline-flex max-w-full rounded-full border border-line-strong bg-surface p-0.5" role="group" aria-label="Filter incidents">
+  return <div className="space-y-6">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+    <div ref={filterSlider.containerRef} className="relative inline-flex max-w-full rounded-full border border-line-strong bg-surface p-0.5" role="group" aria-label="Filter incidents">
       <span aria-hidden="true" className="rounded-full bg-primary" style={filterSlider.indicatorStyle} />
       {filters.map(item => {
         const active = filter === item.key;
@@ -51,6 +50,7 @@ export function IncidentsPage() {
         </button>;
       })}
     </div>
+    <Btn size="xs" disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={12} /> Refresh</Btn>
     </div>
     {error && <InlineNotice tone="danger">{error}</InlineNotice>}
     {loading ? <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading incidents…</Card> : items.length ? <Card className="overflow-hidden">
@@ -79,5 +79,5 @@ export function IncidentsPage() {
       </div>
       {nextOffset !== null && <div className="flex justify-center border-t bg-subtle/40 px-4 py-3"><Btn loading={moreBusy} disabled={moreBusy} onClick={() => void load(nextOffset)}>Load more</Btn></div>}
     </Card> : !error && <Card><EmptyState icon={BellRing} message={filter === "all" ? "No incidents yet" : `No ${filter} incidents`} description="Detected outages and recoveries will appear here." /></Card>}
-  </PageShell>;
+  </div>;
 }

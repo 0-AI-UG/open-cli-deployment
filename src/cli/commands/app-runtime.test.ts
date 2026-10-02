@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { parseAppFlags } from "./app.ts";
-import { parseRollbackArgs } from "./rollback.ts";
 
 describe("app runtime CLI parsing", () => {
   test("parses positional arguments, values and switches", () => {
@@ -9,18 +8,4 @@ describe("app runtime CLI parsing", () => {
     expect(parsed.values.get("port")).toBe("3000");
     expect(parsed.switches.has("disable-auth")).toBe(true);
   });
-
-  test("parses a selected rollback deployment", () => {
-    expect(parseRollbackArgs(["api", "--deployment=42"])).toEqual({
-      appName: "api",
-      deploymentId: 42,
-    });
-    expect(parseRollbackArgs(["api", "--deployment", "43"])).toEqual({
-      appName: "api",
-      deploymentId: 43,
-    });
-    expect(() => parseRollbackArgs(["api", "--deployment"])).toThrow("requires a value");
-    expect(() => parseRollbackArgs(["api", "--wat"])).toThrow("Unknown option");
-  });
-
 });

@@ -140,7 +140,6 @@ export function assessOperationResources(op: OperationRow): ResourceAssessment {
     case "redeploy":
     case "restart_app":
     case "reload_app":
-    case "rollback":
     case "pause_app":
     case "unpause_app":
       return assessApp(Number(input.appId));
