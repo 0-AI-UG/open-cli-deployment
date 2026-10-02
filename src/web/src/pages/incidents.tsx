@@ -40,7 +40,8 @@ export function IncidentsPage() {
   const cols = "md:grid-cols-[minmax(0,1fr)_9rem_11rem_7rem_1rem]";
   return <PageShell>
     <PageHeader title="Incidents" eyebrow="Operations" description="Monitor active conditions and review recovery history." actions={<Btn disabled={loading || moreBusy} onClick={() => void load()}><RefreshCw size={14} /> Refresh</Btn>} />
-    <div ref={filterSlider.containerRef} className="relative inline-flex max-w-full rounded-full border border-line-strong bg-surface p-0.5" role="group" aria-label="Filter incidents">
+    <div className="md:px-6">
+      <div ref={filterSlider.containerRef} className="relative inline-flex max-w-full rounded-full border border-line-strong bg-surface p-0.5" role="group" aria-label="Filter incidents">
       <span aria-hidden="true" className="rounded-full bg-primary" style={filterSlider.indicatorStyle} />
       {filters.map(item => {
         const active = filter === item.key;
@@ -49,6 +50,7 @@ export function IncidentsPage() {
           <span className={`rounded-full px-1.5 text-2xs tabular-nums ${active ? (item.key === "active" && counts.active > 0 ? "bg-danger-solid text-white" : "bg-black/10 text-primary-fg") : "text-muted"}`}>{counts[item.key]}</span>
         </button>;
       })}
+    </div>
     </div>
     {error && <InlineNotice tone="danger">{error}</InlineNotice>}
     {loading ? <Card className="flex items-center gap-2 p-6 text-sm text-muted"><Spinner /> Loading incidents…</Card> : items.length ? <Card className="overflow-hidden">
