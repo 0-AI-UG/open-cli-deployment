@@ -143,7 +143,12 @@ function webhookBuildSourceIdFrom(req: Request): number {
 
 function resourcePartsFrom(req: Request): { type: string; id: string } {
   const parts = new URL(req.url).pathname.split("/");
-  return { type: parts[3], id: parts[4] };
+  return { type: parts[3], id: decodeURIComponent(parts[4]) };
+}
+
+/** Volume IDs may be `local:<server>:<name>`, which clients percent-encode. */
+function volumeIdFrom(req: Request): string {
+  return decodeURIComponent(new URL(req.url).pathname.split("/")[4]);
 }
 
 function environmentIdFrom(req: Request): number {
@@ -361,19 +366,19 @@ export const apiRoutes = {
   },
   "/api/resources/volumes/:id": {
     GET: (req: Request) => {
-      const id = new URL(req.url).pathname.split("/")[4];
+      const id = volumeIdFrom(req);
       return handleGetVolumeDetail(req, id);
     },
   },
   "/api/resources/volumes/:id/files": {
     GET: (req: Request) => {
-      const id = new URL(req.url).pathname.split("/")[4];
+      const id = volumeIdFrom(req);
       return handleListVolumeFiles(req, id);
     },
   },
   "/api/resources/volumes/:id/file": {
     GET: (req: Request) => {
-      const id = new URL(req.url).pathname.split("/")[4];
+      const id = volumeIdFrom(req);
       return handleGetVolumeFile(req, id);
     },
   },
