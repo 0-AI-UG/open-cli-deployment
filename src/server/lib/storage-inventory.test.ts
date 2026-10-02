@@ -35,7 +35,9 @@ test("invalid local IDs cannot become host paths and missing usage is not zero",
   expect(localVolumeIdentity("local:7:../../etc")).toBeNull();
   expect(localVolumeIdentity("123456")).toBeNull();
   expect(storageUsage(null)).toBe("Usage unavailable");
-  expect(storageUsage(0)).toBe("0.00 GiB used");
+  expect(storageUsage(0)).toBe("0 B used");
+  expect(storageUsage(192 * 1024)).toBe("192.0 KiB used");
+  expect(storageUsage(1.54 * 1024 ** 3)).toBe("1.54 GiB used");
 });
 
 test("server storage includes attached block volumes alongside retained local directories", () => {

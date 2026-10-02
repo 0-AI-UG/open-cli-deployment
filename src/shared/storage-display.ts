@@ -16,5 +16,9 @@ export function localVolumeIdentity(id: string) {
 }
 
 export function storageUsage(bytes: number | null) {
-  return bytes == null ? "Usage unavailable" : `${(bytes / 1024 ** 3).toFixed(2)} GiB used`;
+  if (bytes == null) return "Usage unavailable";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let value = bytes, unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  return `${unit === 0 ? value : value.toFixed(value < 10 ? 2 : 1)} ${units[unit]} used`;
 }

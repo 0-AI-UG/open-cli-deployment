@@ -38,6 +38,9 @@ async function serveStatic(filePath: string): Promise<Response | null> {
   }
   if (/[-\.][a-z0-9]{8,}\.\w+$/.test(filePath)) {
     headers["Cache-Control"] = "public, max-age=31536000, immutable";
+  } else if (ext === ".html") {
+    // The shell names the hashed bundles, so a stale copy pins the old frontend.
+    headers["Cache-Control"] = "no-cache";
   }
   return new Response(file, { headers });
 }
