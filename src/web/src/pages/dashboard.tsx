@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { get } from "../api/client.ts";
 import { runCliAction, runConfirmedCliAction } from "../api/cli-actions.ts";
 import { Badge, Card, CardHeader, StatusBadge, Stat, Btn, EmptyState, SegmentedControl, showToast, confirm, CopyButton, PageShell, PageSection, PageHeader, PageState, statusTone } from "../components/ui.tsx";
@@ -32,11 +32,6 @@ type ServerData = {
 };
 type AppView = "cards" | "list";
 const APP_VIEW_KEY = "ocd.dashboard.appView";
-// Each stack gets its own hue (RGB channels, used through --stack) so stacks
-// and their open members read apart from one another. Keyed by stack id, so a
-// stack keeps its colour across reloads.
-const STACK_HUES = ["186 255 57", "96 165 250", "192 132 252", "251 191 36", "251 113 133", "45 212 191"];
-const stackHue = (id: number) => ({ "--stack": STACK_HUES[id % STACK_HUES.length] }) as React.CSSProperties;
 
 const APP_OP_KINDS = new Set([
   "restart_app", "pause_app", "unpause_app", "redeploy", "destroy_app",
@@ -273,7 +268,6 @@ export function DashboardPage() {
         key={`app-${app.id}`}
         className={`group relative flex items-center justify-between gap-4 py-3 pr-3 transition-colors hover:bg-subtle/50 ${nested ? "pl-12" : "pl-4"} ${rowBusy ? "bg-subtle/40" : ""}`}
       >
-        {nested && <span aria-hidden="true" className="absolute inset-y-0 left-[31px] w-px bg-line-strong" />}
         <div className={`flex min-w-0 flex-1 items-center gap-3 ${app.status === "paused" ? "opacity-60" : ""}`}>
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border bg-subtle text-muted">
             <Box size={15} />
@@ -310,17 +304,17 @@ export function DashboardPage() {
     );
   };
 
-  // `stack` tints the card in its stack's hue, with an edge in that hue, when
-  // it is shown as a member of an open stack.
+  // `stack` gives the card a light brand tint when it is shown as a member
+  // of an open stack.
   const renderAppCard = (app: AppData, stack?: StackData) => {
     const busy = !!appBusyKind(app.id);
     const address = appAddress(app);
     const replicas = (app.placement ?? []).reduce((sum, entry) => sum + entry.replicas, 0);
     const tone = stack
-      ? "bg-[rgb(var(--stack)/0.06)] shadow-[inset_3px_0_0_rgb(var(--stack))] hover:bg-[rgb(var(--stack)/0.1)]"
+      ? "bg-brand/5 hover:bg-brand/10"
       : busy ? "bg-subtle/40 hover:bg-subtle/50" : "hover:bg-subtle/50";
     return (
-      <div key={`app-card-${app.id}`} style={stack ? stackHue(stack.id) : undefined} className={`group flex min-h-[136px] min-w-0 flex-col gap-3 p-4 transition-colors ${tone}`}>
+      <div key={`app-card-${app.id}`} className={`group flex min-h-[136px] min-w-0 flex-col gap-3 p-4 transition-colors ${tone}`}>
         <div className="flex items-start gap-3">
           <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border bg-subtle text-muted ${app.status === "paused" ? "opacity-60" : ""}`}><Box size={16} /></span>
           <div className="min-w-0 flex-1">
@@ -350,8 +344,8 @@ export function DashboardPage() {
     );
   };
 
-  // A stack as a card, tinted in its own hue with a solid stack icon, so it
-  // stands apart from the app cards and from other stacks. Clicking it opens
+  // A stack as a card, brand-tinted with a solid stack icon, so it stands
+  // apart from the app cards. Clicking it opens
   // its apps right after it in the grid; one stack is open at a time.
   const renderStackCard = (stack: StackData, members: AppData[]) => {
     const open = openStack === stack.id;
@@ -367,11 +361,10 @@ export function DashboardPage() {
         aria-expanded={open}
         onClick={toggle}
         onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}
-        style={stackHue(stack.id)}
-        className={`group flex min-h-[136px] min-w-0 cursor-pointer flex-col gap-3 p-4 transition-colors ${open ? "bg-[rgb(var(--stack)/0.2)]" : "bg-[rgb(var(--stack)/0.1)] hover:bg-[rgb(var(--stack)/0.16)]"}`}
+        className={`group flex min-h-[136px] min-w-0 cursor-pointer flex-col gap-3 p-4 transition-colors ${open ? "bg-brand/20" : "bg-brand/10 hover:bg-brand/15"}`}
       >
         <div className="flex items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-[rgb(var(--stack))] text-brand-fg"><Boxes size={16} /></span>
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand text-brand-fg"><Boxes size={16} /></span>
           <div className="min-w-0 flex-1">
             <a href={`#/stacks/${stack.id}`} onClick={(event) => event.stopPropagation()} className="block truncate text-sm font-semibold text-fg hover:underline">{stack.name}</a>
             <div className="mt-0.5 truncate text-xs text-muted">Stack · {members.length} app{members.length === 1 ? "" : "s"}</div>
@@ -407,16 +400,15 @@ export function DashboardPage() {
     const total = memberApps.length;
 
     return (
-      // A stack reads as one group: a tinted band with an accent bar down its
-      // left edge, holding its header and its member rows.
-      <div key={`stack-${stack.id}`} style={stackHue(stack.id)} className={`relative ${busy ? "bg-subtle/60" : "bg-[rgb(var(--stack)/0.05)]"}`}>
-        <span aria-hidden="true" className="absolute inset-y-0 left-0 z-[1] w-[3px] bg-[rgb(var(--stack))]" />
+      // A stack reads as one group: a brand-tinted band holding its header
+      // and its member rows.
+      <div key={`stack-${stack.id}`} className={`relative ${busy ? "bg-subtle/60" : "bg-brand/5"}`}>
         <div
           className="flex cursor-pointer items-center justify-between gap-4 py-3 pl-4 pr-3 transition-colors hover:bg-subtle/50"
           onClick={() => toggleStack(stack.id)}
         >
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[rgb(var(--stack))] text-brand-fg">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-brand text-brand-fg">
               <Boxes size={15} />
             </span>
             <div className="min-w-0">
