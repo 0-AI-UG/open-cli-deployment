@@ -241,8 +241,8 @@ export function UserDetailPage({ userId }: { userId: string }) {
     }
   };
 
-  if (loading) return <PageState title="Loading user" />;
-  if (!user) return <PageState kind="empty" title="User not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/admin"; }}>Back to admin</Btn>} />;
+  if (loading) return <PageState title="Loading user" width="md" />;
+  if (!user) return <PageState kind="empty" width="md" title="User not found" action={<Btn variant="ghost" onClick={() => { window.location.hash = "#/admin"; }}>Back to admin</Btn>} />;
 
   return (
     <PageShell width="md">

@@ -492,9 +492,11 @@ function SkeletonBar({ className = "" }: { className?: string }) {
   return <span aria-hidden="true" className={`skeleton block ${className}`} />;
 }
 
-export function PageSkeleton({ title }: { title?: ReactNode }) {
+// `width` must match the loaded page's PageShell, or the skeleton grid is a
+// different size from the page that replaces it.
+export function PageSkeleton({ title, width }: { title?: ReactNode; width?: "md" | "lg" | "xl" }) {
   return (
-    <PageShell reveal="skeleton">
+    <PageShell reveal="skeleton" width={width}>
       <PageHeader title={<SkeletonBar className="h-7 w-48" />} description={<SkeletonBar className="mt-1 h-4 w-72 max-w-full" />} />
       <div role="status" className="space-y-6">
         <span className="sr-only">{title ?? "Loading"}</span>
@@ -526,15 +528,18 @@ export function PageState({
   title,
   description,
   action,
+  width,
 }: {
   kind?: "loading" | "empty" | "error";
   title?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
+  /** The width of the PageShell this state stands in for. */
+  width?: "md" | "lg" | "xl";
 }) {
-  if (kind === "loading") return <PageSkeleton title={title} />;
+  if (kind === "loading") return <PageSkeleton title={title} width={width} />;
   return (
-    <PageShell>
+    <PageShell width={width}>
       <div role={kind === "error" ? "alert" : "status"} className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
         {kind === "error" && (
           <span className="grid h-10 w-10 place-items-center rounded-full bg-danger/10 text-danger"><AlertCircle size={18} /></span>
@@ -1089,9 +1094,7 @@ export function EmptyState({
   return (
     <div className={`flex flex-col items-center justify-center px-4 py-14 text-center ${className}`}>
       {Icon && (
-        <span className="mb-3 grid h-10 w-10 dash-box place-items-center bg-surface text-fg">
-          <Icon size={18} />
-        </span>
+        <Icon size={22} className="mb-3 text-muted" />
       )}
       <p className="text-sm font-medium text-fg">{message}</p>
       {description && <p className="mt-1 max-w-sm text-sm text-muted">{description}</p>}

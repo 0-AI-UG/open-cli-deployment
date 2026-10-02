@@ -406,7 +406,7 @@ export function DashboardPage() {
     );
   };
 
-  if (loading) return <PageState title="Loading overview" />;
+  if (loading) return <PageState title="Loading overview" width="xl" />;
 
   const { apps } = data;
 
