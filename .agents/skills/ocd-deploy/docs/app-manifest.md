@@ -23,7 +23,7 @@ Unknown fields are rejected by default.
   "env": { "DATABASE_URL": { "from": "environment.DATABASE_URL" } },
   "domain": "api.example.com",
   "public": true,
-  "placement": { "server-2": 1, "sight-capacity-1": 1 },
+  "placement": { "server-2": 1, "server-3": 1 },
   "health_check": { "mode": "http", "path": "/health", "expected_statuses": [200] },
   "volume": null
 }
@@ -33,7 +33,7 @@ Unknown fields are rejected by default.
 
 `placement` is required. It maps server names (as shown by `ocd servers`, or a
 numeric server ID) to the number of replicas that server runs, for example
-`{"server-2": 1}` or `{"server-2": 1, "sight-capacity-1": 1}`. OCD runs exactly
+`{"server-2": 1}` or `{"server-2": 1, "server-3": 1}`. OCD runs exactly
 this; it never picks servers or replica counts. Apps with a `volume` must be
 placed on exactly one server with one replica. See
 [Placement](scaling-storage-and-placement.md#placement).

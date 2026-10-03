@@ -1,7 +1,6 @@
 # Open CLI Deployment documentation
 
-This index separates reusable operator documentation from project-specific
-implementation and migration notes.
+Guides for running and operating OCD.
 
 ## Start here
 

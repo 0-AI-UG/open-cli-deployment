@@ -51,7 +51,7 @@ New app grants come only from manifest bindings. For readers outside OCD, such
 as a CDN, create a separately named, read-only external reader:
 
 ```text
-ocd storage-readers create skyline-cdn skyline-media-nbg1 --prefix=uploads/editorial/ --token-file=/private/path/cdn-token
+ocd storage-readers create public-cdn media-bucket --prefix=uploads/editorial/ --token-file=/private/path/cdn-token
 ocd storage-readers list
 ocd storage-readers revoke <reader-id>
 ```

@@ -43,6 +43,8 @@ panel.json
 # Local agent and workspace configuration
 .cate/
 .claude/
+.agents/skills/cate-cli/
+.codex/
 
 # local demo data (bun run dev:demo)
 .demo-data/

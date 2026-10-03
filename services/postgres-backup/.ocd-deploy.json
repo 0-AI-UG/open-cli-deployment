@@ -37,7 +37,7 @@
   "environment": "shared-data",
   "storage": {
     "primary": {
-      "bucket": "ocd-ceroai-backups",
+      "bucket": "<backup-bucket>",
       "prefix": "",
       "permissions": [
         "read",

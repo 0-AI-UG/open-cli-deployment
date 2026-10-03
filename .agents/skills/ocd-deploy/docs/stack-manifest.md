@@ -86,7 +86,7 @@ an intentional artifact-only rollout after configuration is synchronized.
     "web": {
       "manifest": "services/web/.ocd-deploy.json",
       "needs": ["api"],
-      "placement": { "server-2": 1, "sight-capacity-1": 1 }
+      "placement": { "server-2": 1, "server-3": 1 }
     }
   }
 }

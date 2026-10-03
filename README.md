@@ -16,6 +16,26 @@ them onto Hetzner Cloud servers. You operate it through the `ocd` CLI while a sm
 self-hosted panel keeps desired state, credentials, deployment history, and
 recovery operations in one place.
 
+<p align="center">
+  <img src="docs/screenshots/panel.gif" alt="The OCD panel: fleet overview, a stack, an app and its deployment history, and infrastructure" width="960">
+</p>
+
+## How it works
+
+```
+ git push / ocd deploy
+          │
+          ▼
+ ┌─────────────────┐   build    ┌──────────────┐   pull by digest   ┌──────────────────┐
+ │   OCD panel     │ ─────────▶ │ OCI registry │ ─────────────────▶ │ Hetzner servers  │
+ │ desired state,  │  BuildKit  └──────────────┘                    │ Docker + Traefik │
+ │ secrets, history│ ──────────── reconcile over SSH ─────────────▶ │ private network  │
+ └─────────────────┘                                                └──────────────────┘
+```
+
+The panel stores what should run; its engine builds images, provisions
+infrastructure, and reconciles containers onto the servers you place them on.
+
 ## Why OCD?
 
 - **Your Hetzner account:** OCD provisions and manages servers, the private
@@ -130,6 +150,13 @@ bun run build
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and pull
 request checklist. Please report security issues according to
 [SECURITY.md](SECURITY.md), not in a public issue.
+
+## Status
+
+OCD is used in production by its maintainers, but it is pre-1.0: manifests and
+CLI flags can still change between minor releases. Check the
+[release notes](https://github.com/0-AI-UG/open-cli-deployment/releases) before
+upgrading.
 
 ## License
 

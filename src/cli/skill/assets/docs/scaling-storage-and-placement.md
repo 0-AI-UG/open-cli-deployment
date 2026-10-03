@@ -16,7 +16,7 @@ Run two replicas on two servers:
 
 ```json
 {
-  "placement": { "server-2": 1, "sight-capacity-1": 1 }
+  "placement": { "server-2": 1, "server-3": 1 }
 }
 ```
 
@@ -39,8 +39,8 @@ manually.
 Move every replica an app runs on one server to another server:
 
 ```bash
-ocd move my-app --to sight-capacity-1
-ocd move my-app --from server-2 --to sight-capacity-1   # app placed on several servers
+ocd move my-app --to server-3
+ocd move my-app --from server-2 --to server-3   # app placed on several servers
 ```
 
 Stateless apps start their replicas on the target before the source replicas
