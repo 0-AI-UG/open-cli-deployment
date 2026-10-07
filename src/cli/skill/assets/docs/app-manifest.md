@@ -70,8 +70,9 @@ belong in this object.
 `container_port`, `env`, `outputs`, `storage`, `command`, `cap_add`,
 `environment`, required `volume` (`null` for none),
 `suggested_app_name`, `domain`, `placement`, `public`, `memory_mb`,
-`cpu_limit`, `health_check`, `internal_protocol`, `rate_limit_rps`, and
-`compress` retain their normal complete-desired-state semantics.
+`cpu_limit`, `health_check`, `internal_protocol`, `rate_limit_rps`,
+`compress`, and `public_ports` retain their normal complete-desired-state
+semantics.
 
 The `env` object maps variable names to literal strings or `{ "from":
 "environment.KEY" }` / `{ "from": "apps.MEMBER.outputs.KEY" }` references.
@@ -86,6 +87,57 @@ Secrets propagate from referenced values; mark other sensitive outputs with
 Primary volumes are grow-only. Omission of `environment` detaches a standalone
 app; stack members inherit their stack selection. Explicit `null` detaches.
 Domain omission retains its existing value; an empty string clears it.
+
+## Public ports
+
+Most apps need only HTTP(S) through panel ingress and private access on the
+fleet network. A service that must be reachable on its own ports from the
+internet, such as a TURN relay or a game server, declares `public_ports`:
+
+```json
+{
+  "name": "TURN relay",
+  "image": "coturn/coturn:4.7.0",
+  "container_port": 3478,
+  "public": false,
+  "placement": { "turn-1": 1 },
+  "health_check": { "mode": "container" },
+  "volume": null,
+  "public_ports": [
+    { "port": 3478, "protocol": "udp" },
+    { "port": 3478, "protocol": "tcp" },
+    { "port": "49160-49999", "protocol": "udp" }
+  ]
+}
+```
+
+Each entry is `{ "port", "protocol" }`: `port` is an integer or an inclusive
+`"start-end"` range, `protocol` is `tcp` or `udp`. Declaring any public port
+changes how the app runs:
+
+- The container runs on its server's host network (`--network host`): it binds
+  its ports on the server itself and nothing is published through Docker, so
+  large UDP ranges cost nothing extra. The app's private name
+  `<app>.ocd.internal` still reaches it on `container_port`.
+- OCD opens exactly the declared ports to the internet, on IPv4 and IPv6, in a
+  firewall of that server's own (`ocd-public-ports-<server id>` in Hetzner
+  Cloud), and closes them when the entry, the app, or the server's placement
+  goes away. Every other port stays closed by the fleet firewall.
+- Each placed server runs exactly one replica (`placement` values of `1`); a
+  port can be held by one app per server, and a deploy that overlaps another
+  app's ports on a shared server fails before anything changes.
+- `health_check.mode` must be `container`, `exec`, or `heartbeat`; the HTTP
+  probe needs a published port.
+- Releases replace the container in place (stop, then start), so the ports
+  are briefly unavailable during a rollout.
+- Ports OCD uses itself are refused: TCP 22, 80, 443, and TCP 10000-20199
+  (replica ports, the VIP proxy, and internal ingress).
+
+Every app container gets `OCD_PUBLIC_IPV4`, the public IPv4 of the server it
+runs on (an `env` entry with the same name wins), so a relay can advertise its
+own address. `ocd app show` and the panel list the ports and the servers'
+addresses; point DNS at those addresses yourself. `ocd doctor` checks a
+manifest's ports against the apps already placed on its servers.
 
 ## Object storage bindings
 

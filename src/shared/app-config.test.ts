@@ -46,6 +46,10 @@ describe("classifyAppConfigChanges", () => {
     ])).toBe("artifact");
   });
 
+  test("public ports are a runtime change (the container switches network)", () => {
+    expect(classifyAppConfigChanges([{ field: "public_ports", before: [], after: [{ port: 3478, protocol: "udp" }] }])).toBe("runtime");
+  });
+
   test("config-only recreates runtime state while deferring artifact rollout", () => {
     const runtime = { field: "memory_mb", before: 512, after: 1024 };
     const artifact = { field: "image_ref", before: "old", after: "new" };
@@ -305,5 +309,54 @@ describe("placement changes", () => {
     await expect(applyAppConfig(app.id, request(SECOND_SERVER.name))).rejects.toThrow("build worker");
     await expect(applyAppConfig(app.id, request("missing-server"))).rejects.toThrow("does not exist");
     expect(JSON.parse(db.getApp(app.id)!.placement!)).toEqual({ [String(SERVER.id)]: 1 });
+  });
+});
+
+describe("public ports", () => {
+  const ports = [{ port: 3478, protocol: "udp" as const }, { port: "49160-49999", protocol: "udp" as const }];
+
+  test("are diffed, stored canonically and refused when another app holds them on a shared server", async () => {
+    const { app } = seedApp();
+    const req = {
+      app_name: app.name,
+      container_port: 3478,
+      image_ref: IMAGE_REF,
+      environment_id: app.environment_id,
+      public: false,
+      health_check_mode: "container" as const,
+      placement: placement(),
+      public_ports: ports,
+    };
+    expect(diffAppConfig(app, req).find((change) => change.field === "public_ports")?.after).toEqual([
+      { port: 3478, protocol: "udp" },
+      { port: "49160-49999", protocol: "udp" },
+    ]);
+    await applyAppConfig(app.id, req);
+    const stored = db.getApp(app.id)!;
+    expect(db.parseAppPublicPorts(stored)).toEqual(ports);
+    expect(db.appUsesHostNetwork(stored)).toBe(true);
+    expect(diffAppConfig(stored, req).find((change) => change.field === "public_ports")).toBeUndefined();
+
+    const other = db.insertApp({
+      name: `other-${randomSuffix()}`,
+      domain: "",
+      image_ref: IMAGE_REF,
+      container_port: 3000,
+      env_vars: "{}",
+      placement: { [String(SERVER.id)]: 1 },
+    });
+    expect(() => diffAppConfig(other, {
+      ...req,
+      app_name: other.name,
+      environment_id: null,
+      public_ports: [{ port: "49000-49200", protocol: "udp" as const }],
+    })).toThrow(`Public port conflict: 49000-49200/udp on ${SERVER.name} overlaps 49160-49999/udp held by app ${app.name}`);
+    expect(() => diffAppConfig(other, {
+      ...req,
+      app_name: other.name,
+      environment_id: null,
+      placement: { [SECOND_SERVER.name]: 1 },
+      public_ports: [{ port: "49000-49200", protocol: "udp" as const }],
+    })).not.toThrow();
   });
 });

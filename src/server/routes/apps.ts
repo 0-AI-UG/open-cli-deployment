@@ -12,7 +12,7 @@ import { syncAppIngress } from "../../engine/scale/traefik-manager.ts";
 import { enqueue } from "../ipc/enqueue.ts";
 import { enqueueOp } from "./_ops.ts";
 import { enforceConfirmation } from "../lib/action-confirm.ts";
-import { applyAppConfig, assertPlacementUsable, classifyConfigOnlyChanges, deployRequestFromApp, diffAppConfig, resolveRequestPlacement } from "../../shared/app-config.ts";
+import { applyAppConfig, assertPlacementUsable, assertPublicPortsAvailable, classifyConfigOnlyChanges, deployRequestFromApp, diffAppConfig, resolveRequestPlacement } from "../../shared/app-config.ts";
 import type { DeployRequest, PlacementEntry, ReleaseRequest } from "../../shared/rpc.ts";
 import { parsePlacement } from "../../shared/placement.ts";
 import { findActiveOperationByResourceKey } from "../../shared/db/operations.ts";
@@ -24,14 +24,19 @@ import { resolveOciImage } from "../../engine/oci-image.ts";
  *  secret/credential field so nothing sensitive leaks into app listings. */
 export function enrichAppForResponse(app: AppRow & Record<string, unknown>) {
   const envRow = app.environment_id ? db.getEnvironment(app.environment_id as number) : null;
-  const placement: PlacementEntry[] = Object.entries(parsePlacement(app.placement)).map(([serverId, replicas]) => ({
-    server_id: Number(serverId),
-    server_name: db.getServer(Number(serverId))?.name ?? `#${serverId}`,
-    replicas,
-  }));
+  const placement: PlacementEntry[] = Object.entries(parsePlacement(app.placement)).map(([serverId, replicas]) => {
+    const server = db.getServer(Number(serverId));
+    return {
+      server_id: Number(serverId),
+      server_name: server?.name ?? `#${serverId}`,
+      replicas,
+      server_ipv4: server?.ipv4 || undefined,
+    };
+  });
   return {
     ...app,
     placement,
+    public_ports: db.parseAppPublicPorts(app),
     env_vars: [],
     storage: getAppStorage(app.id),
     notifications: getAppNtfy(app.id),
@@ -117,10 +122,13 @@ type AppDeployRequest = Partial<DeployRequest> & {
 };
 
 /** Fail a new app's deploy up front when its placement names a server that
- * does not exist, is not ready, or is a build worker. */
+ * does not exist, is not ready, or is a build worker, or when its public
+ * ports overlap another app's on one of those servers. */
 function newAppPlacementError(req: DeployRequest): string | null {
   try {
-    assertPlacementUsable(resolveRequestPlacement(req));
+    const placement = resolveRequestPlacement(req);
+    assertPlacementUsable(placement);
+    assertPublicPortsAvailable(req.app_name, req.public_ports ?? [], placement);
     return null;
   } catch (error) {
     return (error as Error).message;

@@ -422,3 +422,40 @@ describe("stack placement override", () => {
     }, "ocd-stack.json")).toThrow(/replicas: unknown key/);
   });
 });
+
+describe("public_ports", () => {
+  const turn = {
+    name: "turn",
+    image: "coturn/coturn:4.7.0",
+    volume: null,
+    public: false,
+    placement: { "turn-1": 1 },
+    health_check: { mode: "container" },
+    public_ports: [
+      { port: 3478, protocol: "udp" },
+      { port: 3478, protocol: "tcp" },
+      { port: "49160-49999", protocol: "udp" },
+    ],
+  };
+
+  test("accepts single ports and ranges on one replica per server", () => {
+    expect(() => validateDeployManifest(turn, "turn.json")).not.toThrow();
+  });
+
+  test("names the field of every problem", () => {
+    expect(() => validateDeployManifest({
+      ...turn,
+      public_ports: [{ port: "3478-3478", protocol: "udp" }, { port: 22, protocol: "tcp" }],
+    }, "turn.json")).toThrow(/public_ports\[0\]\.port: expected an integer 1-65535[\s\S]*public_ports\[1\]: 22\/tcp overlaps 22\/tcp/);
+    expect(() => validateDeployManifest({ ...turn, public_ports: [{ port: 1, protocol: "sctp" }] }, "turn.json"))
+      .toThrow(/public_ports\[0\]\.protocol: expected "tcp" \| "udp"/);
+  });
+
+  test("requires one replica per server and a non-HTTP health check", () => {
+    expect(() => validateDeployManifest({ ...turn, placement: { "turn-1": 2 } }, "turn.json"))
+      .toThrow(/placement: apps with public_ports bind host ports/);
+    const { health_check: _omitted, ...withoutHealth } = turn;
+    expect(() => validateDeployManifest(withoutHealth, "turn.json"))
+      .toThrow(/health_check: apps with public_ports need health_check.mode/);
+  });
+});

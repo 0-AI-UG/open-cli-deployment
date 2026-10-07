@@ -77,6 +77,10 @@ export function buildUpstreams(appId: number): string[] {
   const replicas = db
     .getReplicas(appId)
     .filter((r) => r.status === "running" || r.status === "unhealthy");
+  // A host-network app publishes nothing: it listens on the server's own
+  // interfaces at its container port.
+  const app = db.getApp(appId);
+  const hostNetworkPort = app && db.appUsesHostNetwork(app) ? app.container_port : null;
   const ups: string[] = [];
   for (const replica of replicas) {
     const server = db.getServer(replica.server_id);
@@ -86,7 +90,7 @@ export function buildUpstreams(appId: number): string[] {
     // gets silently skipped; the network reconciler backfills it on the
     // next tick and the ingress sync picks it up from there.
     if (!server.routing_address) continue;
-    ups.push(`${server.routing_address}:${replica.host_port}`);
+    ups.push(`${server.routing_address}:${hostNetworkPort ?? replica.host_port}`);
   }
   return ups.sort();
 }

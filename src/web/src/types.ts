@@ -32,7 +32,9 @@ export type AppData = {
   status: string;
   container_port: number;
   /** Declared placement: which servers run the app and how many replicas each. */
-  placement?: Array<{ server_id: number; server_name: string; replicas: number }>;
+  placement?: Array<{ server_id: number; server_name: string; replicas: number; server_ipv4?: string }>;
+  /** Ports open to the internet on every placed server (host network). */
+  public_ports?: Array<{ port: number | string; protocol: string }>;
   volume_id?: string | number;
   volume_mount?: string;
   desired_volume_id?: string;

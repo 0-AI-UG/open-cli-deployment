@@ -31,6 +31,22 @@ describe("buildDockerRunArgs", () => {
     expect(cmd.endsWith(" myapp:latest")).toBe(true);
   });
 
+  test("host network publishes nothing and passes platform env after the env file", () => {
+    const cmd = buildDockerRunArgs({
+      name: "turn",
+      image: "coturn:latest",
+      appName: "turn",
+      network: "host",
+      publish: { bindAddr: "10.0.0.1", hostPort: 10001, containerPort: 3478 },
+      envFilePath: "/home/deploy/apps/turn/.env.deploy",
+      env: { OCD_PUBLIC_IPV4: "203.0.113.7" },
+    });
+    expect(cmd).toContain("--network host");
+    expect(cmd).not.toContain("-p ");
+    expect(cmd.indexOf("--env-file")).toBeLessThan(cmd.indexOf("--env 'OCD_PUBLIC_IPV4=203.0.113.7'"));
+    expect(() => buildDockerRunArgs({ name: "x", image: "x", appName: "x", env: { "BAD KEY": "1" } })).toThrow();
+  });
+
   test("honors per-call overrides", () => {
     const cmd = buildDockerRunArgs({
       name: "pg",

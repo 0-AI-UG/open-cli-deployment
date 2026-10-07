@@ -16,6 +16,7 @@ import {
 } from "./manifest-schema.ts";
 import type { DeployManifest } from "./rpc.ts";
 import { placementShapeError, volumePlacementError } from "./placement.ts";
+import { PublicPortsSchema, publicPortsAppErrors, type PublicPort } from "./public-ports.ts";
 
 // The manifest shape/bounds now live once in ./manifest-schema.ts (the Zod
 // source of truth). Re-export the numeric bounds/predicates here so existing
@@ -358,6 +359,7 @@ export function validateDeployRequest(req: {
   compress?: boolean;
   command?: string[];
   cap_add?: string[];
+  public_ports?: PublicPort[];
 }): ValidationResult<void> {
   if (req.notifications !== undefined && !NtfyBindingsSchema.safeParse(req.notifications).success) {
     return { valid: false, error: "Invalid notification bindings" };
@@ -465,6 +467,20 @@ export function validateDeployRequest(req: {
   }
   if (healthMode !== "http" && req.health_check_path) {
     return { valid: false, error: "health_check.path is only valid for HTTP health checks" };
+  }
+  if (req.public_ports !== undefined) {
+    const parsed = PublicPortsSchema.safeParse(req.public_ports);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const where = issue.path.length ? issue.path.map((seg) => typeof seg === "number" ? `[${seg}]` : `.${String(seg)}`).join("") : "";
+      return { valid: false, error: `public_ports${where}: ${issue.message}` };
+    }
+    const appError = publicPortsAppErrors({
+      public_ports: req.public_ports,
+      placement: req.placement,
+      health_check_mode: healthMode,
+    })[0];
+    if (appError) return { valid: false, error: `${appError.field}: ${appError.message}` };
   }
 
   // Rate limit / health-check path rules are shared with the ingress-update

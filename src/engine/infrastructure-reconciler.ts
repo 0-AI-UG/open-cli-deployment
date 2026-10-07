@@ -5,6 +5,7 @@ import { requireStorageDriver } from "./storage/index.ts";
 import { tryAcquire, release, NON_OP_HOLDER } from "./scheduler.ts";
 import { getHetznerToken } from "../shared/secret-store.ts";
 import { hetzner } from "../shared/hetzner/index.ts";
+import { syncPublicPortFirewalls } from "./public-ports.ts";
 
 function log(context: string, ...args: unknown[]): void {
   console.log(`[${new Date().toISOString()}] [infra-reconciler:${context}]`, ...args);
@@ -96,6 +97,11 @@ export async function reconcileFirewall(): Promise<void> {
       log("firewall", `${server.name}: attachment reconciliation failed: ${error}`);
     }
   }));
+  try {
+    await syncPublicPortFirewalls();
+  } catch (error) {
+    log("firewall", `public-ports firewall reconciliation failed: ${error}`);
+  }
 }
 
 type VolumeOwner = {

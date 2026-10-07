@@ -3,6 +3,7 @@ import db from "./connection.ts";
 import type { ServerRow } from "./servers.ts";
 import type { ReplicaRow } from "./replicas.ts";
 import { serializePlacement, type Placement } from "../placement.ts";
+import { normalizePublicPorts, parsePublicPorts, type PublicPort } from "../public-ports.ts";
 
 const IMMUTABLE_IMAGE = /^[a-z0-9.-]+(?::[0-9]+)?\/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$/i;
 
@@ -62,6 +63,8 @@ export type AppRow = {
   cpu_limit: number; // per-container CPU ceiling in cores (fractional allowed); 0 = platform default
   command_json: string;
   cap_add_json: string;
+  /** JSON array of declared public ports; non-empty = host network. */
+  public_ports_json: string;
   health_check: number; // 1 = HTTP probe (default); 0 = only verify the container is running
   health_check_mode: string;
   health_check_command: string;
@@ -257,6 +260,7 @@ type InsertAppFields = {
   desired_volume_driver?: string;
   command?: string[];
   cap_add?: string[];
+  public_ports?: PublicPort[];
 } & AppIngressSettings;
 
 // The single apps-table INSERT, shared by insertApp and
@@ -275,7 +279,7 @@ function insertAppRow(app: InsertAppFields): AppRow {
   const internalProtocol: InternalProtocol = app.internal_protocol ?? "http";
   return db
     .query(
-      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, rate_limit_rps, health_check_path, compress, placement, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
+      "INSERT INTO apps (name, domain, image_ref, container_port, env_vars, environment_id, public, health_check, health_check_mode, health_check_command, health_check_file, health_check_max_age_seconds, health_check_expected_statuses, internal_protocol, internal_port, virtual_ip, rate_limit_rps, health_check_path, compress, placement, desired_volume_id, desired_volume_size, desired_volume_path, desired_volume_driver, command_json, cap_add_json, public_ports_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *",
     )
     .get(
       app.name,
@@ -304,6 +308,7 @@ function insertAppRow(app: InsertAppFields): AppRow {
       app.desired_volume_driver ?? "",
       JSON.stringify(app.command ?? []),
       JSON.stringify(app.cap_add ?? []),
+      JSON.stringify(normalizePublicPorts(app.public_ports ?? [])),
     ) as AppRow;
 }
 
@@ -546,6 +551,20 @@ export function parseAppCommand(app: Pick<AppRow, "command_json">): string[] {
 
 export function parseAppCapabilities(app: Pick<AppRow, "cap_add_json">): string[] {
   return parseStringArray(app.cap_add_json);
+}
+
+export function parseAppPublicPorts(app: Pick<AppRow, "public_ports_json">): PublicPort[] {
+  return parsePublicPorts(app.public_ports_json);
+}
+
+/** Host-network apps are exactly the ones that declare public ports. */
+export function appUsesHostNetwork(app: Pick<AppRow, "public_ports_json">): boolean {
+  return parseAppPublicPorts(app).length > 0;
+}
+
+export function updateAppPublicPorts(id: number, ports: PublicPort[]): void {
+  db.query("UPDATE apps SET public_ports_json = ? WHERE id = ?")
+    .run(JSON.stringify(normalizePublicPorts(ports)), id);
 }
 
 export function updateAppRuntimeOptions(

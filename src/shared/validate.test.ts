@@ -330,6 +330,21 @@ describe("validateDeployRequest", () => {
     expect(validateDeployRequest({ ...validRequest, health_check_path: "/healthz", internal_protocol: "tcp" }).valid).toBe(false);
   });
 
+
+  test("validates public ports with the manifest rules", () => {
+    const hostNetwork = {
+      ...validRequest,
+      health_check_mode: "container",
+      public_ports: [{ port: 3478, protocol: "udp" as const }, { port: "49160-49999", protocol: "udp" as const }],
+    };
+    expect(validateDeployRequest(hostNetwork).valid).toBe(true);
+    const badRange = validateDeployRequest({ ...hostNetwork, public_ports: [{ port: "9-1", protocol: "udp" as const }] });
+    expect(badRange.valid ? "" : badRange.error).toContain("public_ports[0].port");
+    const replicas = validateDeployRequest({ ...hostNetwork, placement: { "server-2": 2 } });
+    expect(replicas.valid ? "" : replicas.error).toContain("exactly 1 replica");
+    const http = validateDeployRequest({ ...hostNetwork, health_check_mode: undefined });
+    expect(http.valid ? "" : http.error).toContain("health_check.mode");
+  });
 });
 
 describe("validateHealthCheckPath", () => {

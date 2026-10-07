@@ -60,7 +60,7 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, set
                 {app.health_check_file ? <span className="font-mono text-xs text-fg-dim">{` · ${app.health_check_file} ≤ ${app.health_check_max_age_seconds}s`}</span> : ""}
               </span>
             </DataRow>
-            {replicas[0]?.host_port != null && (
+            {replicas[0]?.host_port != null && !app.public_ports?.length && (
               <DataRow label="Host port" mono>{replicas[0].host_port}</DataRow>
             )}
             <DataRow label="Volume intent">
@@ -97,6 +97,15 @@ export function OverviewTab({ app, appId, storage, replicas, metricsHistory, set
               <DataRow label="Public domain">
                 <span className="text-fg-dim">Disabled</span>
                 <Badge>Private</Badge>
+              </DataRow>
+            )}
+            {(app.public_ports?.length ?? 0) > 0 && (
+              <DataRow label={<span className="inline-flex items-center gap-1">Public ports <InfoTip text="Opened to the internet on each placed server's firewall. The app runs on the server's host network." /></span>}>
+                <span className="truncate font-mono text-xs" title={placement.map((entry) => entry.server_ipv4 || entry.server_name).join(", ")}>
+                  {app.public_ports!.map((entry) => `${entry.port}/${entry.protocol}`).join(", ")}
+                  {placement.length > 0 && <span className="text-fg-dim">{` · ${placement.map((entry) => entry.server_ipv4 || entry.server_name).join(", ")}`}</span>}
+                </span>
+                <Badge>Host network</Badge>
               </DataRow>
             )}
             <DataRow label={<span className="inline-flex items-center gap-1">Internal URL <InfoTip text="Reachable from other apps on the private network. Set this in env vars when one app needs to call another." /></span>}>

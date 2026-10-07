@@ -100,6 +100,10 @@ async function showApp(args: string[]): Promise<void> {
     ["Internal protocol", app.internal_protocol || "http"],
     ["Environment", app.environment_name || (app.environment_id ? `#${app.environment_id}` : "-")],
     ["Placement", app.placement?.length ? app.placement.map((entry) => `${entry.server_name}×${entry.replicas}`).join(", ") : "-"],
+    ["Public ports", app.public_ports?.length
+      ? `${app.public_ports.map((entry) => `${entry.port}/${entry.protocol}`).join(", ")} (host network)` +
+        (app.placement?.length ? ` at ${app.placement.map((entry) => entry.server_ipv4 || entry.server_name).join(", ")}` : "")
+      : "-"],
     ["Memory MB", String(app.memory_mb ?? "-")],
     ["CPU cores", String(app.cpu_limit ?? "-")],
     ["Config revision", String(app.config_revision ?? "-")],

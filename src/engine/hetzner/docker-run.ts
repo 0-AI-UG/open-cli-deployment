@@ -143,7 +143,21 @@ export type StartAppReplicaOpts = {
   envHash?: string;
   command?: string[];
   capAdd?: string[];
+  /** Run on the server's host network (apps with public ports). The container
+   * binds its ports on every host interface; nothing is published. */
+  hostNetwork?: boolean;
 };
+
+const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+
+/** Platform values every app container gets with --env. `ip` is the address
+ * OCD reaches the server on, which is the server's public IPv4. A key the
+ * app's own environment already sets is left to it. */
+export function platformContainerEnv(ip: string, envVars?: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (IPV4.test(ip) && envVars?.OCD_PUBLIC_IPV4 === undefined) env.OCD_PUBLIC_IPV4 = ip;
+  return env;
+}
 
 export function currentAppAliases(): Array<{ hostname: string; address: string }> {
   try {
@@ -203,6 +217,7 @@ export async function startAppReplicaWithSsh(
     [REVISION_LABELS.imageId]: imageId,
     [REVISION_LABELS.bindAddress]: opts.bindAddr,
     [REVISION_LABELS.hostPort]: String(opts.hostPort),
+    ...(opts.hostNetwork ? { [REVISION_LABELS.network]: "host" } : {}),
   };
 
   // Crash-resume adoption: keep an already-running exact revision. A stale
@@ -244,10 +259,11 @@ export async function startAppReplicaWithSsh(
     name: opts.containerName,
     image: opts.image,
     appName: opts.appName,
-    network: opts.network,
+    network: opts.hostNetwork ? "host" : opts.network,
     extraHosts,
     publish: { bindAddr: opts.bindAddr, hostPort: opts.hostPort, containerPort: opts.containerPort },
     envFilePath,
+    env: platformContainerEnv(ip, opts.envVars),
     volumeMount: opts.volumeMount,
     memoryMb: opts.memoryMb,
     cpus: opts.cpus,

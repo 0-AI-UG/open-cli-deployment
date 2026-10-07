@@ -121,6 +121,175 @@ export async function ensureFirewallAttached(firewallId: string | number, server
   }
 }
 
+// --- Public-port firewalls ---
+//
+// The fleet firewall above is shared by every server, so it cannot open a
+// port on one server only. Apps with public ports get a second, per-server
+// firewall that OCD owns completely: its rules are exactly the public ports
+// of the apps placed on that server, and it is deleted when none remain.
+// Hetzner combines the rules of every firewall applied to a server.
+
+const PUBLIC_PORTS_ROLE = "public-ports";
+
+export type PublicPortsFirewall = {
+  id: number;
+  name: string;
+  labels?: Record<string, string>;
+  rules?: FirewallRule[];
+  applied_to?: Array<{ type: string; server?: { id: number } }>;
+};
+
+export type DesiredPublicPortsFirewall = {
+  /** OCD server id. */
+  serverId: number;
+  /** Hetzner server id. */
+  providerId: string;
+  rules: FirewallRule[];
+};
+
+export type PublicPortsFirewallAction =
+  | { kind: "create"; serverId: number; providerId: string; rules: FirewallRule[] }
+  | { kind: "set_rules"; firewallId: number; rules: FirewallRule[] }
+  | { kind: "apply"; firewallId: number; providerId: string }
+  | { kind: "remove_from"; firewallId: number; providerIds: string[] }
+  | { kind: "delete"; firewallId: number };
+
+export function publicPortsFirewallName(serverId: number): string {
+  return `ocd-public-ports-${serverId}`;
+}
+
+function ruleKey(rule: FirewallRule): string {
+  return JSON.stringify([
+    rule.direction,
+    rule.protocol,
+    rule.port ?? "",
+    [...(rule.source_ips ?? [])].sort(),
+    rule.description ?? "",
+  ]);
+}
+
+function sameRules(a: FirewallRule[], b: FirewallRule[]): boolean {
+  const left = a.map(ruleKey).sort();
+  const right = b.map(ruleKey).sort();
+  return left.length === right.length && left.every((key, index) => key === right[index]);
+}
+
+function appliedServerIds(firewall: PublicPortsFirewall): string[] {
+  return (firewall.applied_to ?? [])
+    .filter((entry) => entry.type === "server" && entry.server)
+    .map((entry) => String(entry.server!.id));
+}
+
+/**
+ * Plan the Hetzner calls that make the public-ports firewalls match the
+ * desired rules. Pure; exported for tests. Each desired server ends with one
+ * firewall holding exactly its rules and applied to it alone; every other
+ * OCD public-ports firewall is detached and deleted.
+ */
+export function planPublicPortsFirewalls(
+  existing: PublicPortsFirewall[],
+  desired: DesiredPublicPortsFirewall[],
+): PublicPortsFirewallAction[] {
+  const actions: PublicPortsFirewallAction[] = [];
+  const kept = new Set<number>();
+  for (const want of desired) {
+    if (want.rules.length === 0) continue;
+    const firewall = existing.find((fw) =>
+      fw.labels?.["ocd-server"] === String(want.serverId) && !kept.has(fw.id));
+    if (!firewall) {
+      actions.push({ kind: "create", serverId: want.serverId, providerId: want.providerId, rules: want.rules });
+      continue;
+    }
+    kept.add(firewall.id);
+    if (!sameRules(firewall.rules ?? [], want.rules)) {
+      actions.push({ kind: "set_rules", firewallId: firewall.id, rules: want.rules });
+    }
+    const applied = appliedServerIds(firewall);
+    if (!applied.includes(want.providerId)) {
+      actions.push({ kind: "apply", firewallId: firewall.id, providerId: want.providerId });
+    }
+    const stray = applied.filter((id) => id !== want.providerId);
+    if (stray.length > 0) actions.push({ kind: "remove_from", firewallId: firewall.id, providerIds: stray });
+  }
+  for (const firewall of existing) {
+    if (kept.has(firewall.id)) continue;
+    const applied = appliedServerIds(firewall);
+    if (applied.length > 0) actions.push({ kind: "remove_from", firewallId: firewall.id, providerIds: applied });
+    actions.push({ kind: "delete", firewallId: firewall.id });
+  }
+  return actions;
+}
+
+async function listPublicPortsFirewalls(): Promise<PublicPortsFirewall[]> {
+  const list = await hetznerApi(
+    `/firewalls?label_selector=${encodeURIComponent(`ocd-role=${PUBLIC_PORTS_ROLE}`)}&per_page=50`,
+  ) as unknown as { firewalls: PublicPortsFirewall[] };
+  return list.firewalls ?? [];
+}
+
+/**
+ * Converge the per-server public-ports firewalls on `desired` (every server
+ * that should have open public ports; any other server gets none). A firewall
+ * still being detached may refuse deletion; it no longer opens anything, and
+ * the next reconciliation deletes it.
+ */
+export async function reconcilePublicPortsFirewalls(desired: DesiredPublicPortsFirewall[]): Promise<PublicPortsFirewallAction[]> {
+  const actions = planPublicPortsFirewalls(await listPublicPortsFirewalls(), desired);
+  for (const action of actions) {
+    switch (action.kind) {
+      case "create":
+        log("firewall", `Creating ${publicPortsFirewallName(action.serverId)} with ${action.rules.length} rule(s)`);
+        await hetznerApi("/firewalls", {
+          method: "POST",
+          body: JSON.stringify({
+            name: publicPortsFirewallName(action.serverId),
+            labels: {
+              managed_by: "open-cli-deployment",
+              "ocd-role": PUBLIC_PORTS_ROLE,
+              "ocd-server": String(action.serverId),
+            },
+            rules: action.rules,
+            apply_to: [{ type: "server", server: { id: Number(action.providerId) } }],
+          }),
+        });
+        break;
+      case "set_rules":
+        log("firewall", `Updating public-ports firewall ${action.firewallId} to ${action.rules.length} rule(s)`);
+        await hetznerApi(`/firewalls/${action.firewallId}/actions/set_rules`, {
+          method: "POST",
+          body: JSON.stringify({ rules: action.rules }),
+        });
+        break;
+      case "apply":
+        await ensureFirewallAttached(action.firewallId, action.providerId);
+        break;
+      case "remove_from":
+        log("firewall", `Detaching public-ports firewall ${action.firewallId} from ${action.providerIds.join(", ")}`);
+        try {
+          await hetznerApi(`/firewalls/${action.firewallId}/actions/remove_from_resources`, {
+            method: "POST",
+            body: JSON.stringify({
+              remove_from: action.providerIds.map((id) => ({ type: "server", server: { id: Number(id) } })),
+            }),
+          });
+        } catch (error) {
+          if (!/not.applied|not_found|not found/i.test(error instanceof Error ? error.message : String(error))) throw error;
+        }
+        break;
+      case "delete":
+        try {
+          await hetznerApi(`/firewalls/${action.firewallId}`, { method: "DELETE" });
+          log("firewall", `Deleted public-ports firewall ${action.firewallId}`);
+        } catch (error) {
+          if (isNotFoundError(error)) break;
+          log("firewall", `Public-ports firewall ${action.firewallId} not deleted yet (retried on the next pass): ${error}`);
+        }
+        break;
+    }
+  }
+  return actions;
+}
+
 // --- Server Management ---
 
 export async function createServer(opts: {

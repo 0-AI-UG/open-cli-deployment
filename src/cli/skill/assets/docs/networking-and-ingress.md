@@ -8,14 +8,17 @@
 - [Internal protocol](#internal-protocol)
 - [Health checks](#health-checks)
 - [HTTP middleware](#http-middleware)
+- [Public ports](#public-ports)
 - [Configuration timing](#configuration-timing)
 
 ## Network layers
 
-OCD provides two distinct exposure mechanisms:
+OCD provides three distinct exposure mechanisms:
 
 1. stable private app names on the fleet network;
-2. public HTTP/HTTPS domain routing through panel ingress.
+2. public HTTP/HTTPS domain routing through panel ingress;
+3. public TCP/UDP ports on the app's own server, for apps that declare
+   `public_ports`.
 
 `public: false` only disables public-domain routing. Private app networking is
 separate.
@@ -117,6 +120,18 @@ Rules:
 
 - health paths are invalid for raw TCP;
 - rate limit must be `0..1000000`, where zero disables it.
+
+## Public ports
+
+An app with `public_ports` runs on its server's host network and OCD opens
+exactly the declared ports in a per-server Hetzner Cloud Firewall
+(`ocd-public-ports-<server id>`), next to the fleet firewall that every server
+shares (SSH, HTTP, HTTPS, ICMP). Clients connect to the server's public
+address directly; nothing passes through the panel. The firewall changes when
+the app deploys, moves, changes its ports, or is deleted, and a controller
+re-checks every five minutes, repairing drift and closing ports nothing
+declares any more. Containers learn the address from `OCD_PUBLIC_IPV4`. See
+[App manifest](app-manifest.md#public-ports) for the rules.
 
 ## Configuration timing
 

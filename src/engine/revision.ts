@@ -11,6 +11,7 @@ export const REVISION_LABELS = {
   imageId: "ocd.image-id",
   bindAddress: "ocd.bind-address",
   hostPort: "ocd.host-port",
+  network: "ocd.network",
 } as const;
 
 export function hashEnvironment(env: Record<string, string>): string {

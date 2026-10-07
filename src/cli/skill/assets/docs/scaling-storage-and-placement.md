@@ -25,6 +25,8 @@ own and never creates servers: it runs exactly the declared replicas on exactly
 the declared servers. Every named server must exist, be `ready`, and not be a
 dedicated build worker, otherwise the deploy fails. The panel server is a
 valid placement. Create capacity explicitly with `ocd servers create`.
+Apps with `public_ports` run exactly one replica per placed server, because
+their container binds the server's own ports.
 
 Convergence is per server. Missing replicas start on their declared server and
 surplus ones are removed. When a placement drops a server, its replicas are

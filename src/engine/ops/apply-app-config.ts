@@ -6,6 +6,7 @@ import { syncAppIngress } from "../scale/traefik-manager.ts";
 import { registerOp } from "./registry.ts";
 import type { OpKindDefinition, Step } from "../types.ts";
 import { commitManifestDeliverySource } from "../manifest-delivery-source.ts";
+import { syncPublicPortFirewalls } from "../public-ports.ts";
 
 type ApplyAppConfigInput = { appId: number; userId?: string; spec: DeployRequest };
 
@@ -23,7 +24,12 @@ const apply: Step<ApplyAppConfigInput, { changed: string[] }> = {
     await commitManifestDeliverySource(ctx.input.appId, ctx.input.spec.delivery_source);
     if (Object.keys(ctx.input.spec.notifications ?? {}).length) await reconcileNtfyService(ctx, true);
     await syncAppIngress(ctx.input.appId);
-    return { changed: changes.map((change) => change.field) };
+    const changed = changes.map((change) => change.field);
+    const app = db.getApp(ctx.input.appId);
+    if (changed.includes("public_ports") || (changed.includes("placement") && app && db.appUsesHostNetwork(app))) {
+      await syncPublicPortFirewalls();
+    }
+    return { changed };
   },
 };
 

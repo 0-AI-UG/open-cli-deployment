@@ -322,7 +322,8 @@ export interface App {
   status: string;
   domain: string;
   image_ref?: string;
-  placement?: Array<{ server_id: number; server_name: string; replicas: number }>;
+  placement?: Array<{ server_id: number; server_name: string; replicas: number; server_ipv4?: string }>;
+  public_ports?: Array<{ port: number | string; protocol: string }>;
   servers: number[];
   created_at: string;
   public?: boolean | number;

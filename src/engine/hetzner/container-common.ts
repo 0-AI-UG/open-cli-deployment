@@ -52,7 +52,9 @@ export type DockerRunOpts = {
   image: string;
   /** App name used to scope the volume host-path allowlist. */
   appName: string;
-  /** Override the docker network. Default "ocd-net". Pass null to skip --network. */
+  /** Override the docker network. Default "ocd-net". Pass null to skip
+   * --network. "host" shares the server's network namespace; `publish` is then
+   * ignored because the container binds host ports itself. */
   network?: string | null;
   /** Static hostname mappings injected into the container. OCD uses these for
    * app aliases because containers do not inherit host /etc/hosts. */
@@ -61,6 +63,8 @@ export type DockerRunOpts = {
   publish?: { bindAddr: string; hostPort: number; containerPort: number };
   /** Absolute path to env-file on the host (--env-file). */
   envFilePath?: string;
+  /** Platform values set with --env after the env file (they win over it). */
+  env?: Record<string, string>;
   /** Primary "host:container" volume mount string (validated). */
   volumeMount?: string;
   /** Per-container memory ceiling in MB. Default DEFAULT_MEM_MB. */
@@ -140,11 +144,17 @@ export function buildDockerRunArgs(opts: DockerRunOpts): string {
     parts.push(`--cap-add=${cap}`);
   }
 
-  if (opts.publish) {
+  if (opts.publish && network !== "host") {
     const { bindAddr, hostPort, containerPort } = opts.publish;
     parts.push(`-p ${bindAddr}:${hostPort}:${containerPort}`);
   }
   if (opts.envFilePath) parts.push(`--env-file ${opts.envFilePath}`);
+  for (const [key, value] of Object.entries(opts.env ?? {})) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || /[\0\r\n]/.test(value)) {
+      throw new Error(`Invalid container environment entry: ${key}`);
+    }
+    parts.push(`--env ${shellSingleQuote(`${key}=${value}`)}`);
+  }
 
   if (opts.volumeMount) {
     const parsed = parseVolumeSpec(opts.volumeMount);

@@ -6,6 +6,7 @@ import {
   removeContainer,
 } from "../../shared/remote/index.ts";
 import { syncAllTraefik } from "../scale/traefik-manager.ts";
+import { syncPublicPortFirewalls } from "../public-ports.ts";
 import { requireStorageDriver } from "../storage/index.ts";
 import { registerOp } from "./registry.ts";
 import { assertCleanupComplete, softStep, runDbCleanupGate } from "./_shared.ts";
@@ -17,7 +18,7 @@ type DestroyInput = {
   retentionClass?: "user" | "provisional";
 };
 
-const markDeleting: Step<DestroyInput, { ok: true }> = {
+const markDeleting: Step<DestroyInput, { ok: true; hadPublicPorts?: true }> = {
   name: "mark_deleting",
   label: "Mark deletion intent",
   async run(ctx) {
@@ -27,6 +28,7 @@ const markDeleting: Step<DestroyInput, { ok: true }> = {
         ctx.log(`DNS cleanup is manual: remove the A record for ${app.domain} when it is no longer needed`);
       }
       db.markAppDeletionRequested(ctx.input.appId);
+      if (db.appUsesHostNetwork(app)) return { ok: true, hadPublicPorts: true };
     }
     return { ok: true };
   },
@@ -71,9 +73,13 @@ const stopAndRemoveContainers: Step<DestroyInput, { affectedServerIds: number[];
 const removeIngressRoute: Step<DestroyInput, { ok: boolean; error?: string }> = {
   name: "remove_ingress_route",
   label: "Remove ingress route",
-  async run(ctx) {
+  async run(ctx, prior) {
     const r = await softStep(ctx, "remove_ingress_route", async () => {
       await syncAllTraefik();
+      // Close the app's public ports; the firewall controller retries a failure.
+      if ((prior["mark_deleting"] as { hadPublicPorts?: true } | undefined)?.hadPublicPorts) {
+        await syncPublicPortFirewalls();
+      }
     });
     return r.ok ? { ok: true } : { ok: false, error: r.error };
   },

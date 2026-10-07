@@ -6,6 +6,7 @@ import dbInstance, * as db from "../../shared/db.ts";
 import { isNotFoundError } from "../../shared/hetzner/errors.ts";
 import {
   assertPlacementUsable,
+  assertPublicPortsAvailable,
   resolveDeployRequestEnvironmentIds,
   resolveRequestPlacement,
 } from "../../shared/app-config.ts";
@@ -32,6 +33,8 @@ import { registerOp } from "./registry.ts";
 import { FatalProbeError, type OpContext, type OpKindDefinition, type Step } from "../types.ts";
 import { attestReplica, hashEnvironment, latestDesiredImage } from "../revision.ts";
 import { addReplicas } from "../scale/scale-up.ts";
+import { syncPublicPortFirewalls } from "../public-ports.ts";
+import { describePublicPort } from "../../shared/public-ports.ts";
 import { assertRolloutDiskSpace } from "../hetzner/build.ts";
 import { commitManifestDeliverySource } from "../manifest-delivery-source.ts";
 import {
@@ -158,6 +161,7 @@ const resolvePlacementStep: Step<DeployInput, ServerOut> = {
     // exist and be usable. OCD never picks or provisions a server.
     const placement = resolveRequestPlacement(req);
     assertPlacementUsable(placement);
+    assertPublicPortsAvailable(req.app_name, req.public_ports ?? [], placement);
     const servers = Object.keys(placement).map((id) => db.getServer(Number(id))!);
     for (const server of servers) await assertRolloutDiskSpace(server.ipv4, server.ssh_host_key || undefined);
     const primary = servers[0];
@@ -405,6 +409,7 @@ const insertAppRow: Step<DeployInput, InsertAppOut> = {
           desired_volume_driver: volume?.driverId ?? req.volume_driver ?? "",
           command: req.command,
           cap_add: req.cap_add,
+          public_ports: req.public_ports,
         },
         server.serverId,
       );
@@ -606,6 +611,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
         cpus: req.cpu_limit || undefined,
         command: req.command,
         capAdd: req.cap_add,
+        hostNetwork: (req.public_ports?.length ?? 0) > 0,
         hostKey: server.serverHostKey || undefined,
         configRevision: appRow?.config_revision ?? 1,
         envHash: hashEnvironment(envVars),
@@ -689,7 +695,7 @@ const pullAndRunContainer: Step<DeployInput, ArtifactOut> = {
 const syncIngressStep: Step<DeployInput, { domain: string }> = {
   name: "sync_ingress",
   label: "Configure ingress",
-  async run(_ctx, prior) {
+  async run(ctx, prior) {
     const appOut = prior["insert_app_row"] as InsertAppOut;
     await syncAppIngress(appOut.appId);
     db.appendDeployLog(
@@ -698,6 +704,14 @@ const syncIngressStep: Step<DeployInput, { domain: string }> = {
         ? `[ingress] Public ingress configured for ${appOut.domain}`
         : `[ingress] Internal ingress configured (private app)`,
     );
+    const publicPorts = ctx.input.public_ports ?? [];
+    if (publicPorts.length > 0) {
+      await syncPublicPortFirewalls();
+      db.appendDeployLog(
+        appOut.appId,
+        `[ingress] Public ports open on the server firewall: ${publicPorts.map(describePublicPort).join(", ")}`,
+      );
+    }
     return { domain: appOut.domain };
   },
   async compensate(ctx, out, prior) {
@@ -708,6 +722,13 @@ const syncIngressStep: Step<DeployInput, { domain: string }> = {
       await syncAllTraefik();
     } catch (err) {
       ctx.log(`Failed to remove ingress route: ${err}`);
+    }
+    if ((ctx.input.public_ports ?? []).length > 0) {
+      try {
+        await syncPublicPortFirewalls({ excludeAppIds: [appOut.appId] });
+      } catch (err) {
+        ctx.log(`Failed to close public ports (the firewall controller retries): ${err}`);
+      }
     }
   },
 };

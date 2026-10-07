@@ -69,6 +69,7 @@ export async function pullImmutableImageAndRun(
     envHash?: string;
     command?: string[];
     capAdd?: string[];
+    hostNetwork?: boolean;
   },
   onLog?: (line: string) => void,
 ): Promise<{ containerId: string; imageTag: string; imageDigest: string; imageBytes: number }> {
@@ -94,6 +95,7 @@ export async function pullImmutableImageAndRun(
     envHash: opts.envHash,
     command: opts.command,
     capAdd: opts.capAdd,
+    hostNetwork: opts.hostNetwork,
   }, opts.hostKey);
   const inspected = await sshExec(
     ip,

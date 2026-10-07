@@ -449,6 +449,7 @@ async function restartSourceReplica(
     cpus: app.cpu_limit || undefined,
     command: db.parseAppCommand(app),
     capAdd: db.parseAppCapabilities(app),
+    hostNetwork: db.appUsesHostNetwork(app),
   }, sourceHostKey);
   logLine(`Restarted source container ${containerName} on ${sourceServer.name}`);
 }

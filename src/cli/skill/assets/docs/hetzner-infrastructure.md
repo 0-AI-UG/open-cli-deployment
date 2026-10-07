@@ -20,6 +20,14 @@ ocd servers delete <name|id>
 
 Direct SSH remains available through `ocd ssh`.
 
+Every server carries the fleet firewall `open-cli-deployment` (SSH, HTTP,
+HTTPS, ICMP). A server that runs an app with `public_ports` also carries
+`ocd-public-ports-<server id>`, which OCD owns completely: its rules are the
+declared public ports of the apps placed there, and OCD deletes it when there
+are none. Hetzner combines the rules of every firewall on a server. Give such a
+service a small server of its own when its traffic or ports should stay apart
+from other apps.
+
 ## Hetzner settings
 
 Configure Hetzner in **Settings → Hetzner**. Credentials remain in the encrypted

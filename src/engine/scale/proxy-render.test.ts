@@ -121,6 +121,14 @@ describe("renderProxyConfig", () => {
     expect(entry.frontPorts).toEqual([80, 3000, app.internal_port]);
   });
 
+  test("a host-network app is reached on its container port, not the replica host port", () => {
+    const server = makeServer("10.0.7.12");
+    const app = makeApp({ server, containerPort: 3478, hostPort: 10202, internalProtocol: "tcp" });
+    db.updateAppPublicPorts(app.id, [{ port: 3478, protocol: "udp" }]);
+    const entry = renderProxyConfig(stateFor(app.name)).apps[0]!;
+    expect(entry.backends).toEqual(["10.0.7.12:3478"]);
+  });
+
   test("tcp-routed app gets no :80 front port", () => {
     const server = makeServer("10.0.7.11");
     const app = makeApp({ server, internalProtocol: "tcp", containerPort: 5432, hostPort: 10202 });

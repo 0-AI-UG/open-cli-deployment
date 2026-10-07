@@ -8,6 +8,8 @@ import {
   listHetznerServers,
   ensureFirewall,
   ensureFirewallAttached,
+  reconcilePublicPortsFirewalls,
+  type DesiredPublicPortsFirewall,
 } from "../../engine/hetzner/servers.ts";
 import {
   createVolume,
@@ -73,6 +75,12 @@ export const hetzner = {
 
   async ensureFirewallAttached(firewallId: string, serverId: string) {
     await ensureFirewallAttached(firewallId, serverId);
+  },
+
+  /** Converge the per-server public-ports firewalls; returns how many
+   * changes were made. */
+  async reconcilePublicPortsFirewalls(desired: DesiredPublicPortsFirewall[]): Promise<number> {
+    return (await reconcilePublicPortsFirewalls(desired)).length;
   },
 
   async listServerTypes() {

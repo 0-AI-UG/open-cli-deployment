@@ -12,7 +12,13 @@ export type Server = {
   created_at: string;
 };
 
-export type PlacementEntry = { server_id: number; server_name: string; replicas: number };
+export type PlacementEntry = {
+  server_id: number;
+  server_name: string;
+  replicas: number;
+  /** The server's public IPv4, where an app's public ports answer. */
+  server_ipv4?: string;
+};
 
 export type App = {
   id: number;
@@ -123,6 +129,9 @@ export type DeployRequest = {
   cpu_limit?: number; // Per-container CPU ceiling in cores (fractional allowed). Omit / 0 → platform default
   command?: string[]; // Optional argv appended after the OCI image
   cap_add?: string[]; // Explicit Linux capabilities restored after cap-drop=ALL
+  /** Ports opened to the internet on every placed server; non-empty runs the
+   * app on the host network with one replica per server. */
+  public_ports?: import("./public-ports.ts").PublicPort[];
   health_check?: boolean; // Default true; false = skip the HTTP probe, only verify the container is running
   health_check_mode?: "http" | "container" | "exec" | "heartbeat";
   health_check_command?: string;

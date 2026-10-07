@@ -63,6 +63,49 @@ describe("startAppReplica", () => {
   });
 
 
+  test("tells every container its server's public IPv4 unless the app sets it", async () => {
+    await startAppReplica("203.0.113.7", {
+      containerName: "web",
+      image: "web:latest",
+      appName: "web",
+      bindAddr: "10.0.0.1",
+      hostPort: 8080,
+      containerPort: 3000,
+    });
+    expect(calls.find((c) => c.includes("docker run -d"))).toContain("OCD_PUBLIC_IPV4=203.0.113.7");
+
+    calls.length = 0;
+    await startAppReplica("203.0.113.7", {
+      containerName: "web",
+      image: "web:latest",
+      appName: "web",
+      bindAddr: "10.0.0.1",
+      hostPort: 8080,
+      containerPort: 3000,
+      envVars: { OCD_PUBLIC_IPV4: "198.51.100.1" },
+    });
+    expect(calls.find((c) => c.includes("docker run -d"))).not.toContain("--env ");
+  });
+
+  test("hostNetwork runs on the host network, publishes nothing and labels the revision", async () => {
+    await startAppReplica("203.0.113.7", {
+      containerName: "turn",
+      image: "coturn:latest",
+      appName: "turn",
+      bindAddr: "10.0.0.1",
+      hostPort: 10001,
+      containerPort: 3478,
+      network: "ocd-net",
+      hostNetwork: true,
+    });
+    const run = calls.find((c) => c.includes("docker run -d"))!;
+    expect(run).toContain("--network host");
+    expect(run).not.toContain("--network ocd-net");
+    expect(run).not.toContain("-p 10.0.0.1");
+    expect(run).toContain("ocd.network=host");
+    expect(run).toContain("--cap-drop=ALL");
+  });
+
   test("network:null omits --network", async () => {
     await startAppReplica("1.2.3.4", {
       containerName: "app2",

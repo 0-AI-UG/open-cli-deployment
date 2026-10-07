@@ -19,6 +19,7 @@ import { StorageBindingsSchema } from "./storage-schema.ts";
  */
 import { z } from "zod";
 import { volumePlacementError } from "./placement.ts";
+import { PublicPortsSchema, publicPortsAppErrors } from "./public-ports.ts";
 
 // --- numeric bounds + predicates (formerly in ./validate.ts) ----------------
 
@@ -310,6 +311,9 @@ export const DeployManifestSchema = z
     ).optional(),
     /** Response compression on the public router. */
     compress: z.boolean({ error: "expected boolean" }).optional(),
+    /** Ports opened to the internet on every placed server. Declaring any runs
+     * the app on the host network, one replica per server. */
+    public_ports: PublicPortsSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -323,6 +327,14 @@ export const DeployManifestSchema = z
     if (value.volume && value.placement) {
       const error = volumePlacementError(value.placement);
       if (error) ctx.addIssue({ code: "custom", message: error, path: ["placement"] });
+    }
+    const healthMode = value.health_check?.mode ?? (value.health_check?.enabled === false ? "container" : "http");
+    for (const { field, message } of publicPortsAppErrors({
+      public_ports: value.public_ports,
+      placement: value.placement,
+      health_check_mode: healthMode,
+    })) {
+      ctx.addIssue({ code: "custom", message, path: [field] });
     }
   });
 

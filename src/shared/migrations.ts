@@ -2907,6 +2907,16 @@ export const migrations: Migration[] = [
       db.run("UPDATE panel_deployments SET source = 'main-release' WHERE source = 'admin-main-release'");
     },
   },
+  {
+    version: 128,
+    description: "Add public ports (host network) to apps",
+    up: (db) => {
+      const columns = new Set((db.query("PRAGMA table_info(apps)").all() as Array<{ name: string }>).map((c) => c.name));
+      if (!columns.has("public_ports_json")) {
+        db.run("ALTER TABLE apps ADD COLUMN public_ports_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(public_ports_json))");
+      }
+    },
+  },
 ];
 
 /** Helper for migration 82: merge two v2 entry lists (override wins by key) and

@@ -1,5 +1,6 @@
 import * as db from "../../shared/db.ts";
-import { assertPlacementUsable } from "../../shared/app-config.ts";
+import { assertPlacementUsable, assertPublicPortsAvailable } from "../../shared/app-config.ts";
+import { syncPublicPortFirewalls } from "../public-ports.ts";
 import { parsePlacement, type Placement } from "../../shared/placement.ts";
 import { migrateVolumeReplica, rollbackMigrateWithVolume, type VolumeMigrationContext } from "../scale/migrate.ts";
 import { addReplicas } from "../scale/scale-up.ts";
@@ -43,6 +44,14 @@ const loadAndValidate: Step<MoveInput, ValidateOut> = {
       throw new Error(`App ${app.name} is not placed on ${source?.name ?? `server #${fromServerId}`}`);
     }
     assertPlacementUsable({ [String(toServerId)]: 1 });
+    const publicPorts = db.parseAppPublicPorts(app);
+    if (publicPorts.length > 0) {
+      if (placement[String(toServerId)]) {
+        throw new Error(`App ${app.name} has public ports and already runs on the target server; one replica per server`);
+      }
+      if (count !== 1) throw new Error(`App ${app.name} has public ports, so each server runs exactly 1 replica`);
+      assertPublicPortsAvailable(app.name, publicPorts, { [String(toServerId)]: 1 });
+    }
     if (app.volume_id) {
       const driver = requireStorageDriver(app.volume_driver);
       if (!driver.portable) {
@@ -167,6 +176,14 @@ const syncIngressStep: Step<MoveInput, { ok: true }> = {
       await syncAppIngress(ctx.input.appId);
     } catch (err) {
       ctx.log(`Ingress sync warning: ${err}`);
+    }
+    const app = db.getApp(ctx.input.appId);
+    if (app && db.appUsesHostNetwork(app)) {
+      try {
+        await syncPublicPortFirewalls();
+      } catch (err) {
+        ctx.log(`Public ports firewall warning (the firewall controller retries within 5 minutes): ${err}`);
+      }
     }
     return { ok: true };
   },

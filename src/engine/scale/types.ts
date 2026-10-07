@@ -55,6 +55,7 @@ export function appReplicaRunOpts(
     cpus: app.cpu_limit || undefined,
     command: db.parseAppCommand(app),
     capAdd: db.parseAppCapabilities(app),
+    hostNetwork: db.appUsesHostNetwork(app),
   };
 }
 

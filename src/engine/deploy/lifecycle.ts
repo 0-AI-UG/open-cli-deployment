@@ -282,6 +282,7 @@ export async function recreateAppContainer(
       cpus: app.cpu_limit || undefined,
       command: db.parseAppCommand(app),
       capAdd: db.parseAppCapabilities(app),
+      hostNetwork: db.appUsesHostNetwork(app),
     }, hostKey);
 
     // Health check (running-only when the app opted out of the HTTP probe)

@@ -14,6 +14,7 @@ import {
   resolveAppEnvVars,
 } from "../../shared/env-crypto.ts";
 import { rollingRedeploy } from "../scale/index.ts";
+import { syncPublicPortFirewalls } from "../public-ports.ts";
 import { syncAppIngress } from "../scale/traefik-manager.ts";
 import { replicaBindHost } from "../scale/types.ts";
 import { registerOp } from "./registry.ts";
@@ -59,6 +60,8 @@ type RollbackSnapshot = {
   cpus: number | null;
   command: string[];
   capAdd: string[];
+  /** Absent in snapshots taken before public ports existed: bridge network. */
+  hostNetwork?: boolean;
   configRevision: number;
   envHash: string;
 };
@@ -96,6 +99,7 @@ function candidateApp(app: AppRow, candidate: DeployRequest | null): AppRow {
     internal_protocol: candidate.internal_protocol ?? "http",
     command_json: JSON.stringify(candidate.command ?? []),
     cap_add_json: JSON.stringify(candidate.cap_add ?? []),
+    public_ports_json: JSON.stringify(candidate.public_ports ?? []),
     config_revision: app.config_revision + 1,
   };
 }
@@ -184,6 +188,7 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
       cpus: target.app.cpu_limit ?? null,
       command: db.parseAppCommand(target.app),
       capAdd: db.parseAppCapabilities(target.app),
+      hostNetwork: db.appUsesHostNetwork(target.app),
       configRevision: target.app.config_revision,
       envHash: hashEnvironment(await resolveAppEnvVars(target.app)),
     };
@@ -206,6 +211,7 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
       cpus: target.app.cpu_limit ?? null,
       command: db.parseAppCommand(target.app),
       capAdd: db.parseAppCapabilities(target.app),
+      hostNetwork: db.appUsesHostNetwork(target.app),
       configRevision: target.app.config_revision,
       envHash: hashEnvironment(await resolveAppEnvVars(target.app)),
     };
@@ -232,6 +238,7 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
       cpus: snap.cpus ?? undefined,
       command: snap.command,
       capAdd: snap.capAdd,
+      hostNetwork: snap.hostNetwork,
       configRevision: snap.configRevision,
       envHash: snap.envHash,
     }, hostKey);
@@ -287,6 +294,7 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
       cpus: app.cpu_limit || undefined,
       command: db.parseAppCommand(app),
       capAdd: db.parseAppCapabilities(app),
+      hostNetwork: db.appUsesHostNetwork(app),
       hostKey: server.ssh_host_key || undefined,
       configRevision: app.config_revision,
       envHash: hashEnvironment(envVars),
@@ -407,7 +415,7 @@ const rollExtraReplicas: Step<RedeployInput, { ok: true }> = {
   },
 };
 
-const commitCandidateConfig: Step<RedeployInput, { committed: boolean; configRevision: number }> = {
+const commitCandidateConfig: Step<RedeployInput, { committed: boolean; configRevision: number; publicPortsChanged?: boolean }> = {
   name: "commit_candidate_config",
   label: "Commit configuration",
   async run(ctx) {
@@ -417,7 +425,7 @@ const commitCandidateConfig: Step<RedeployInput, { committed: boolean; configRev
     }
     const before = db.getApp(ctx.input.appId);
     if (!before) throw new Error("App not found");
-    await applyAppConfig(before.id, ctx.input.candidate, {
+    const changes = await applyAppConfig(before.id, ctx.input.candidate, {
       userId: ctx.input.userId,
       log: (line) => ctx.log(`[config] ${line}`),
       allowUnchangedLegacyVolumeIntent: ctx.input.allowUnchangedLegacyVolumeIntent,
@@ -430,15 +438,24 @@ const commitCandidateConfig: Step<RedeployInput, { committed: boolean; configRev
       throw new Error(`Candidate revision commit was not atomic: expected r${before.config_revision + 1}, got r${after.config_revision}`);
     }
     ctx.log(`configuration committed atomically at r${after.config_revision} after readiness passed`);
-    return { committed: true, configRevision: after.config_revision };
+    return {
+      committed: true,
+      configRevision: after.config_revision,
+      publicPortsChanged: changes.some((change) => change.field === "public_ports"),
+    };
   },
 };
 
 const syncIngressStep: Step<RedeployInput, { ok: true }> = {
   name: "sync_ingress",
   label: "Configure ingress",
-  async run(ctx) {
+  async run(ctx, prior) {
     await syncAppIngress(ctx.input.appId);
+    const commit = prior["commit_candidate_config"] as { publicPortsChanged?: boolean } | undefined;
+    const app = db.getApp(ctx.input.appId);
+    if (commit?.publicPortsChanged || (app && db.appUsesHostNetwork(app))) {
+      await syncPublicPortFirewalls();
+    }
     return { ok: true };
   },
 };

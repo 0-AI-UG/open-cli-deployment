@@ -49,6 +49,7 @@ export function makeFakeComputeProvider(
     ensureSshKey: ReturnType<typeof mock>;
     ensureFirewall: ReturnType<typeof mock>;
     ensureFirewallAttached: ReturnType<typeof mock>;
+    reconcilePublicPortsFirewalls: ReturnType<typeof mock>;
     volumeCreate: ReturnType<typeof mock>;
     volumeDelete: ReturnType<typeof mock>;
     volumeAttach: ReturnType<typeof mock>;
@@ -74,6 +75,7 @@ export function makeFakeComputeProvider(
     ensureSshKey: mock(async (name: string) => ({ id: "k1", name })),
     ensureFirewall: mock(async () => "fw-1"),
     ensureFirewallAttached: mock(async () => {}),
+    reconcilePublicPortsFirewalls: mock(async () => 0),
     volumeCreate: mock(async (opts: { name: string; sizeGb: number }) => ({
       providerId: `v-${opts.name}`,
       linuxDevice: "/dev/sdb",
@@ -89,6 +91,7 @@ export function makeFakeComputeProvider(
     ensureSshKey: _mocks.ensureSshKey,
     ensureFirewall: _mocks.ensureFirewall,
     ensureFirewallAttached: _mocks.ensureFirewallAttached,
+    reconcilePublicPortsFirewalls: _mocks.reconcilePublicPortsFirewalls,
     listServerTypes: async () => [],
     createServer: _mocks.createServer,
     getServer: _mocks.getServer,

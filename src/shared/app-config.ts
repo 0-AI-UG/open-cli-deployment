@@ -5,6 +5,7 @@ import type { AppRow } from "./db/apps.ts";
 import type { DeployRequest } from "./rpc.ts";
 import { parseRuntimeConfig, serializeRuntimeConfig, preflightRuntimeEnv, runtimeAppFromRequest } from "./runtime-env.ts";
 import { describePlacement, parsePlacement, resolvePlacement, type Placement } from "./placement.ts";
+import { normalizePublicPorts, publicPortConflicts, type PublicPort } from "./public-ports.ts";
 import { validateDeployRequest } from "./validate.ts";
 
 export type AppConfigChange = {
@@ -22,7 +23,7 @@ const RUNTIME_CONFIG_FIELDS = new Set([
   "health_check", "health_check_mode", "health_check_command", "health_check_file",
   "health_check_max_age_seconds", "health_check_expected_statuses", "internal_protocol",
   "desired_volume_id", "desired_volume_size", "desired_volume_path", "desired_volume_driver",
-  "command", "cap_add",
+  "command", "cap_add", "public_ports",
 ]);
 
 /** Classify the least disruptive convergence action for a desired-config diff.
@@ -85,6 +86,23 @@ export function assertPlacementUsable(placement: Placement): void {
       throw new Error(`Placement server ${server.name} is not ready (status: ${server.status})`);
     }
   }
+}
+
+/** No two apps may claim an overlapping public port on the same server.
+ * `placement` is resolved (server id keys). */
+export function assertPublicPortsAvailable(appName: string, ports: PublicPort[], placement: Placement): void {
+  if (ports.length === 0) return;
+  const others = db.getApps().map((other) => ({
+    name: other.name,
+    placement: parsePlacement(other.placement),
+    public_ports: db.parseAppPublicPorts(other),
+  }));
+  const conflicts = publicPortConflicts(
+    { name: appName, placement, public_ports: ports },
+    others,
+    (id) => db.getServer(Number(id))?.name ?? `#${id}`,
+  );
+  if (conflicts.length > 0) throw new Error(`Public port conflict: ${conflicts.join("; ")}`);
 }
 
 /** Gate a placement change for an existing app: a volume app may not change
@@ -168,6 +186,7 @@ export function mergeDeployRequestWithExistingApp(
     manifest_hash: supplied.manifest_hash,
     command: supplied.command ?? db.parseAppCommand(app),
     cap_add: supplied.cap_add ?? db.parseAppCapabilities(app),
+    public_ports: supplied.public_ports ?? db.parseAppPublicPorts(app),
   };
   return merged;
 }
@@ -202,6 +221,7 @@ function normalizedSpec(req: DeployRequest) {
     desired_volume_driver: req.volume_driver ?? "",
     command: req.command ?? [],
     cap_add: req.cap_add ?? [],
+    public_ports: normalizePublicPorts(req.public_ports ?? []),
   };
 }
 
@@ -239,6 +259,7 @@ function comparableApp(app: AppRow) {
     desired_volume_driver: app.desired_volume_driver || "",
     command: db.parseAppCommand(app),
     cap_add: db.parseAppCapabilities(app),
+    public_ports: db.parseAppPublicPorts(app),
   };
 }
 
@@ -277,6 +298,7 @@ export function deployRequestFromApp(app: AppRow): DeployRequest {
     volume_driver: app.desired_volume_driver || undefined,
     command: current.command,
     cap_add: current.cap_add,
+    public_ports: current.public_ports,
   };
 }
 
@@ -298,6 +320,7 @@ export function diffAppConfig(app: AppRow, req: DeployRequest): AppConfigChange[
   const before = comparableApp(app) as Record<string, unknown>;
   const spec = normalizedSpec(effective);
   assertPlacementChangeAllowed(app, effective.volume_size ?? 0, spec.placement);
+  assertPublicPortsAvailable(app.name, spec.public_ports, spec.placement);
   const after = spec as Record<string, unknown>;
   const changes: AppConfigChange[] = [];
   for (const [field, value] of Object.entries(after)) {
@@ -400,6 +423,7 @@ export async function applyAppConfig(
       driverId: desired.desired_volume_driver,
     });
   }
+  if (changed.has("public_ports")) db.updateAppPublicPorts(app.id, desired.public_ports);
   if (changed.has("placement")) db.updateAppPlacement(app.id, desired.placement);
   if (opts.userId) db.updateAppDeployedBy(app.id, opts.userId);
   db.normalizeAppConfigRevision(app.id, app.config_revision, opts.forceRevision);
