@@ -1,6 +1,6 @@
 import { test, expect, mock, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import db, { saveSetting } from "../../shared/db.ts";
@@ -18,7 +18,7 @@ mock.module("../object-storage/s3.ts", () => ({
   getObject: async (bucket: string, key: string) => corrupt ? Buffer.from("corrupt") : objects.get(`${bucket}/${key}`)!,
   deleteObject: async (bucket: string, key: string) => { if (deleteFails) throw new Error("denied"); removed.push(`${bucket}/${key}`); objects.delete(`${bucket}/${key}`); },
 }));
-const { requestBackup, backupTick, listBackups, pruneBackups } = await import("./backups.ts");
+const { requestBackup, backupTick, listBackups, pruneBackups, sweepStaleBackupDirs, TOO_LARGE_ERROR } = await import("./backups.ts");
 let recoveryKey: string;
 beforeEach(async () => {
   objects.clear(); removed.length = 0; corrupt = false; deleteFails = false;
@@ -78,4 +78,30 @@ test("backup history includes every recorded backup, newest first", () => {
   expect(history).toHaveLength(105);
   expect(history[0].id).toBe("history-104");
   expect(history[104].id).toBe("history-0");
+});
+
+test("an oversized database waits a day before the next attempt, other failures retry hourly", async () => {
+  db.run("DELETE FROM panel_backups");
+  saveSetting("panel_backup_enabled", "1");
+  const now = Date.now();
+  const failed = db.query("INSERT INTO panel_backups (id, created_at, status, bucket, object_key, endpoint, region, error, finished_at) VALUES (?, ?, 'failed', 'backup-bucket', ?, 'https://storage.example.com', 'test', ?, ?)");
+  failed.run("too-large", now - 2 * 3600_000, "too-large.ocdb", `${TOO_LARGE_ERROR} (300 MiB of 256 MiB); retrying in 24 hours`, now - 2 * 3600_000);
+  await backupTick(now);
+  expect(listBackups().map(b => b.id)).toEqual(["too-large"]);
+  db.query("UPDATE panel_backups SET error='Backup interrupted or timed out' WHERE id='too-large'").run();
+  await backupTick(now);
+  expect(listBackups().length).toBe(2);
+  saveSetting("panel_backup_enabled", "0");
+});
+
+test("removes snapshot folders left by killed backups, keeps a running one", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ocd-sweep-"));
+  try {
+    const stale = path.join(dir, "ocd-panel-backup-stale"), fresh = path.join(dir, "ocd-panel-backup-fresh"), other = path.join(dir, "unrelated");
+    for (const folder of [stale, fresh, other]) mkdirSync(folder);
+    const hourAgo = new Date(Date.now() - 3600_000);
+    utimesSync(stale, hourAgo, hourAgo); utimesSync(other, hourAgo, hourAgo);
+    sweepStaleBackupDirs(Date.now(), dir);
+    expect([existsSync(stale), existsSync(fresh), existsSync(other)]).toEqual([false, true, true]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

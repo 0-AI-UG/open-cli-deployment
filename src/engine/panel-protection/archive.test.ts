@@ -1,9 +1,10 @@
 import { describe, test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, existsSync, statSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, statSync, rmSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { encryptArchive, decryptArchive, generateRecoveryKey, sha256, type PanelArchive } from "./archive.ts";
+import { encryptArchive, encryptArchiveFromFile, decryptArchive, generateRecoveryKey, sha256, type PanelArchive } from "./archive.ts";
 import { restoreArchive } from "./restore.ts";
 import { CURRENT_SCHEMA_VERSION, initializeCurrentSchema } from "../../shared/db/current-schema.ts";
 
@@ -15,6 +16,21 @@ function fixture(): PanelArchive {
   return { version: 1, createdAt: new Date().toISOString(), image: "", schemaVersion: CURRENT_SCHEMA_VERSION, jwtSecret: "original-secret-".repeat(4), database: bytes.toString("base64"), databaseSha256: sha256(bytes), ssh: { id_ed25519: Buffer.from("private-key").toString("base64") } };
 }
 describe("encrypted panel backup recovery", () => {
+  test("streams a multi-chunk database into an archive that decrypts like the in-memory one", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ocd-stream-archive-"));
+    try {
+      // Larger than one 3 MiB chunk and not a multiple of 3, so chunk joins and the final partial chunk are covered.
+      const database = randomBytes(7 * 1024 * 1024 + 1);
+      const file = path.join(dir, "deploy.db");
+      writeFileSync(file, database);
+      const { database: _unused, databaseSha256: _sha, ...metadata } = fixture();
+      const key = generateRecoveryKey();
+      const { archive, databaseSha256 } = encryptArchiveFromFile(metadata, file, key);
+      expect(databaseSha256).toBe(sha256(database));
+      expect(decryptArchive(archive, key)).toEqual({ ...metadata, database: database.toString("base64"), databaseSha256 });
+      expect(() => decryptArchive(archive, generateRecoveryKey())).toThrow("authentication");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
   test("authenticates all backup bytes and the key", () => {
     const value = fixture(), key = generateRecoveryKey();
     const encrypted = encryptArchive(value, key);

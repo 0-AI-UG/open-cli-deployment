@@ -6,6 +6,7 @@ import { reconcileNetwork } from "./scale/network-reconciler.ts";
 import { reconcileProxy } from "./scale/proxy-manager.ts";
 import { reconcileTraefik } from "./scale/traefik-manager.ts";
 import { collectServerMetrics } from "./metrics-parse.ts";
+import { pruneOldOperationLogs } from "../shared/db/operations.ts";
 import { checkReplicaHealth, HEALTH_EXEMPT_STATUSES } from "./health.ts";
 import { sweepStuckStates } from "./stuck-sweep.ts";
 import { sweepExpiredProvisionalVolumes } from "./provisional-volume-sweep.ts";
@@ -26,6 +27,8 @@ function log(context: string, ...args: unknown[]) {
 const TICK_MS = 30_000;
 const METRICS_RETENTION_SEC = 24 * 60 * 60;
 const AVAILABILITY_RETENTION_SEC = 7 * 24 * 60 * 60;
+// Engine logs are the largest table; keeping them forever pushed the panel database past the backup size.
+const OPERATION_LOG_RETENTION_SEC = 14 * 24 * 60 * 60;
 
 let running = false;
 
@@ -222,6 +225,7 @@ async function tick(): Promise<void> {
     db.pruneOldMetrics(METRICS_RETENTION_SEC);
     db.pruneOldServerMetrics(METRICS_RETENTION_SEC);
     db.pruneOldAvailabilitySamples(AVAILABILITY_RETENTION_SEC);
+    pruneOldOperationLogs(OPERATION_LOG_RETENTION_SEC);
 
     log("tick", `done in ${Date.now() - start}ms (${byApp.size} apps, ${serverWork.size} servers)`);
   } catch (err) {

@@ -34,7 +34,7 @@ describe("buildPanelReleaseScript", () => {
   test("runs the new container on the same loopback port Traefik targets", () => {
     const script = buildPanelReleaseScript(base);
     expect(script).toContain(
-      "docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 -p 127.0.0.1:3001:3001 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data ghcr.io/0-ai-ug/open-cli-deployment@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 --memory 1024m --memory-swap 1024m -p 127.0.0.1:3001:3001 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data ghcr.io/0-ai-ug/open-cli-deployment@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     );
     // Old container is removed only after a successful pull (pull-then-swap).
     expect(script).toContain("docker rm -f ocd-panel");
@@ -64,7 +64,7 @@ describe("buildPanelReleaseScript", () => {
 
     test("restarts the previous image when the new one never becomes healthy", () => {
       const script = buildPanelReleaseScript(base);
-      expect(script).toContain('docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 -p 127.0.0.1:3001:3001 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data $PREV_IMAGE');
+      expect(script).toContain('docker run -d --name ocd-panel --restart unless-stopped --log-opt max-size=20m --log-opt max-file=3 --memory 1024m --memory-swap 1024m -p 127.0.0.1:3001:3001 --env-file /home/deploy/apps/ocd-panel/.env.deploy -v /mnt/data:/app/data $PREV_IMAGE');
       expect(script).toContain("rolling back to $PREV_IMAGE");
     });
 
@@ -113,6 +113,8 @@ describe("buildPanelReleaseScript", () => {
     const script = buildPanelReleaseScript(base);
     expect(script.match(/--log-opt max-size=20m/g)?.length).toBe(2);
     expect(script.match(/--log-opt max-file=3/g)?.length).toBe(2);
+    // The rollback container keeps the same memory ceiling as the new one.
+    expect(script.match(/--memory 1024m --memory-swap 1024m/g)?.length).toBe(2);
   });
 
   test("emits syntactically valid bash with a database snapshot", async () => {
