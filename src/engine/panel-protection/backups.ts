@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, lstatSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, lstatSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Database } from "bun:sqlite";
@@ -7,7 +7,30 @@ import { SSH_DIR } from "../../shared/paths.ts";
 import { getJwtSecret, secretStore } from "../../shared/secret-store.ts";
 import { CURRENT_SCHEMA_VERSION } from "../../shared/db/current-schema.ts";
 import { getS3Credentials, putObject, getObject, deleteObject } from "../object-storage/s3.ts";
-import { encryptArchive, sha256, MAX_ARCHIVE_BYTES } from "./archive.ts";
+import { encryptArchiveFromFile, sha256, MAX_ARCHIVE_BYTES } from "./archive.ts";
+
+const TEMP_PREFIX = "ocd-panel-backup-";
+const STALE_TEMP_MS = 30 * 60_000;
+// Retrying an oversized database every hour cannot succeed; wait for the log retention to shrink it.
+export const TOO_LARGE_ERROR = "Panel database exceeds the supported backup size";
+export class BackupTooLargeError extends Error {
+  constructor(bytes: number) {
+    super(`${TOO_LARGE_ERROR} (${Math.round(bytes / 1048576)} MiB of ${MAX_ARCHIVE_BYTES / 2 / 1048576} MiB); retrying in 24 hours`);
+  }
+}
+
+/** A backup killed mid-run (out of memory, restart) never reaches its cleanup; drop its snapshot copy. */
+export function sweepStaleBackupDirs(now = Date.now(), dir = tmpdir()): void {
+  let entries: string[] = [];
+  try { entries = readdirSync(dir); } catch { return; }
+  for (const name of entries) {
+    if (!name.startsWith(TEMP_PREFIX)) continue;
+    const full = path.join(dir, name);
+    try {
+      if (now - statSync(full).mtimeMs > STALE_TEMP_MS) rmSync(full, { recursive: true, force: true });
+    } catch { /* already gone */ }
+  }
+}
 
 export type BackupRow = { id: string; created_at: number; status: string; region: string; bucket: string; object_key: string; endpoint: string; checksum: string; size_bytes: number; error: string; finished_at: number | null };
 export const listBackups = () => db.query("SELECT * FROM panel_backups ORDER BY created_at DESC, rowid DESC").all() as BackupRow[];
@@ -32,14 +55,17 @@ export async function performBackup(row: BackupRow): Promise<void> {
   const dir = mkdtempSync(path.join(tmpdir(), "ocd-panel-backup-"));
   try {
     const snapshotPath = path.join(dir, "deploy.db");
+    const pages = db.query("SELECT (SELECT page_count FROM pragma_page_count()) - (SELECT freelist_count FROM pragma_freelist_count()) AS used, (SELECT page_size FROM pragma_page_size()) AS size").get() as { used: number; size: number };
+    // Refuse before VACUUM INTO, so an oversized database never costs a snapshot copy.
+    if (pages.used * pages.size > MAX_ARCHIVE_BYTES / 2) throw new BackupTooLargeError(pages.used * pages.size);
     db.run(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);
     const snapshot = new Database(snapshotPath, { readonly: true });
     try {
       const check = snapshot.query("PRAGMA integrity_check").get() as { integrity_check: string };
       if (check.integrity_check !== "ok") throw new Error("Panel database integrity check failed");
     } finally { snapshot.close(); }
-    const database = readFileSync(snapshotPath);
-    if (database.length > MAX_ARCHIVE_BYTES / 2) throw new Error("Panel database exceeds the supported backup size (256 MiB)");
+    const databaseBytes = statSync(snapshotPath).size;
+    if (databaseBytes > MAX_ARCHIVE_BYTES / 2) throw new BackupTooLargeError(databaseBytes);
     const ssh: Record<string, string> = {};
     let names: string[] = [];
     try { names = readdirSync(SSH_DIR); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -48,7 +74,7 @@ export async function performBackup(row: BackupRow): Promise<void> {
       if (!lstatSync(file).isFile()) throw new Error("SSH directory must contain regular files only");
       ssh[name] = readFileSync(file).toString("base64");
     }
-    const encrypted = encryptArchive({ version: 1, createdAt: new Date().toISOString(), image: getPanel()?.image_ref || "", schemaVersion: CURRENT_SCHEMA_VERSION, jwtSecret: getJwtSecret(), database: database.toString("base64"), databaseSha256: sha256(database), ssh }, key);
+    const { archive: encrypted } = encryptArchiveFromFile({ version: 1, createdAt: new Date().toISOString(), image: getPanel()?.image_ref || "", schemaVersion: CURRENT_SCHEMA_VERSION, jwtSecret: getJwtSecret(), ssh }, snapshotPath, key);
     if (encrypted.length > MAX_ARCHIVE_BYTES) throw new Error("Backup exceeds maximum archive size");
     await putObject(row.bucket, row.object_key, encrypted, credentials);
     // Verify the uploaded bytes before declaring success or deleting an old backup.
@@ -79,17 +105,26 @@ export async function pruneBackups(): Promise<void> {
 
 export async function backupTick(now = Date.now()): Promise<void> {
   // Interrupted uploads are safe to retry as new snapshots; incomplete objects are never restore candidates.
-  db.query("UPDATE panel_backups SET status='failed', error='Backup interrupted or timed out', finished_at=? WHERE status='running' AND created_at < ?").run(now, now - 30 * 60_000);
+  db.query("UPDATE panel_backups SET status='failed', error='Backup interrupted or timed out', finished_at=? WHERE status='running' AND created_at < ?").run(now, now - STALE_TEMP_MS);
+  sweepStaleBackupDirs(now);
   const settings = getSettings();
-  const latest = db.query("SELECT created_at, status FROM panel_backups ORDER BY created_at DESC, rowid DESC LIMIT 1").get() as { created_at: number; status: string } | null;
-  if (settings.panel_backup_enabled === "1" && (!latest || now - latest.created_at >= (latest.status === "failed" ? 3600_000 : 86400_000))) await requestBackup();
+  const latest = db.query("SELECT created_at, status, error FROM panel_backups ORDER BY created_at DESC, rowid DESC LIMIT 1").get() as { created_at: number; status: string; error: string | null } | null;
+  if (settings.panel_backup_enabled === "1" && (!latest || now - latest.created_at >= retryDelay(latest))) await requestBackup();
   const row = db.query("SELECT * FROM panel_backups WHERE status='pending' ORDER BY created_at LIMIT 1").get() as BackupRow | null;
   if (!row) return;
   const claim = db.query("UPDATE panel_backups SET status='running' WHERE id=? AND status='pending'").run(row.id);
   if (!claim.changes) return;
   try { await performBackup(row); }
-  catch {
+  catch (error) {
     // Provider responses can contain secrets: expose a bounded, generic diagnostic.
-    db.query("UPDATE panel_backups SET status='failed', error='Backup failed. Check object storage access, free disk space, and panel database integrity.', finished_at=? WHERE id=?").run(Date.now(), row.id);
+    const message = error instanceof BackupTooLargeError
+      ? error.message
+      : "Backup failed. Check object storage access, free disk space, and panel database integrity.";
+    db.query("UPDATE panel_backups SET status='failed', error=?, finished_at=? WHERE id=?").run(message, Date.now(), row.id);
   }
+}
+
+function retryDelay(latest: { status: string; error: string | null }): number {
+  if (latest.status !== "failed") return 86400_000;
+  return latest.error?.startsWith(TOO_LARGE_ERROR) ? 86400_000 : 3600_000;
 }

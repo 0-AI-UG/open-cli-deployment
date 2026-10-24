@@ -29,6 +29,9 @@ import { resolveRegistryCredentialsForImage } from "../registry-config.ts";
 import { DEFAULT_LOG_MAX_FILES, DEFAULT_LOG_MAX_SIZE } from "../../shared/remote/index.ts";
 import { defaultStorageDriver, requireStorageDriver } from "../storage/index.ts";
 
+/** Normal panel use stays below 400 MiB; the backup streams its archive, so 1 GiB leaves ample headroom. */
+export const PANEL_MEMORY_LIMIT_MB = 1024;
+
 type ProgressFn = (step: string, detail: string) => void;
 
 function log(context: string, ...args: any[]) {
@@ -437,7 +440,9 @@ export function buildPanelReleaseScript(opts: {
   const cleanup = registryConfigDir
     ? `su - deploy -c "rm -rf ${registryConfigDir}" 2>/dev/null || true`
     : `true`;
-  const logFlags = `--log-opt max-size=${DEFAULT_LOG_MAX_SIZE} --log-opt max-file=${DEFAULT_LOG_MAX_FILES}`;
+  // Without a ceiling one runaway panel task exhausts the host and takes Traefik and every app on it down;
+  // with it, the kernel restarts only the panel container.
+  const logFlags = `--log-opt max-size=${DEFAULT_LOG_MAX_SIZE} --log-opt max-file=${DEFAULT_LOG_MAX_FILES} --memory ${PANEL_MEMORY_LIMIT_MB}m --memory-swap ${PANEL_MEMORY_LIMIT_MB}m`;
   const snapshotLines = [
     // Stop the sole writer before copying SQLite and its WAL. The snapshot is
     // on the same persistent volume and is only removed after a healthy swap.

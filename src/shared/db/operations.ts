@@ -166,6 +166,20 @@ export function listChildOperations(parentId: number): OperationRow[] {
     .all(parentId) as OperationRow[];
 }
 
+/**
+ * Drops log lines of operations that finished long ago; the operation rows with status and error stay.
+ * Deletes in bounded batches so one reconcile tick never holds the write lock for long.
+ */
+export function pruneOldOperationLogs(olderThanSeconds: number, batchSize = 5_000): number {
+  return db.query(
+    `DELETE FROM operation_logs WHERE id IN (
+       SELECT l.id FROM operation_logs l JOIN operations o ON o.id = l.op_id
+       WHERE o.status IN ('done','failed','cancelled','compensated','compensation_failed')
+         AND o.finished_at < datetime('now', ?)
+       LIMIT ?)`,
+  ).run(`-${olderThanSeconds} seconds`, batchSize).changes;
+}
+
 /** Latest terminal deletion attempts for the same app, newest first. */
 export function recentDestroyAppAttempts(appId: number, limit = 6): OperationRow[] {
   return db.query(
