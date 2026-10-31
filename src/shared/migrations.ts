@@ -1,3 +1,4 @@
+import { initializeCiSchema } from "./db/ci-schema.ts";
 import { initializeNtfySchema } from "./db/ntfy-schema.ts";
 import { initializeIncidentHistorySchema } from "./db/incident-history-schema.ts";
 import type { Database } from "bun:sqlite";
@@ -2916,6 +2917,11 @@ export const migrations: Migration[] = [
         db.run("ALTER TABLE apps ADD COLUMN public_ports_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(public_ports_json))");
       }
     },
+  },
+  {
+    version: 129,
+    description: "Dedicated GitHub CI runners and deployment check policies",
+    up(db) { initializeCiSchema(db); },
   },
 ];
 

@@ -116,6 +116,7 @@ export type ServerData = {
   location?: string;
   status?: string;
   build_worker?: boolean;
+  ci_runner?: boolean;
   replica_count?: number;
   monthly_eur?: number;
   provider_id?: string | number;

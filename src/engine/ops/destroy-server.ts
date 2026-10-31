@@ -29,6 +29,7 @@ const preflight: Step<DestroyServerInput, { ok: true }> = {
         `Cannot disconnect ${server.name} while server-local volumes are tracked; remove their apps and permanently delete retained volumes first`,
       );
     }
+    if (db.getCiRunnerByServerId(ctx.input.serverId)) throw new Error("Remove the CI runner before deleting its server");
     if (db.getBuildWorkerByServerId(ctx.input.serverId)) {
       throw new Error("Remove the OCD build worker before deleting its server");
     }

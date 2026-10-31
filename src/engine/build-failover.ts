@@ -13,7 +13,8 @@ export async function withBuildFailover<T>(args: {
   capacityPollMs?: number;
 }): Promise<{ value: T; workerId: number }> {
   const excludedWorkerIds: number[] = [];
-  const deadline = Date.now() + (args.capacityWaitMs ?? 10 * 60_000);
+  const sharedWait = Math.max(10 * 60_000, ...db.getCiRunners().filter(runner => runner.shared_builds).map(runner => (runner.job_timeout_seconds + 120) * 1000));
+  const deadline = Date.now() + (args.capacityWaitMs ?? sharedWait);
   const pollMs = args.capacityPollMs ?? 2_000;
   let failoverAttempts = 0;
   let parked = false;
@@ -28,6 +29,7 @@ export async function withBuildFailover<T>(args: {
         continue;
       }
       try {
+        updateExecutingStepDetail(args.ctx.opId, "Waiting for build worker");
         return await args.coordinator.withWorker({
           operationId: args.ctx.opId,
           preferredWorkerId: args.preferredWorkerId,

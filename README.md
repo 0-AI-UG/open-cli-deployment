@@ -46,6 +46,8 @@ infrastructure, and reconciles containers onto the servers you place them on.
 - **Operational controls:** inspect logs, open a shell, copy files, pause, move,
   and recover failed operations from the CLI. The panel is for reading and
   configuration; operations run through the CLI.
+- **GitHub Actions CI:** run workflows on dedicated or shared build servers,
+  with optional checks that gate repository deployments. See [CI setup](src/cli/skill/assets/docs/ci-runners.md).
 - **Portable integrations:** use HTTPS Git hosts and OCI registries rather
   than a closed hosting ecosystem.
 

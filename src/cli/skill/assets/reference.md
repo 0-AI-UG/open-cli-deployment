@@ -12,6 +12,7 @@ require no GitHub Actions runner.
 - [App manifest](docs/app-manifest.md)
 - [Stack manifest](docs/stack-manifest.md)
 - [Build workers and webhooks](docs/build-workers-and-webhooks.md)
+- [GitHub Actions CI runners](docs/ci-runners.md)
 - [Immutable images and health](docs/immutable-images-and-health.md)
 - [Releases](docs/releases.md)
 - [Environments and secrets](docs/environments-and-secrets.md)

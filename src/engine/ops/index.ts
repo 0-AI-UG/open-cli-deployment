@@ -25,3 +25,5 @@ import "./install-build-worker.ts";
 import "./remove-build-worker.ts";
 import "./build-delivery.ts";
 import "./webhook-build-source.ts";
+
+import "./ci-runner.ts";

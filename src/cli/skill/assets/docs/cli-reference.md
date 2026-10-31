@@ -115,3 +115,13 @@ Declare app-owned object access with manifest `storage` bindings. OCD creates
 and injects the scoped token during deployment. Use `ocd storage-readers create`
 for external read-only consumers such as a CDN. See
 [Environments and secrets](environments-and-secrets.md).
+
+## CI runners
+
+`ocd ci connect github --app-id=ID --installation-id=ID --private-key-file=PATH`
+connects a GitHub App. `ocd ci install --server=NAME --repository=OWNER/REPO`
+reserves a server. Add `--share-builds` to reuse an existing build worker, or
+use `--organization=ORG --runner-group=ID` for selected private repositories. Use `ocd ci ls`, `ocd ci status`, and
+`ocd ci <drain|resume|retry|remove> <name|id>` for lifecycle management.
+`ocd ci checks SOURCE_ID [--file=POLICY.json]` reads or updates deployment gates.
+See [CI runners](ci-runners.md) for setup, policies, and trust requirements.

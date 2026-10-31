@@ -21,7 +21,7 @@ type StackData = {
 type DashboardData = { apps: AppData[] };
 type ServerData = {
   id: number; name: string; status: string; type: string; location: string; ipv4: string;
-  build_worker?: boolean; apps?: Array<{ id: number; name: string; status: string }>;
+  ci_runner?: boolean; build_worker?: boolean; apps?: Array<{ id: number; name: string; status: string }>;
 };
 type AppView = "cards" | "list";
 const APP_VIEW_KEY = "ocd.dashboard.appView";
@@ -388,7 +388,7 @@ export function DashboardPage() {
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md border bg-subtle text-muted"><Server size={16} /></span>
                     <div className="min-w-0">
                       <div className="truncate font-mono text-sm font-semibold text-fg">{server.name}</div>
-                      <div className="truncate text-xs text-muted">{[server.type?.toUpperCase(), server.location].filter(Boolean).join(" · ")}{server.build_worker ? " · build worker" : ""}</div>
+                      <div className="truncate text-xs text-muted">{[server.type?.toUpperCase(), server.location].filter(Boolean).join(" · ")}{server.ci_runner && server.build_worker ? " · build + CI worker" : server.ci_runner ? " · CI runner" : server.build_worker ? " · build worker" : ""}</div>
                     </div>
                   </div>
                   <StatusBadge status={server.status} />

@@ -54,6 +54,8 @@ export async function handleInstallBuildWorker(request: Request): Promise<Respon
     const server = Number.isInteger(serverId) ? db.getServer(serverId) : null;
     if (!server) return Response.json({ error: "Server not found" }, { status: 404, headers: corsHeaders });
     if (server.status !== "ready") return Response.json({ error: `Server ${server.name} is not ready` }, { status: 409, headers: corsHeaders });
+    const ci = db.getCiRunnerByServerId(server.id);
+    if (ci && (!ci.shared_builds || ci.host_reserved)) return Response.json({ error: "Server is reserved for CI" }, { status: 409, headers: corsHeaders });
     if (db.getPanel()?.server_id === server.id || db.getApps(server.id).length) {
       return Response.json({ error: "Build workers require a dedicated server with no panel or apps" }, { status: 409, headers: corsHeaders });
     }
@@ -102,6 +104,7 @@ export async function handleRemoveBuildWorker(request: Request, workerId: number
     const payload = await requireAuthenticated(request);
     const worker = db.getBuildWorker(workerId);
     if (!worker) return Response.json({ error: "Build worker not found" }, { status: 404, headers: corsHeaders });
+    if (db.getCiRunnerByServerId(worker.server_id)) return Response.json({ error: "Remove the shared CI runner before removing its build worker" }, { status: 409, headers: corsHeaders });
     const { opId } = enqueue({
       kind: "remove_build_worker",
       resourceKeys: [`builder:${worker.id}`, `server:${worker.server_id}`],

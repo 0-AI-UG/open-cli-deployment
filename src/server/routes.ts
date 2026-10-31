@@ -1,3 +1,4 @@
+import { handleCiConnection, handleCiRunners, handleCiRunnerAction, handleCiCheckPolicy } from "./routes/ci.ts";
 import { handleDeployBuildSource } from "./routes/build-workers.ts";
 import { handleNtfySettings, handleUserNtfy, handleNtfyCredentials, handleNtfyTest, handleCreateNtfyApp } from "./routes/ntfy.ts";
 import { handleListIncidents, handleGetIncident, handleResolveIncident } from "./routes/incidents.ts";
@@ -241,6 +242,22 @@ export const apiRoutes = {
   "/api/servers/refresh": { POST: (req: Request) => handleRefreshServers(req) },
   "/api/readiness": { GET: (req: Request) => handleGetReadiness(req) },
   "/api/servers/:id": { DELETE: (req: Request) => handleDeleteServer(req, serverIdFrom(req)) },
+  "/api/ci/connection": {
+    GET: (req: Request) => handleCiConnection(req),
+    PUT: (req: Request) => handleCiConnection(req),
+  },
+  "/api/ci/runners": {
+    GET: (req: Request) => handleCiRunners(req),
+    POST: (req: Request) => handleCiRunners(req),
+  },
+  "/api/ci/runners/:id": {
+    POST: (req: Request) => handleCiRunnerAction(req, Number(new URL(req.url).pathname.split("/").pop())),
+    DELETE: (req: Request) => handleCiRunnerAction(req, Number(new URL(req.url).pathname.split("/").pop())),
+  },
+  "/api/build-sources/:id/ci": {
+    GET: (req: Request) => handleCiCheckPolicy(req, buildSourceIdFrom(req)),
+    PUT: (req: Request) => handleCiCheckPolicy(req, buildSourceIdFrom(req)),
+  },
   "/api/runners": {
     GET: (req: Request) => handleGetBuildWorkers(req),
     POST: (req: Request) => handleInstallBuildWorker(req),

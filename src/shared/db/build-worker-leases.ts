@@ -45,7 +45,9 @@ function eligibleWorker(
 ): boolean {
   const row = db.query(
     `SELECT id FROM build_workers
-     WHERE id = ? AND status = 'online' AND draining = 0 AND disk_free_bytes >= ?
+     WHERE id = ? AND NOT EXISTS (
+       SELECT 1 FROM ci_runners c WHERE c.server_id=build_workers.server_id AND c.host_reserved=1
+     ) AND status = 'online' AND draining = 0 AND disk_free_bytes >= ?
        AND last_checked_at IS NOT NULL
        AND unixepoch(last_checked_at) >= unixepoch('now') - ?`,
   ).get(workerId, minFreeBytes, observationMaxAgeSeconds);

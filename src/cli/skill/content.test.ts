@@ -76,7 +76,7 @@ describe("embedded OCD skill", () => {
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("untrusted forks");
     expect(files["docs/build-workers-and-webhooks.md"]).toContain("X-Hub-Signature-256");
     expect(files["docs/immutable-images-and-health.md"]).toContain("OCI credential");
-    expect(Object.keys(files).filter((path) => path.startsWith("docs/"))).toHaveLength(15);
+    expect(Object.keys(files).filter((path) => path.startsWith("docs/"))).toHaveLength(16);
   });
 
   test("documents the unified desired-configuration surface", () => {
@@ -90,7 +90,7 @@ describe("embedded OCD skill", () => {
     for (const command of [
       "deploy", "release", "apps", "logs", "restart", "pause",
       "unpause", "envs", "stack", "ops", "servers",
-      "ssh", "app", "move", "resources", "volumes", "buckets", "runners",
+      "ssh", "app", "move", "resources", "volumes", "buckets", "runners", "ci",
     ]) {
       expect(cli).toContain(`ocd ${command}`);
     }
@@ -124,7 +124,7 @@ describe("embedded OCD skill", () => {
       .map((file) => file.contents)
       .join("\n");
 
-    for (const removed of ["cache_ref", "git_branch", "wait_for_ci", "runs-on: [self-hosted", "post_start", "ocd rollback", "releases-and-rollback"]) {
+    for (const removed of ["cache_ref", "git_branch", "wait_for_ci", "post_start", "ocd rollback", "releases-and-rollback"]) {
       expect(manual.toLowerCase()).not.toContain(removed.toLowerCase());
     }
     expect(manual).toContain("repository@sha256:<digest>");

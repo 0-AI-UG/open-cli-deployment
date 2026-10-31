@@ -1,3 +1,4 @@
+import { ci } from "./commands/ci.ts";
 import { login } from "./commands/login.ts";
 import { apps } from "./commands/apps.ts";
 import { status } from "./commands/status.ts";
@@ -54,6 +55,7 @@ const commands: Record<string, (args: string[]) => Promise<void>> = {
   gc,
   manifest,
   runners,
+  ci,
   doctor,
   registry,
   source,
@@ -89,6 +91,7 @@ ${BOLD}Commands:${RESET}
   ops cancel|retry|finalize <id>  Recover a stuck operation
   servers                Inspect and manage servers
   runners                Manage OCD BuildKit workers and webhooks
+  ci                     Manage dedicated GitHub Actions CI runners
   doctor [manifest]      Check deploy readiness and show exact next actions
   registry               Connect scoped OCI push/pull credentials
   source                 Connect private Git checkout credentials

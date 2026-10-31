@@ -7,7 +7,7 @@ export const BUILD_WORKER_VERSION = "2";
 export const BUILD_PLATFORM = "linux/amd64";
 export const BUILDX_BUILDER = "ocd-worker";
 const WORKER_DIR = "/opt/ocd-build-worker";
-const BUILD_LOCK = `${WORKER_DIR}/build.lock`;
+export const BUILD_LOCK = `${WORKER_DIR}/build.lock`;
 const LEGACY_RUNNER_DIR = "/opt/ocd-actions-runner";
 
 function shellQuote(value: string): string {

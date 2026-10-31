@@ -8,7 +8,8 @@ description: Build, deploy, configure, operate, recover, and troubleshoot applic
 Use the `ocd` CLI for Open CLI Deployment panels. OCD runs on Hetzner Cloud and owns HTTPS
 Git checkout, BuildKit image creation, immutable OCI publication, manifest
 reconciliation, and runtime rollout. GitHub signed push webhooks are an optional
-trigger integration; GitHub Actions is not part of app delivery.
+trigger integration. Optional GitHub Actions CI runners can run checks
+and gate repository delivery; OCD still owns image builds and runtime rollout.
 
 ## Safety contract
 
@@ -98,6 +99,7 @@ ocd release <app> --image <repository@sha256:digest> [--commit <sha>]
 ocd doctor [manifest]
 ocd registry <status|login|logout>
 ocd source <status|login|logout>
+ocd ci <connect|install|ls|status|drain|resume|retry|remove|checks>
 ocd runners ls
 ocd runners install --server=<name|id> [--name=X]
 ocd runners sources
@@ -138,6 +140,7 @@ OCD injects topic-scoped publish/subscribe tokens; use
 - [App manifest](docs/app-manifest.md)
 - [Stack manifest](docs/stack-manifest.md)
 - [Build workers and webhooks](docs/build-workers-and-webhooks.md)
+- [GitHub Actions CI runners](docs/ci-runners.md)
 - [Immutable images and health](docs/immutable-images-and-health.md)
 - [Releases](docs/releases.md)
 - [CLI reference](docs/cli-reference.md)

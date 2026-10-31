@@ -27,6 +27,7 @@ Guides for running and operating OCD.
 - [Hetzner Object Storage](object-storage.md)
 - [Panel backups and alerts](panel-protection.md)
 - [Build worker operations](build-workers.md)
+- [GitHub Actions CI runners](../src/cli/skill/assets/docs/ci-runners.md)
 - [Storage inventory](storage-inventory.md)
 - [Volume recovery](volume-recovery.md)
 - [PostgreSQL restore](postgresql-restore.md)

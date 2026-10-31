@@ -1,3 +1,4 @@
+import { CiSettings } from "./ci-settings.tsx";
 import { useState, useEffect } from "react";
 import { get, post, put, del } from "../../api/client.ts";
 import { Card, CardHeader, Btn, Badge, Table, Field, InfoTip, InlineNotice, EmptyState, SkeletonCard, StatusBadge, CopyButton, showToast, confirm } from "../../components/ui.tsx";
@@ -113,6 +114,8 @@ export function BuildSettings() {
           </Table>
         )}
       </Card>
+
+      <CiSettings />
 
       <Card className="overflow-hidden">
         <CardHeader icon={<GitHubIcon size={15} className="text-fg" />} title="GitHub push webhooks" description={`${sources.length} source${sources.length === 1 ? "" : "s"}`} />

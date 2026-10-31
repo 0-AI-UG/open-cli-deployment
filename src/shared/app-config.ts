@@ -79,6 +79,7 @@ export function assertPlacementUsable(placement: Placement): void {
   for (const id of Object.keys(placement).map(Number)) {
     const server = db.getServer(id);
     if (!server) throw new Error(`Placement server #${id} does not exist`);
+    if (db.getCiRunnerByServerId(id)) throw new Error(`Placement server ${server.name} is a dedicated CI runner and cannot run apps`);
     if (db.getBuildWorkerByServerId(id)) {
       throw new Error(`Placement server ${server.name} is a dedicated build worker and cannot run apps`);
     }

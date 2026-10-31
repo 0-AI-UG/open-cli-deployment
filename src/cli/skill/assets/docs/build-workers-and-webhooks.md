@@ -138,3 +138,5 @@ compete with another active revision. `ocd ops retry <id>` resumes a failed rele
 successful members remain checkpoints. Each built/reused digest is persisted in the
 operation. Stacks use `release_order`; members use `needs` and output references.
 Local BuildKit cache is retained up to 12 GB when disk pressure requires pruning.
+
+For GitHub Actions workflows and optional deployment checks, use [CI runners](ci-runners.md). CI may reuse an OCD build worker with explicit `--share-builds` scheduling.

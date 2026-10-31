@@ -11,6 +11,7 @@ const remove: Step<RemoveBuildWorkerInput, { serverId: number }> = {
   async run(ctx) {
     const worker = db.getBuildWorker(ctx.input.workerId);
     if (!worker) throw new Error("Build worker not found");
+    if (db.getCiRunnerByServerId(worker.server_id)) throw new Error("Remove the shared CI runner before removing its build worker");
     const inUse = db.getBuildSources().some((source) => source.worker_id === worker.id);
     if (inUse) throw new Error("Build worker is still assigned to one or more repository sources");
     const server = db.getServer(worker.server_id);

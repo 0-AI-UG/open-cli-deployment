@@ -1,6 +1,6 @@
 {
   "name": "open-cli-deployment",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "A self-hosted, CLI-first platform for deploying containers to your own servers.",
   "private": true,
   "license": "MIT",

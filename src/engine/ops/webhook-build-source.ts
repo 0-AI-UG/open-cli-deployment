@@ -1,3 +1,4 @@
+import { waitForCiChecks } from "../ci-checks.ts";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import * as db from "../../shared/db.ts";
@@ -137,6 +138,7 @@ const build: Step<WebhookBuildSourceInput, Built> = {
   async run(ctx, prior) {
     assertFreshDelivery(ctx);
     const source = db.getBuildSource(ctx.input.sourceId)!;
+    await waitForCiChecks(ctx, () => assertFreshDelivery(ctx));
     const prepared = prior.prepare_source as Prepared;
     const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app);
     await preflightRolloutSpace(apps.map((app) => app.name), (message) => ctx.log(message));
@@ -286,6 +288,7 @@ const reconcile: Step<WebhookBuildSourceInput, { childIds: number[] }> = {
   label: "Reconcile repository manifests",
   async run(ctx, prior) {
     assertFreshDelivery(ctx);
+    await waitForCiChecks(ctx, () => assertFreshDelivery(ctx));
     const prepared = prior.prepare_source as Prepared;
     const built = prior.build_images as Built;
     const apps = prepared.appIds.map((id) => db.getApp(id)).filter((app): app is AppRow => !!app);

@@ -1,3 +1,4 @@
+import { startCiController, stopCiController } from "./ci-controller.ts";
 import { recoveryPending } from "./panel-protection/recovery-state.ts";
 import { startPanelProtection, stopPanelProtection } from "./panel-protection/index.ts";
 import { startEngine, stopEngine } from "./engine.ts";
@@ -38,6 +39,7 @@ export function startEngineInProcess(): void {
     log("startEngine failed:", err);
   });
   startReconciler();
+  startCiController();
   startPanelProtection();
 }
 
@@ -45,6 +47,7 @@ export function stopEngineInProcess(): void {
   if (!started) return;
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = null;
+  stopCiController();
   stopReconciler();
   stopPanelProtection();
   stopEngine();

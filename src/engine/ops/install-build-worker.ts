@@ -16,7 +16,7 @@ const preflight: Step<InstallBuildWorkerInput, { serverId: number }> = {
     const server = db.getServer(worker.server_id);
     if (!server) throw new Error("Build worker server not found");
     if (
-      db.getPanel()?.server_id === server.id || db.getApps(server.id).length ||
+      (db.getCiRunnerByServerId(server.id) && (!db.getCiRunnerByServerId(server.id)!.shared_builds || db.getCiRunnerByServerId(server.id)!.host_reserved)) || db.getPanel()?.server_id === server.id || db.getApps(server.id).length ||
       db.getApps().some((app) => parsePlacement(app.placement)[String(server.id)])
     ) {
       throw new Error("Build workers require a dedicated server with no panel or apps placed on it");

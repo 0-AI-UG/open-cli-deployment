@@ -31,6 +31,7 @@ export function getServersWithApps(): any[] {
     const apps = db.getApps(s.id) as DbApp[];
     return {
       ...s,
+      ci_runner: !!db.getCiRunnerByServerId(s.id),
       build_worker: !!db.getBuildWorkerByServerId(s.id),
       apps: apps.map((a) => {
         const reps = db.getReplicas(a.id) as DbReplica[];

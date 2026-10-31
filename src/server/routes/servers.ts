@@ -29,6 +29,7 @@ export async function handleDeleteServer(request: Request, serverId: number): Pr
     if (!db.getServer(serverId)) {
       return Response.json({ error: "Server not found" }, { status: 404, headers: corsHeaders });
     }
+    if (db.getCiRunnerByServerId(serverId)) return Response.json({ error: "Remove the CI runner before deleting its server" }, { status: 409, headers: corsHeaders });
     if (db.getBuildWorkerByServerId(serverId)) {
       return Response.json(
         { error: "Remove the OCD build worker before deleting its server" },

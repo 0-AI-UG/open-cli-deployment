@@ -6,6 +6,9 @@ OCI registries. Workers are not registered with a hosted CI service; the OCD
 engine schedules and supervises all build work. GitHub signed push webhooks are
 the current optional automatic trigger integration.
 
+GitHub Actions CI uses [separate dedicated CI runners](../src/cli/skill/assets/docs/ci-runners.md).
+CI can share a build worker with explicit `--share-builds` scheduling. Application and panel servers remain excluded.
+
 Worker installation provisions a dedicated `ocd-worker` BuildKit container
 builder. Registry-backed cache import/export never depends on Docker's default
 builder driver.
