@@ -4,7 +4,7 @@ import { secretStore } from "../shared/secret-store.ts";
 export const CI_GITHUB_SECRET = "ci:github-app";
 export type GitHubCiConnection = { app_id: string; installation_id: string; private_key: string; access_token?: string; account_login?: string };
 export class GitHubCiError extends Error {
-  constructor(public status: number) { super(`GitHub CI API returned HTTP ${status}`); }
+  constructor(public status: number, public path = "", method = "GET") { super(`GitHub CI API ${method} ${path} returned HTTP ${status}`); }
 }
 export function normalizeCiRepository(input: string): string {
   const value = input.trim().replace(/^https:\/\/github\.com\//i, "").replace(/\/$/, "").replace(/\.git$/i, "");
@@ -33,7 +33,7 @@ export async function githubCiRequest<T>(path: string, token: string, method = "
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   // Never include response bodies: registration and installation responses contain secrets.
-  if (!response.ok) throw new GitHubCiError(response.status);
+  if (!response.ok) throw new GitHubCiError(response.status, path, method);
   return (response.status === 204 ? undefined : await response.json()) as T;
 }
 export async function ciInstallationToken(repository: string, config?: GitHubCiConnection, scope: "repository" | "organization" = "repository"): Promise<string> {
@@ -79,10 +79,25 @@ export async function hasQueuedCiJob(repositories: string[], token: string): Pro
   for (const repository of repositories) {
     for (const status of ["queued", "in_progress"]) {
       for (let runPage = 1; runPage <= 100; runPage++) {
-        const runs = await githubCiRequest<{ workflow_runs: { id: number }[] }>(`/repos/${repository}/actions/runs?status=${status}&per_page=100&page=${runPage}`, token);
+        let runs: { workflow_runs: { id: number }[] };
+        try {
+          runs = await githubCiRequest(`/repos/${repository}/actions/runs?status=${status}&per_page=100&page=${runPage}`, token);
+        } catch (error) {
+          // Some selected repositories (e.g. temporary security forks) have no Actions API.
+          // Their absence must not starve work in the rest of the organization.
+          if (error instanceof GitHubCiError && error.status === 404) break;
+          throw error;
+        }
         for (const run of runs.workflow_runs) {
           for (let page = 1; page <= 100; page++) {
-            const result = await githubCiRequest<{ jobs: { status: string; labels: string[] }[] }>(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100&page=${page}`, token);
+            let result: { jobs: { status: string; labels: string[] }[] };
+            try {
+              result = await githubCiRequest(`/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100&page=${page}`, token);
+            } catch (error) {
+              // Runs can be deleted between discovery and job inspection.
+              if (error instanceof GitHubCiError && error.status === 404) break;
+              throw error;
+            }
             if (result.jobs.some(job => job.status === "queued" && job.labels.some(label => label.toLowerCase() === "ocd-ci"))) return true;
             if (result.jobs.length < 100) break;
           }

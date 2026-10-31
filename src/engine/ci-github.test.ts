@@ -2,7 +2,7 @@ import { useTempDataDir } from "../shared/test-helpers.ts";
 useTempDataDir();
 import { describe, expect, test } from "bun:test";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { githubAppJwt, normalizeCiRepository, ciRepositoryFromUrl, githubCiRequest, assertCiOrganizationGroup } from "./ci-github.ts";
+import { githubAppJwt, normalizeCiRepository, ciRepositoryFromUrl, githubCiRequest, assertCiOrganizationGroup, hasQueuedCiJob } from "./ci-github.ts";
 
 describe("GitHub CI trust boundaries", () => {
   test("accepts canonical repository names and rejects other hosts and shell input", () => {
@@ -45,4 +45,22 @@ test("organization runner groups enforce a selected private repository boundary"
     repositories = [];
     await expect(assertCiOrganizationGroup("acme", 77, "token")).rejects.toThrow("at least one");
   } finally { globalThis.fetch = original; }
+});
+
+test("unavailable Actions repositories do not starve queued jobs elsewhere in a shared pool", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.includes("/acme/unavailable/")) return Response.json({ message: "Not Found" }, { status: 404 });
+    if (url.includes("/jobs?")) return Response.json({ jobs: [{ status: "queued", labels: ["self-hosted", "ocd-ci"] }] });
+    return Response.json({ workflow_runs: [{ id: 123 }] });
+  }) as unknown as typeof fetch;
+  try { expect(await hasQueuedCiJob(["acme/unavailable", "acme/api"], "token")).toBe(true); }
+  finally { globalThis.fetch = original; }
+});
+test("queue discovery still fails closed on authorization and rate-limit errors", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => Response.json({ message: "Forbidden" }, { status: 403 })) as unknown as typeof fetch;
+  try { await expect(hasQueuedCiJob(["acme/api"], "token")).rejects.toThrow("HTTP 403"); }
+  finally { globalThis.fetch = original; }
 });
