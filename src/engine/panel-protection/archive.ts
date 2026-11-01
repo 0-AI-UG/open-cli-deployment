@@ -1,5 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { gzipSync, gunzipSync, createGzip } from "node:zlib";
+import { createReadStream } from "node:fs";
+import { Readable, Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const MAGIC = Buffer.from("OCD-BACKUP-1\n");
 export const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
@@ -25,6 +28,41 @@ export function encryptArchive(archive: PanelArchive, key: string): Buffer {
   cipher.setAAD(MAGIC);
   const compressed = gzipSync(JSON.stringify(archive));
   return Buffer.concat([MAGIC, iv, cipher.update(compressed), cipher.final(), cipher.getAuthTag()]);
+}
+
+/** Preserve the archive format without materializing the database, its base64
+ * string and a second JSON copy together on a small production panel. */
+export async function encryptSnapshotArchive(snapshotPath: string, archive: Omit<PanelArchive, "database" | "databaseSha256">, key: string): Promise<Buffer> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(snapshotPath)) hash.update(chunk);
+  const metadata = { ...archive, databaseSha256: hash.digest("hex") };
+  async function* json() {
+    yield JSON.stringify(metadata).slice(0, -1) + ',"database":"';
+    let remainder = Buffer.alloc(0);
+    for await (const chunk of createReadStream(snapshotPath)) {
+      const bytes = remainder.length ? Buffer.concat([remainder, chunk]) : chunk as Buffer;
+      const end = bytes.length - bytes.length % 3;
+      if (end) yield bytes.subarray(0, end).toString("base64");
+      remainder = Buffer.from(bytes.subarray(end));
+    }
+    if (remainder.length) yield remainder.toString("base64");
+    yield '"}';
+  }
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", keyBytes(key), iv);
+  cipher.setAAD(MAGIC);
+  const chunks: Buffer[] = [MAGIC, iv];
+  let size = MAGIC.length + iv.length + 16;
+  await pipeline(Readable.from(json()), createGzip(), cipher, new Writable({
+    write(chunk: Buffer, _encoding, done) {
+      size += chunk.length;
+      if (size > MAX_ARCHIVE_BYTES) return done(new Error("Backup exceeds maximum archive size"));
+      chunks.push(Buffer.from(chunk));
+      done();
+    },
+  }));
+  chunks.push(cipher.getAuthTag());
+  return Buffer.concat(chunks);
 }
 export function decryptArchive(bytes: Buffer, key: string): PanelArchive {
   if (bytes.length > MAX_ARCHIVE_BYTES || !bytes.subarray(0, MAGIC.length).equals(MAGIC) || bytes.length < MAGIC.length + 28) {
