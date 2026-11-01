@@ -1,7 +1,7 @@
 import { parentPort, workerData } from "node:worker_threads";
-import { readFileSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { Database } from "bun:sqlite";
-import { encryptArchive, sha256, MAX_ARCHIVE_BYTES, type PanelArchive } from "./archive.ts";
+import { encryptSnapshotArchive, MAX_ARCHIVE_BYTES, type PanelArchive } from "./archive.ts";
 
 const input = workerData as { snapshotPath: string; databasePath?: string; key: string; archive: Omit<PanelArchive, "database" | "databaseSha256"> };
 try {
@@ -18,8 +18,7 @@ try {
     } finally { snapshot.close(); }
   }
   if (statSync(input.snapshotPath).size > MAX_ARCHIVE_BYTES / 2) throw new Error("Snapshot exceeds backup size limit");
-  const database = readFileSync(input.snapshotPath);
-  const encrypted = encryptArchive({ ...input.archive, database: database.toString("base64"), databaseSha256: sha256(database) }, input.key);
+  const encrypted = await encryptSnapshotArchive(input.snapshotPath, input.archive, input.key);
   const bytes = new Uint8Array(encrypted);
   parentPort!.postMessage(bytes, [bytes.buffer]);
 } catch {
