@@ -17,6 +17,7 @@ import { rollingRedeploy } from "../scale/index.ts";
 import { syncPublicPortFirewalls } from "../public-ports.ts";
 import { syncAppIngress } from "../scale/traefik-manager.ts";
 import { replicaBindHost } from "../scale/types.ts";
+import { replaceRoutedReplica } from "../scale/routed-replacement.ts";
 import { registerOp } from "./registry.ts";
 import type { OpKindDefinition, Step, OpContext } from "../types.ts";
 import { attestReplica, hashEnvironment, latestDesiredImage } from "../revision.ts";
@@ -245,6 +246,7 @@ const snapshotCurrentRevision: Step<RedeployInput, RollbackSnapshot | null> = {
     const health = await probeAppHealth(app, server.ipv4, snap.containerName, snap.bindAddr, snap.hostPort, 5, hostKey);
     if (first) db.updateReplicaStatus(first.id, health.healthy ? "running" : "unhealthy");
     db.updateAppStatus(ctx.input.appId, health.healthy ? "running" : "unhealthy");
+    await syncAppIngress(ctx.input.appId);
     db.appendDeployLog(ctx.input.appId, `[rollback] Restored previous image after failed redeploy (healthy=${health.healthy})`);
     ctx.log(`Rolled back to previous image ${snap.remote.image} (healthy=${health.healthy})`);
     if (!health.healthy && !health.inconclusive) {
@@ -304,16 +306,45 @@ const pullAndRunCandidate: Step<RedeployInput, ArtifactOut> = {
       ctx.log(`[pull] ${line}`);
     };
 
-    const r = await pullImmutableImageAndRun(server.ipv4, {
-      ...runOpts,
-      imageRef: app.image_ref,
-    }, logLine);
-
-    return {
-      imageTag,
-      imageDigest: "imageDigest" in r ? r.imageDigest : undefined,
-      imageBytes: "imageBytes" in r ? r.imageBytes : undefined,
-    };
+    if (replicas.length > 1 && !replicas.slice(1).some((replica) => replica.status === "running")) {
+      throw new Error("Cannot replace the primary replica without a serving sibling");
+    }
+    return replaceRoutedReplica({
+      redundant: replicas.length > 1,
+      removeFromIngress: async () => {
+        db.updateReplicaStatus(first.id, "draining");
+        await syncAppIngress(app.id);
+        ctx.log(`Primary replica ${first.container_name} removed from ingress; draining for 10s`);
+      },
+      drain: () => Bun.sleep(10_000),
+      replace: async () => {
+        const r = await pullImmutableImageAndRun(server.ipv4, {
+          ...runOpts,
+          imageRef: app.image_ref,
+        }, logLine);
+        return {
+          imageTag,
+          imageDigest: "imageDigest" in r ? r.imageDigest : undefined,
+          imageBytes: "imageBytes" in r ? r.imageBytes : undefined,
+        };
+      },
+      verifyReady: async () => {
+        const health = await probeAppHealth(app, server.ipv4, first.container_name,
+          bindAddr, first.host_port, 10, server.ssh_host_key || undefined);
+        if (!health.healthy) throw new Error(`Primary replacement failed readiness: ${health.error || health.statusCode}`);
+        const attestation = await attestReplica(app, first, server, {
+          imageDigest: app.image_ref,
+          envHash: hashEnvironment(envVars),
+          configRevision: app.config_revision,
+        });
+        if (!attestation.ok) throw new Error(`Primary replacement failed attestation: ${attestation.error}`);
+      },
+      admitToIngress: async () => {
+        db.updateReplicaStatus(first.id, "running");
+        await syncAppIngress(app.id);
+        ctx.log(`Primary replica ${first.container_name} passed readiness and attestation; rejoined ingress`);
+      },
+    });
   },
 };
 

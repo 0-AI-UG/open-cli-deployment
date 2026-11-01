@@ -23,6 +23,30 @@ beforeEach(() => {
 });
 
 describe("startAppReplica", () => {
+  test("gives a running old revision time to finish requests before removal", async () => {
+    stubs = [{ match: "{{json .Config.Labels}}", stdout: "{}|true|old-container" }];
+    await startAppReplica("1.2.3.4", {
+      containerName: "web", image: "web:latest", appName: "web",
+      bindAddr: "10.0.0.1", hostPort: 8080, containerPort: 3000,
+    });
+    const stop = calls.findIndex((c) => c.includes("docker stop -t 30 web"));
+    const remove = calls.findIndex((c) => c.includes("docker rm -f web"));
+    expect(stop).toBeGreaterThanOrEqual(0);
+    expect(stop).toBeLessThan(remove);
+  });
+
+  test("does not force-remove a serving revision when graceful stop fails", async () => {
+    stubs = [
+      { match: "{{json .Config.Labels}}", stdout: "{}|true|old-container" },
+      { match: "docker stop -t 30 web", stdout: "", exitCode: 1 },
+    ];
+    await expect(startAppReplica("1.2.3.4", {
+      containerName: "web", image: "web:latest", appName: "web",
+      bindAddr: "10.0.0.1", hostPort: 8080, containerPort: 3000,
+    })).rejects.toThrow("Unable to gracefully stop");
+    expect(calls.some((c) => c.includes("docker rm -f web"))).toBe(false);
+  });
+
   test("removes the stale container, then runs a hardened container", async () => {
     const { containerId } = await startAppReplica("1.2.3.4", {
       containerName: "myapp",

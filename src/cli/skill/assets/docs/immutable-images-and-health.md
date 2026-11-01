@@ -17,6 +17,13 @@ OCD starts a candidate, evaluates its declared readiness contract, and makes it
 current only after success. A failed build or candidate does not change the
 app's desired image.
 
+For services with multiple replicas, the primary replacement is removed from
+ingress and drained before its old process stops, just like subsequent replicas.
+It rejoins only after readiness and revision attestation pass. An ingress-sync
+failure stops replacement rather than continuing to tear down a routed process.
+Running old containers receive SIGTERM with a 30-second shutdown window before
+removal, allowing applications to finish requests and settle background work.
+
 Readiness modes:
 
 - `http`: path plus accepted statuses (default `[200]`);
