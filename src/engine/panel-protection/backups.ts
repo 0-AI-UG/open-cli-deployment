@@ -1,7 +1,6 @@
-import { mkdtempSync, readdirSync, readFileSync, lstatSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, lstatSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { Database } from "bun:sqlite";
 import db, { getPanel, getSettings, saveSetting } from "../../shared/db.ts";
 import { SSH_DIR } from "../../shared/paths.ts";
 import { getJwtSecret, secretStore } from "../../shared/secret-store.ts";
@@ -33,13 +32,6 @@ export async function performBackup(row: BackupRow): Promise<void> {
   const dir = mkdtempSync(path.join(tmpdir(), "ocd-panel-backup-"));
   try {
     const snapshotPath = path.join(dir, "deploy.db");
-    db.run(`VACUUM INTO '${snapshotPath.replace(/'/g, "''")}'`);
-    const snapshot = new Database(snapshotPath, { readonly: true });
-    try {
-      const check = snapshot.query("PRAGMA integrity_check").get() as { integrity_check: string };
-      if (check.integrity_check !== "ok") throw new Error("Panel database integrity check failed");
-    } finally { snapshot.close(); }
-    if (statSync(snapshotPath).size > MAX_ARCHIVE_BYTES / 2) throw new Error("Panel database exceeds the supported backup size (256 MiB)");
     const ssh: Record<string, string> = {};
     let names: string[] = [];
     try { names = readdirSync(SSH_DIR); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
@@ -48,7 +40,7 @@ export async function performBackup(row: BackupRow): Promise<void> {
       if (!lstatSync(file).isFile()) throw new Error("SSH directory must contain regular files only");
       ssh[name] = readFileSync(file).toString("base64");
     }
-    const encrypted = await encryptSnapshot({ snapshotPath, key, archive: { version: 1, createdAt: new Date().toISOString(), image: getPanel()?.image_ref || "", schemaVersion: CURRENT_SCHEMA_VERSION, jwtSecret: getJwtSecret(), ssh } });
+    const encrypted = await encryptSnapshot({ snapshotPath, databasePath: db.filename, key, archive: { version: 1, createdAt: new Date().toISOString(), image: getPanel()?.image_ref || "", schemaVersion: CURRENT_SCHEMA_VERSION, jwtSecret: getJwtSecret(), ssh } });
     if (encrypted.length > MAX_ARCHIVE_BYTES) throw new Error("Backup exceeds maximum archive size");
     await putObject(row.bucket, row.object_key, encrypted, credentials);
     // Verify the uploaded bytes before declaring success or deleting an old backup.
