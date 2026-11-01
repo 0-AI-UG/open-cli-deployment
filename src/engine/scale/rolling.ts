@@ -46,11 +46,7 @@ export async function rollingRedeploy(
       // Drop from the ingress upstream pool so in-flight requests drain
       // via the other replicas before we tear this one down.
       db.updateReplicaStatus(replica.id, "draining");
-      try {
-        await syncAppIngress(app.id);
-      } catch (err) {
-        log("scale", `Ingress sync during rolling drain failed: ${err}`);
-      }
+      await syncAppIngress(app.id);
 
       // Drain
       emit("scale", `Draining ${replica.container_name}...`);
@@ -90,11 +86,7 @@ export async function rollingRedeploy(
       db.updateReplicaStatus(replica.id, "running");
 
       // Re-admit this replica to the ingress upstream pool.
-      try {
-        await syncAppIngress(app.id);
-      } catch (err) {
-        log("scale", `Ingress sync after rolling replace failed: ${err}`);
-      }
+      await syncAppIngress(app.id);
 
       emit("scale", `Replica ${replica.container_name} updated`);
     }

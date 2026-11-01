@@ -174,7 +174,7 @@ export function currentAppAliases(): Array<{ hostname: string; address: string }
 
 /**
  * The one place that starts a hardened app-replica container: optional
- * `.env.deploy` (re)write → `docker rm -f` the stale container → hardened
+ * `.env.deploy` (re)write → gracefully stop the stale container → hardened
  * `docker run` (always via buildDockerRunArgs, so cap-drop / no-new-privileges /
  * mem-cpu-pids ceilings / volume allowlisting can never be forgotten). Throws
  * describeFailure() on a non-zero run. Returns the new container id.
@@ -236,6 +236,12 @@ export async function startAppReplicaWithSsh(
   if (same) {
     log("run", `Adopted existing attested container ${opts.containerName}`);
     return { containerId: existingId || opts.containerName };
+  }
+  if (running === "true") {
+    const stopped = await exec(ip, asUser(`docker stop -t 30 ${opts.containerName}`), hostKey);
+    if (stopped.exitCode !== 0) {
+      throw new Error(describeFailure(`Unable to gracefully stop ${opts.containerName}`, stopped));
+    }
   }
   await exec(ip, asUser(`docker rm -f ${opts.containerName} 2>/dev/null || true`), hostKey);
 
